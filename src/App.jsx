@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import StrategyConsultantTerminal from './components/planner/StrategyConsultantTerminal';
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
@@ -9,6 +9,26 @@ function App() {
   const [selectedTx, setSelectedTx] = useState(null);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isSweeping, setIsSweeping] = useState(false);
+  const [dlqStatus, setDlqStatus] = useState({ active: false, count: 0 });
+
+  useEffect(() => {
+    const checkDlq = async () => {
+      try {
+        const workerUrl = import.meta.env.VITE_WORKER_URL || '';
+        const res = await fetch(`${workerUrl}/api/dlq-status`);
+        if (res.ok) {
+           const data = await res.json();
+           setDlqStatus({ active: data.active, count: data.count });
+        }
+      } catch (e) {
+        console.error("Failed to fetch DLQ status", e);
+      }
+    };
+
+    checkDlq();
+    const interval = setInterval(checkDlq, 15000); // Check every 15s
+    return () => clearInterval(interval);
+  }, []);
 
   const handleManualSweep = async () => {
     setIsSweeping(true);
@@ -66,6 +86,11 @@ function App() {
               <a href="#" className="hover:text-white transition-colors">Ledger</a>
               <a href="#" className="hover:text-white transition-colors">Market Cache</a>
               <a href="#" className="hover:text-white transition-colors">AI Strategies</a>
+            </div>
+
+            <div className={`hidden md:flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-medium transition-colors ${dlqStatus.active ? 'bg-amber-500/10 border-amber-500/50 text-amber-400' : 'bg-slate-800 border-slate-700 text-slate-300'}`}>
+              <div className={`w-2 h-2 rounded-full ${dlqStatus.active ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+              Edge Buffer Status {dlqStatus.active && `(${dlqStatus.count})`}
             </div>
 
             <div className="flex items-center gap-4">

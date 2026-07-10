@@ -13,14 +13,45 @@ export interface Env {
   MARKET_CACHE: KVNamespace;
 }
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Axim-Signature',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 
+    if (request.method === 'OPTIONS') {
+      return new Response(null, {
+        status: 200,
+        headers: corsHeaders
+      });
+    }
+
     const url = new URL(request.url);
+
+    if (request.method === 'GET' && url.pathname === '/api/dlq-status') {
+      // Endpoint for app diagnostics
+      try {
+        const dlqList = await env.GREEN_STATE.list({ limit: 1 });
+        const hasDlqItems = dlqList.keys.length > 0;
+        return new Response(JSON.stringify({ active: hasDlqItems, count: dlqList.keys.length }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Failed to read DLQ' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
     if (request.method === 'GET' && url.pathname === '/api/market-cache') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized Edge Ingress', { status: 401 });
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
       }
 
       const latestPrices = await env.MARKET_CACHE.get('latest_prices');
@@ -29,7 +60,7 @@ export default {
           status: 404,
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*'
+            ...corsHeaders
           }
         });
       }
@@ -38,7 +69,7 @@ export default {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
+          ...corsHeaders
         }
       });
     }
@@ -47,7 +78,7 @@ export default {
 
     const signature = request.headers.get('X-Axim-Signature');
     if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-      return new Response('Unauthorized Edge Ingress', { status: 401 });
+      return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
     }
 
     try {
@@ -94,7 +125,7 @@ export default {
         throw new Error(`DB Ingestion Fault: ${dbResponse.statusText}`);
       }
 
-      return new Response(JSON.stringify({ success: true, status: 'ledger_updated' }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, status: 'ledger_updated' }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
     } catch (error) {
       // 4. Fail-Open Edge Buffer (DLQ)
@@ -111,7 +142,7 @@ export default {
         success: false, 
         status: 'buffered_to_dlq',
         dlq_id: errorId 
-      }), { status: 202 }); // Accepted but deferred
+      }), { status: 202, headers: { 'Content-Type': 'application/json', ...corsHeaders } }); // Accepted but deferred
     }
   }
 };

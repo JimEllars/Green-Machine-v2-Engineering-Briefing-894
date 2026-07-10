@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
 import { supabase } from '../../supabaseClient';
@@ -43,25 +43,27 @@ export default function StrategyConsultantTerminal() {
     return () => supabase.removeChannel(channel);
   }, []);
 
+  const typedLengthRef = useRef(0);
+
   // Typewriter effect for the terminal
   useEffect(() => {
-    if (!strategy || strategy.length <= displayText.length) {
+    if (!strategy || strategy.length <= typedLengthRef.current) {
       setIsTyping(false);
       return;
     }
 
     setIsTyping(true);
-    let i = displayText.length;
     const interval = setInterval(() => {
-      setDisplayText(strategy.slice(0, i));
-      i++;
-      if (i > strategy.length) {
+      typedLengthRef.current++;
+      setDisplayText(strategy.slice(0, typedLengthRef.current));
+
+      if (typedLengthRef.current >= strategy.length) {
         clearInterval(interval);
         setIsTyping(false);
       }
     }, 15);
     return () => clearInterval(interval);
-  }, [strategy, displayText.length]);
+  }, [strategy]);
 
   return (
     <div className="bg-[#0A0F15] border border-slate-800 rounded-xl flex flex-col h-full shadow-2xl overflow-hidden relative">
