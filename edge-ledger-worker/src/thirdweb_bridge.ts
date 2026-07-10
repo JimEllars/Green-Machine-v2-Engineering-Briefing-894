@@ -34,9 +34,24 @@ export default {
     if (request.method === 'GET' && url.pathname === '/api/dlq-status') {
       // Endpoint for app diagnostics
       try {
-        const dlqList = await env.GREEN_STATE.list({ limit: 1 });
-        const hasDlqItems = dlqList.keys.length > 0;
-        return new Response(JSON.stringify({ active: hasDlqItems, count: dlqList.keys.length }), {
+        let totalCount = 0;
+        let cursor = undefined;
+        let listComplete = false;
+
+        while (!listComplete) {
+          const listOptions = cursor ? { cursor } : undefined;
+          const dlqList = await env.GREEN_STATE.list(listOptions);
+          totalCount += dlqList.keys.length;
+
+          if (dlqList.list_complete) {
+            listComplete = true;
+          } else {
+            cursor = dlqList.cursor;
+          }
+        }
+
+        const hasDlqItems = totalCount > 0;
+        return new Response(JSON.stringify({ active: hasDlqItems, count: totalCount }), {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
@@ -45,6 +60,95 @@ export default {
         });
       } catch(e) {
         return new Response(JSON.stringify({ error: 'Failed to read DLQ' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/dlq-flush') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        let cursor = undefined;
+        let listComplete = false;
+        let processedCount = 0;
+
+        while (!listComplete) {
+          const dlqList = await env.GREEN_STATE.list(cursor ? { cursor } : undefined);
+
+          for (const key of dlqList.keys) {
+            const rawPayload = await env.GREEN_STATE.get(key.name);
+            if (rawPayload) {
+              try {
+                const payload = JSON.parse(rawPayload);
+                if (payload.error === 'unparseable') {
+                   // Delete unparseable from DLQ
+                   await env.GREEN_STATE.delete(key.name);
+                   continue;
+                }
+
+                const {
+                  partner_id,
+                  wallet_address,
+                  smart_contract_address,
+                  amount,
+                  currency,
+                  event_type,
+                  transaction_hash
+                } = payload;
+
+                let status = 'pending';
+                if (event_type === 'minted' || event_type === 'settled') status = 'minted';
+                if (event_type === 'failed') status = 'failed';
+
+                const ledgerEntry = {
+                  partner_id,
+                  wallet_address,
+                  smart_contract_address,
+                  amount,
+                  currency,
+                  status,
+                  ...(transaction_hash && { transaction_hash })
+                };
+
+                const dbResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions?on_conflict=transaction_hash`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                    'apikey': env.SUPABASE_SERVICE_KEY,
+                    'Prefer': 'resolution=merge-duplicates'
+                  },
+                  body: JSON.stringify([ledgerEntry])
+                });
+
+                if (dbResponse.ok) {
+                  await env.GREEN_STATE.delete(key.name);
+                  processedCount++;
+                }
+              } catch (parseError) {
+                console.error('Parse or upsert error', parseError);
+              }
+            }
+          }
+
+          if (dlqList.list_complete) {
+            listComplete = true;
+          } else {
+            cursor = dlqList.cursor;
+          }
+        }
+
+        return new Response(JSON.stringify({ success: true, processed: processedCount }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to flush DLQ' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
 

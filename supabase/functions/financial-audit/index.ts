@@ -82,11 +82,21 @@ serve(async (req) => {
     // Try to parse the recommendation output as JSON to append the optimized value
     let strategyPayload = recommendation.output;
     try {
-      const parsedOut = JSON.parse(strategyPayload);
+      let cleanedPayload = strategyPayload;
+      if (typeof cleanedPayload === 'string') {
+        // Strip out markdown blocks (```json, ```, etc.)
+        cleanedPayload = cleanedPayload.replace(/^```[a-z]*\s*/i, '').replace(/\s*```$/i, '').trim();
+      }
+      const parsedOut = JSON.parse(cleanedPayload);
       parsedOut._node_health_index = nodeHealthIndex;
       strategyPayload = JSON.stringify(parsedOut, null, 2);
     } catch(e) {
       // If it's not JSON, append it textually or ignore
+      strategyPayload = JSON.stringify({
+        schema_fallback: true,
+        raw_message: strategyPayload,
+        _node_health_index: nodeHealthIndex
+      }, null, 2);
     }
 
     // 4. Write to Ledger & Trigger Realtime
