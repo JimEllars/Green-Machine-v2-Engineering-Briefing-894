@@ -2,17 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
 
-const INITIAL_MARKET_DATA = [
-  { symbol: 'BTC', name: 'Bitcoin', price: 64230.50, change: 2.4, type: 'crypto', icon: 'DollarSign' },
-  { symbol: 'ETH', name: 'Ethereum', price: 3450.20, change: -1.2, type: 'crypto', icon: 'Activity' },
-  { symbol: 'SOL', name: 'Solana', price: 145.80, change: 5.6, type: 'crypto', icon: 'Zap' },
-  { symbol: 'AAPL', name: 'Apple Inc.', price: 189.45, change: 0.8, type: 'equity', icon: 'Briefcase' },
-  { symbol: 'MSFT', name: 'Microsoft', price: 420.15, change: 1.1, type: 'equity', icon: 'Monitor' },
-  { symbol: 'NVDA', name: 'NVIDIA', price: 850.30, change: -3.4, type: 'equity', icon: 'Cpu' },
-];
-
 export default function MarketFeedMatrix() {
-  const [marketData, setMarketData] = useState(INITIAL_MARKET_DATA);
+  const [marketData, setMarketData] = useState([]);
 
 
   useEffect(() => {
@@ -21,7 +12,7 @@ export default function MarketFeedMatrix() {
         // Calling Cloudflare Worker Endpoint
         const response = await fetch('/api/market-cache', {
           headers: {
-            'X-Axim-Signature': 'axim_internal_finance' // Using the mock internal key shown in App.jsx
+            'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY
           }
         });
         
@@ -35,8 +26,6 @@ export default function MarketFeedMatrix() {
               { symbol: 'SOL', name: 'Solana', price: data.crypto.SOL.price, change: data.crypto.SOL.change_24h, type: 'crypto', icon: 'Zap' },
               { symbol: 'AAPL', name: 'Apple Inc.', price: data.equities.AAPL.price, change: data.equities.AAPL.change_24h, type: 'equity', icon: 'Briefcase' },
               { symbol: 'MSFT', name: 'Microsoft', price: data.equities.MSFT.price, change: data.equities.MSFT.change_24h, type: 'equity', icon: 'Monitor' },
-              // Fallback NVDA as it wasn't in mock response
-              { symbol: 'NVDA', name: 'NVIDIA', price: 850.30, change: -3.4, type: 'equity', icon: 'Cpu' },
             ];
             setMarketData(formattedData);
           }

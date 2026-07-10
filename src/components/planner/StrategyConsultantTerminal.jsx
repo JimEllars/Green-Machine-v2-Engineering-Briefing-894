@@ -33,11 +33,10 @@ export default function StrategyConsultantTerminal() {
     const channel = supabase
       .channel('strategy-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'financial_recommendations' }, (payload) => {
-        setStrategy(payload.new.strategy_payload || '');
+        setStrategy(prev => prev + '\n\n' + (payload.new.strategy_payload || ''));
         if (payload.new.provider_used) {
            setProvider(payload.new.provider_used.toUpperCase());
         }
-        setDisplayText(''); // Reset typing
       })
       .subscribe();
 
@@ -46,10 +45,13 @@ export default function StrategyConsultantTerminal() {
 
   // Typewriter effect for the terminal
   useEffect(() => {
-    if (!strategy) return;
+    if (!strategy || strategy.length <= displayText.length) {
+      setIsTyping(false);
+      return;
+    }
 
     setIsTyping(true);
-    let i = 0;
+    let i = displayText.length;
     const interval = setInterval(() => {
       setDisplayText(strategy.slice(0, i));
       i++;
@@ -59,7 +61,7 @@ export default function StrategyConsultantTerminal() {
       }
     }, 15);
     return () => clearInterval(interval);
-  }, [strategy]);
+  }, [strategy, displayText.length]);
 
   return (
     <div className="bg-[#0A0F15] border border-slate-800 rounded-xl flex flex-col h-full shadow-2xl overflow-hidden relative">

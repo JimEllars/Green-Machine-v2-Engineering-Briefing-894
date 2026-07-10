@@ -25,7 +25,7 @@ export default function AffiliatePayoutGrid() {
     fetchInitialData();
 
     const channel = supabase
-      .channel('ledger-changes')
+      .channel('ledger-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, (payload) => {
         setTransactions(prev => {
           if (payload.eventType === 'INSERT') {
@@ -98,7 +98,12 @@ export default function AffiliatePayoutGrid() {
                     key={tx.id}
                     layout
                     initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      backgroundColor: tx.status === 'minted' ? ['rgba(16, 185, 129, 0.4)', 'rgba(30, 41, 59, 0)'] : 'rgba(30, 41, 59, 0)'
+                    }}
+                    transition={{ duration: 0.5 }}
                     className="hover:bg-slate-800/30 transition-colors"
                   >
                     <td className="px-6 py-4 font-mono text-emerald-400">{tx.partner}</td>
