@@ -5,7 +5,10 @@
  * Enforces Zero Data Loss via KV Dead Letter Queue (DLQ).
  */
 
+import { syncMarketCache } from './market_watcher';
+
 export interface Env {
+  ORACLE_API_KEY: string;
   AXIM_INTERNAL_KEY: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
@@ -44,8 +47,8 @@ export default {
         let listComplete = false;
 
         while (!listComplete) {
-          const listOptions = cursor ? { cursor } : undefined;
-          const dlqList = await env.GREEN_STATE.list(listOptions);
+          const listOptions: any = cursor ? { cursor } : undefined;
+          const dlqList: any = await env.GREEN_STATE.list(listOptions);
           totalCount += dlqList.keys.length;
 
           if (dlqList.list_complete) {
@@ -68,6 +71,27 @@ export default {
       }
     }
 
+
+    if (request.method === 'POST' && url.pathname === '/api/cache-sync') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        await syncMarketCache(env);
+        return new Response(JSON.stringify({ success: true, status: 'synced' }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to sync cache' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/dlq-flush') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
@@ -81,7 +105,7 @@ export default {
         const MAX_PROCESS = 25;
 
         while (!listComplete && processedCount < MAX_PROCESS) {
-          const dlqList = await env.GREEN_STATE.list(cursor ? { cursor } : undefined);
+          const dlqList: any = await env.GREEN_STATE.list(cursor ? { cursor } : undefined);
 
           for (const key of dlqList.keys) {
             if (processedCount >= MAX_PROCESS) {

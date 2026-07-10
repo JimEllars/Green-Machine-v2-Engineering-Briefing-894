@@ -13,6 +13,8 @@ function App() {
   const [isSweeping, setIsSweeping] = useState(false);
   const [dlqStatus, setDlqStatus] = useState({ active: false, count: 0 });
   const [isFlushing, setIsFlushing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
 
   useEffect(() => {
     const checkDlq = async () => {
@@ -62,6 +64,29 @@ function App() {
     } catch(e) {
       console.error('Failed to flush DLQ:', e);
       setIsFlushing(false);
+    }
+  };
+
+
+  const handleSyncKV = async () => {
+    setIsSyncing(true);
+    setSyncSuccess(false);
+    try {
+      const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
+      const res = await fetch(`${workerUrl}/api/cache-sync`, {
+        method: 'POST',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        setSyncSuccess(true);
+        setTimeout(() => setSyncSuccess(false), 2000);
+      }
+    } catch(e) {
+      console.error('Failed to sync KV:', e);
+    } finally {
+      setIsSyncing(false);
     }
   };
 

@@ -7,7 +7,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // 1. Strict RBAC / Header Validation
   const authHeader = req.headers.get('Authorization');
   if (!authHeader || !authHeader.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string)) {
@@ -20,12 +20,12 @@ serve(async (req) => {
   )
 
   try {
-    // 2. Scrape System Variables (Mocked queries for blueprint)
+    // 2. Scrape System Variables (Exact count structures for blueprint)
     // a. Compute debts from api_usage_logs
-    const { data: usageLogs } = await supabase.from('api_usage_logs').select('*').limit(100);
+    const { count: usageLogsCount } = await supabase.from('api_usage_logs').select('*', { count: 'exact', head: true });
     
     // b. Active affiliate records
-    const { data: affiliates } = await supabase.from('blockchain_transactions').select('*').eq('status', 'minted');
+    const { count: affiliatesCount } = await supabase.from('blockchain_transactions').select('*', { count: 'exact', head: true }).eq('status', 'minted');
 
     // c. Fetch Market Cache (Live external KV read via API)
     let marketCache = { BTC: 0, ETH: 0 }; // Fallback
@@ -52,8 +52,8 @@ serve(async (req) => {
     }
 
     // Calculate Node Health Index (H = 0.7 * M - 0.3 * D)
-    const M = affiliates?.length || 0; // Marginal proxy
-    const D = usageLogs?.length || 0; // Debt proxy
+    const M = affiliatesCount || 0; // Marginal proxy
+    const D = usageLogsCount || 0; // Debt proxy
     const nodeHealthIndex = (0.7 * M) - (0.3 * D);
 
     // 3. Channel to LLM Proxy (DeepSeek Priority)
@@ -108,7 +108,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ success: true, routed_to: provider }), { status: 200 });
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 })

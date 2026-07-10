@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import SafeIcon from '../../common/SafeIcon';
 
@@ -7,6 +7,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
   const [dbConnected, setDbConnected] = useState(true);
   const [edgeCacheAvailable, setEdgeCacheAvailable] = useState(true);
   const [tickerStream, setTickerStream] = useState([]);
+
+  const streamEndRef = useRef(null);
 
   useEffect(() => {
     let subscription;
@@ -44,7 +46,9 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
           .channel('public:blockchain_transactions')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, payload => {
              const newTx = `[${new Date().toLocaleTimeString()}] ${payload.eventType.toUpperCase()} - ${payload.new?.transaction_hash?.substring(0,8) || 'Unknown'}`;
-             setTickerStream(prev => [newTx, ...prev].slice(0, 5));
+             // Removing the slice(0,5) to allow scrolling if we want, or keeping it but scrolling anyway.
+             // We'll append it to the end so scrolling to bottom makes sense.
+             setTickerStream(prev => [...prev, newTx].slice(-50)); // keep last 50
 
              if (payload.eventType === 'INSERT') {
                setTxCount(prev => prev + 1);
@@ -67,6 +71,13 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
       }
     };
   }, []);
+
+  // Auto-scroll effect
+  useEffect(() => {
+    if (streamEndRef.current) {
+      streamEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [tickerStream]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 h-full flex flex-col">
@@ -107,13 +118,16 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
 
         <div className="mt-4 flex-grow bg-black/40 rounded-lg p-4 border border-slate-700 font-mono text-[10px] text-slate-400 overflow-y-auto">
           <div className="mb-2 text-emerald-500 font-bold uppercase tracking-wider">Live Tx Stream</div>
-          {tickerStream.length === 0 ? (
-            <div className="text-slate-600 italic">Listening for changes...</div>
-          ) : (
-            tickerStream.map((msg, idx) => (
-              <div key={idx} className="mb-1 truncate">{msg}</div>
-            ))
-          )}
+          <div className="max-h-[150px] overflow-y-auto">
+            {tickerStream.length === 0 ? (
+              <div className="text-slate-600 italic">Listening for changes...</div>
+            ) : (
+              tickerStream.map((msg, idx) => (
+                <div key={idx} className="mb-1 truncate">{msg}</div>
+              ))
+            )}
+            <div ref={streamEndRef} />
+          </div>
         </div>
       </div>
     </div>
