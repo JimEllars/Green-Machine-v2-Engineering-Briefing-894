@@ -14,25 +14,44 @@ const INITIAL_MARKET_DATA = [
 export default function MarketFeedMatrix() {
   const [marketData, setMarketData] = useState(INITIAL_MARKET_DATA);
 
-  // Simulate KV Cache high-frequency updates
+
   useEffect(() => {
-    const interval = setInterval(() => {
-      setMarketData(prev => prev.map(asset => {
-        const volatility = asset.type === 'crypto' ? 0.002 : 0.0005;
-        const change = 1 + (Math.random() * volatility * 2 - volatility);
-        const newPrice = asset.price * change;
-        const newChange = asset.change + (Math.random() * 0.4 - 0.2);
+    const fetchMarketData = async () => {
+      try {
+        // Calling Cloudflare Worker Endpoint
+        const response = await fetch('/api/market-cache', {
+          headers: {
+            'X-Axim-Signature': 'axim_internal_finance' // Using the mock internal key shown in App.jsx
+          }
+        });
         
-        return {
-          ...asset,
-          price: newPrice,
-          change: newChange
-        };
-      }));
-    }, 3000); // 3 second refresh to simulate edge cache reads
+        if (response.ok) {
+          const data = await response.json();
+          // Transform edge data to UI format
+          if (data && data.crypto && data.equities) {
+             const formattedData = [
+              { symbol: 'BTC', name: 'Bitcoin', price: data.crypto.BTC.price, change: data.crypto.BTC.change_24h, type: 'crypto', icon: 'DollarSign' },
+              { symbol: 'ETH', name: 'Ethereum', price: data.crypto.ETH.price, change: data.crypto.ETH.change_24h, type: 'crypto', icon: 'Activity' },
+              { symbol: 'SOL', name: 'Solana', price: data.crypto.SOL.price, change: data.crypto.SOL.change_24h, type: 'crypto', icon: 'Zap' },
+              { symbol: 'AAPL', name: 'Apple Inc.', price: data.equities.AAPL.price, change: data.equities.AAPL.change_24h, type: 'equity', icon: 'Briefcase' },
+              { symbol: 'MSFT', name: 'Microsoft', price: data.equities.MSFT.price, change: data.equities.MSFT.change_24h, type: 'equity', icon: 'Monitor' },
+              // Fallback NVDA as it wasn't in mock response
+              { symbol: 'NVDA', name: 'NVIDIA', price: 850.30, change: -3.4, type: 'equity', icon: 'Cpu' },
+            ];
+            setMarketData(formattedData);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch market data", error);
+      }
+    };
+
+    fetchMarketData(); // initial fetch
+    const interval = setInterval(fetchMarketData, 30000); // 30s interval for TTL
 
     return () => clearInterval(interval);
   }, []);
+
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">

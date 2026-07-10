@@ -1,26 +1,58 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
+import { supabase } from '../../supabaseClient';
+import { formatDistanceToNow } from 'date-fns';
 
-const MOCK_TRANSACTIONS = [
-  { id: 'tx_1', partner: 'AXM-992', wallet: '0x71C...3A9', amount: 1250.00, currency: 'USDC', status: 'minted', time: '2m ago' },
-  { id: 'tx_2', partner: 'AXM-441', wallet: '0x99B...1F2', amount: 850.50, currency: 'USDT', status: 'pending', time: 'Just now' },
-  { id: 'tx_3', partner: 'AXM-105', wallet: '0x33A...8C4', amount: 3200.00, currency: 'USDC', status: 'minted', time: '15m ago' },
-  { id: 'tx_4', partner: 'AXM-882', wallet: '0x55D...9E1', amount: 450.00, currency: 'DAI', status: 'failed', time: '1h ago' },
-];
+
 
 export default function AffiliatePayoutGrid() {
-  const [transactions, setTransactions] = useState(MOCK_TRANSACTIONS);
+  const [transactions, setTransactions] = useState([]);
 
-  // Simulate WebSocket settlement updates
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setTransactions(prev => prev.map(tx => 
-        tx.id === 'tx_2' ? { ...tx, status: 'minted', time: 'Just now' } : tx
-      ));
-    }, 5000);
-    return () => clearTimeout(timer);
+    const fetchInitialData = async () => {
+      const { data, error } = await supabase
+        .from('blockchain_transactions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (data) {
+        setTransactions(data.map(mapTransaction));
+      }
+    };
+
+    fetchInitialData();
+
+    const channel = supabase
+      .channel('ledger-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, (payload) => {
+        setTransactions(prev => {
+          if (payload.eventType === 'INSERT') {
+            return [mapTransaction(payload.new), ...prev].slice(0, 10);
+          }
+          if (payload.eventType === 'UPDATE') {
+             return prev.map(tx => tx.id === payload.new.id ? mapTransaction(payload.new) : tx);
+          }
+          return prev;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const mapTransaction = (dbTx) => ({
+    id: dbTx.id,
+    partner: dbTx.partner_id ? `AXM-${dbTx.partner_id.substring(0,3)}` : 'Unknown', // mocking partner ID format
+    wallet: `${dbTx.wallet_address.substring(0, 5)}...${dbTx.wallet_address.substring(dbTx.wallet_address.length - 3)}`,
+    amount: Number(dbTx.amount),
+    currency: dbTx.currency,
+    status: dbTx.status,
+    time: formatDistanceToNow(new Date(dbTx.updated_at || dbTx.created_at || Date.now()), { addSuffix: true })
+  });
 
   const getStatusConfig = (status) => {
     switch(status) {
