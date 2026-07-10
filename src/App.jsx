@@ -16,8 +16,12 @@ function App() {
   useEffect(() => {
     const checkDlq = async () => {
       try {
-        const workerUrl = import.meta.env.VITE_WORKER_URL || '';
-        const res = await fetch(`${workerUrl}/api/dlq-status`);
+        const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
+        const res = await fetch(`${workerUrl}/api/dlq-status`, {
+          headers: {
+            'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+          }
+        });
         if (res.ok) {
            const data = await res.json();
            setDlqStatus({ active: data.active, count: data.count });
@@ -34,7 +38,7 @@ function App() {
 
   const handleFlushDLQ = async () => {
     try {
-      const workerUrl = import.meta.env.VITE_WORKER_URL || '';
+      const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
       const res = await fetch(`${workerUrl}/api/dlq-flush`, {
         method: 'POST',
         headers: {

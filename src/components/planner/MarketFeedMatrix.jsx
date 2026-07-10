@@ -5,45 +5,57 @@ import SafeIcon from '../../common/SafeIcon';
 export default function MarketFeedMatrix() {
   const [marketData, setMarketData] = useState([]);
   const [isStale, setIsStale] = useState(false);
+  const [isDegraded, setIsDegraded] = useState(false);
 
 
   useEffect(() => {
     const fetchMarketData = async () => {
       try {
         // Calling Cloudflare Worker Endpoint
-        const workerUrl = import.meta.env.VITE_WORKER_URL || '';
+        const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
         const response = await fetch(`${workerUrl}/api/market-cache`, {
           headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY
           }
         });
         
-        if (response.ok) {
-          const data = await response.json();
-          // Check telemetry timestamp
-          if (data && data._telemetry_timestamp) {
-            const ageMs = Date.now() - data._telemetry_timestamp;
-            if (ageMs > 60000) {
-              setIsStale(true);
-            } else {
-              setIsStale(false);
-            }
-          }
+        if (!response.ok) {
+           throw new Error(`Edge Connection Degraded: ${response.status}`);
+        }
 
-          // Transform edge data to UI format
-          if (data && data.crypto && data.equities) {
-             const formattedData = [
-              { symbol: 'BTC', name: 'Bitcoin', price: data.crypto.BTC.price, change: data.crypto.BTC.change_24h, type: 'crypto', icon: 'DollarSign' },
-              { symbol: 'ETH', name: 'Ethereum', price: data.crypto.ETH.price, change: data.crypto.ETH.change_24h, type: 'crypto', icon: 'Activity' },
-              { symbol: 'SOL', name: 'Solana', price: data.crypto.SOL.price, change: data.crypto.SOL.change_24h, type: 'crypto', icon: 'Zap' },
-              { symbol: 'AAPL', name: 'Apple Inc.', price: data.equities.AAPL.price, change: data.equities.AAPL.change_24h, type: 'equity', icon: 'Briefcase' },
-              { symbol: 'MSFT', name: 'Microsoft', price: data.equities.MSFT.price, change: data.equities.MSFT.change_24h, type: 'equity', icon: 'Monitor' },
-            ];
-            setMarketData(formattedData);
+        const data = await response.json();
+        setIsDegraded(false);
+        // Check telemetry timestamp
+        if (data && data._telemetry_timestamp) {
+          const ageMs = Date.now() - data._telemetry_timestamp;
+          if (ageMs > 60000) {
+            setIsStale(true);
+          } else {
+            setIsStale(false);
           }
+        }
+
+        // Transform edge data to UI format
+        if (data && data.crypto && data.equities) {
+           const formattedData = [
+            { symbol: 'BTC', name: 'Bitcoin', price: data.crypto.BTC.price, change: data.crypto.BTC.change_24h, type: 'crypto', icon: 'DollarSign' },
+            { symbol: 'ETH', name: 'Ethereum', price: data.crypto.ETH.price, change: data.crypto.ETH.change_24h, type: 'crypto', icon: 'Activity' },
+            { symbol: 'SOL', name: 'Solana', price: data.crypto.SOL.price, change: data.crypto.SOL.change_24h, type: 'crypto', icon: 'Zap' },
+            { symbol: 'AAPL', name: 'Apple Inc.', price: data.equities.AAPL.price, change: data.equities.AAPL.change_24h, type: 'equity', icon: 'Briefcase' },
+            { symbol: 'MSFT', name: 'Microsoft', price: data.equities.MSFT.price, change: data.equities.MSFT.change_24h, type: 'equity', icon: 'Monitor' },
+          ];
+          setMarketData(formattedData);
         }
       } catch (error) {
         console.error("Failed to fetch market data", error);
+        setIsDegraded(true);
+        setMarketData([
+          { symbol: 'BTC', name: 'Bitcoin', price: 65000, change: 0, type: 'crypto', icon: 'DollarSign' },
+          { symbol: 'ETH', name: 'Ethereum', price: 3500, change: 0, type: 'crypto', icon: 'Activity' },
+          { symbol: 'SOL', name: 'Solana', price: 150, change: 0, type: 'crypto', icon: 'Zap' },
+          { symbol: 'AAPL', name: 'Apple Inc.', price: 175, change: 0, type: 'equity', icon: 'Briefcase' },
+          { symbol: 'MSFT', name: 'Microsoft', price: 400, change: 0, type: 'equity', icon: 'Monitor' },
+        ]);
       }
     };
 
@@ -56,6 +68,12 @@ export default function MarketFeedMatrix() {
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+      {isDegraded && (
+        <div className="mb-4 bg-amber-500/20 border border-amber-500/50 rounded-lg p-3 text-amber-400 text-sm font-medium flex items-center justify-center gap-2">
+          <SafeIcon name="AlertTriangle" className="w-4 h-4" />
+          Edge Connection Degraded - Displaying Local Baseline Snapshot
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
