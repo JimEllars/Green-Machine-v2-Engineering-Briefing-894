@@ -4,6 +4,8 @@ import StrategyConsultantTerminal from './components/planner/StrategyConsultantT
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
 import SafeIcon from './common/SafeIcon';
+import SystemDiagnosticsPanel from './components/planner/SystemDiagnosticsPanel';
+
 
 function App() {
   const [selectedTx, setSelectedTx] = useState(null);
@@ -29,6 +31,24 @@ function App() {
     const interval = setInterval(checkDlq, 15000); // Check every 15s
     return () => clearInterval(interval);
   }, []);
+
+  const handleFlushDLQ = async () => {
+    try {
+      const workerUrl = import.meta.env.VITE_WORKER_URL || '';
+      const res = await fetch(`${workerUrl}/api/dlq-flush`, {
+        method: 'POST',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        // Will refresh automatically via interval, but can reset here
+        setDlqStatus({ active: false, count: 0 });
+      }
+    } catch(e) {
+      console.error('Failed to flush DLQ:', e);
+    }
+  };
 
   const handleManualSweep = async () => {
     setIsSweeping(true);
@@ -134,7 +154,7 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Alerts & Stats */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-
+            <SystemDiagnosticsPanel dlqStatus={dlqStatus} />
           </div>
 
           {/* Center Column: Market & Ledger */}
@@ -159,6 +179,13 @@ function App() {
                     {action}
                   </button>
                 ))}
+                <button
+                  onClick={handleFlushDLQ}
+                  className="col-span-2 p-3 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg border border-amber-500/50 text-[10px] font-bold text-amber-500 transition-colors uppercase tracking-wider flex items-center justify-center gap-2"
+                >
+                  <SafeIcon name="RefreshCw" className="w-3 h-3" />
+                  Flush DLQ Buffer
+                </button>
               </div>
             </div>
           </div>
