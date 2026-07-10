@@ -8,8 +8,14 @@ import { formatDistanceToNow } from 'date-fns';
 
 export default function AffiliatePayoutGrid() {
   const [transactions, setTransactions] = useState([]);
+  const [connectionStatus, setConnectionStatus] = useState('CONNECTING'); // CONNECTING, SUBSCRIBED, TIMED_OUT, CLOSED
 
   useEffect(() => {
+    let channel;
+    let retryTimeout;
+    let retryCount = 0;
+    const maxBackoff = 30000;
+
     const fetchInitialData = async () => {
       const { data, error } = await supabase
         .from('blockchain_transactions')
@@ -22,25 +28,49 @@ export default function AffiliatePayoutGrid() {
       }
     };
 
-    fetchInitialData();
+    const subscribeToChanges = () => {
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
 
-    const channel = supabase
-      .channel('ledger-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, (payload) => {
-        setTransactions(prev => {
-          if (payload.eventType === 'INSERT') {
-            return [mapTransaction(payload.new), ...prev].slice(0, 10);
+      setConnectionStatus('CONNECTING');
+
+      channel = supabase
+        .channel('ledger-realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, (payload) => {
+          setTransactions(prev => {
+            if (payload.eventType === 'INSERT') {
+              return [mapTransaction(payload.new), ...prev].slice(0, 10);
+            }
+            if (payload.eventType === 'UPDATE') {
+               return prev.map(tx => tx.id === payload.new.id ? mapTransaction(payload.new) : tx);
+            }
+            return prev;
+          });
+        })
+        .subscribe((status) => {
+          setConnectionStatus(status);
+
+          if (status === 'SUBSCRIBED') {
+            retryCount = 0; // reset on success
+          } else if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            // Exponential backoff
+            const delay = Math.min(1000 * Math.pow(2, retryCount), maxBackoff);
+            retryCount++;
+            clearTimeout(retryTimeout);
+            retryTimeout = setTimeout(() => {
+              subscribeToChanges();
+            }, delay);
           }
-          if (payload.eventType === 'UPDATE') {
-             return prev.map(tx => tx.id === payload.new.id ? mapTransaction(payload.new) : tx);
-          }
-          return prev;
         });
-      })
-      .subscribe();
+    };
+
+    fetchInitialData();
+    subscribeToChanges();
 
     return () => {
-      supabase.removeChannel(channel);
+      clearTimeout(retryTimeout);
+      if (channel) supabase.removeChannel(channel);
     };
   }, []);
 
@@ -70,6 +100,16 @@ export default function AffiliatePayoutGrid() {
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <SafeIcon name="Layers" className="text-emerald-500" />
             Thirdweb Ledger Sync
+            <div className="flex items-center ml-3">
+              <div
+                className={`w-2.5 h-2.5 rounded-full ${
+                  connectionStatus === 'SUBSCRIBED' ? 'bg-emerald-500' :
+                  connectionStatus === 'CONNECTING' ? 'bg-amber-500 animate-pulse' :
+                  'bg-rose-500'
+                }`}
+                title={`Connection Status: ${connectionStatus}`}
+              />
+            </div>
           </h2>
           <p className="text-slate-400 text-sm mt-1">Real-time smart contract settlements</p>
         </div>

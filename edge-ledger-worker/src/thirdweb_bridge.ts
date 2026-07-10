@@ -54,8 +54,8 @@ export default {
         return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
       }
 
-      const latestPrices = await env.MARKET_CACHE.get('latest_prices');
-      if (!latestPrices) {
+      const cacheResult = await env.MARKET_CACHE.getWithMetadata('latest_prices');
+      if (!cacheResult.value) {
         return new Response(JSON.stringify({ error: 'Cache miss' }), {
           status: 404,
           headers: {
@@ -65,7 +65,17 @@ export default {
         });
       }
 
-      return new Response(latestPrices, {
+      let parsedData;
+      try {
+        parsedData = JSON.parse(cacheResult.value);
+        // Track data freshness
+        parsedData._telemetry_timestamp = (cacheResult.metadata && cacheResult.metadata.updated_at) ? cacheResult.metadata.updated_at : Date.now();
+      } catch (e) {
+        // Fallback if parsing fails
+        parsedData = { error: 'Invalid JSON in cache' };
+      }
+
+      return new Response(JSON.stringify(parsedData), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
