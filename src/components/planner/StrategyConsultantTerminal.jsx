@@ -1,41 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
+import { supabase } from '../../supabaseClient';
 
-const MOCK_STRATEGY = `**SYSTEM SWEEP COMPLETE: 02:00 UTC**
 
-**Active Engine:** DeepSeek-V3 (Cost-Optimized Router)
-**Status:** Nominal. No deep-reasoning failover required.
-
-### Liquidity Analysis
-- **Micro-App Compute Debt:** $412.50 (api_usage_logs)
-- **Pending Escrow:** $8,450.00 USDC
-- **Available Treasury:** $145,200.00
-
-### Recommendations
-1. **Infrastructure Rebalance:** Shift 15% of compute allocation from App-Branch-B to App-Branch-A due to a 34% drop in API efficiency.
-2. **Thirdweb Gas Optimization:** Batch the current 4 pending USDT settlements to save approximately $12.40 in L1 fees.
-3. **Market Hedge:** BTC volatility detected (+2.4%). Hold current USDC reserves; do not convert to volatile assets for the next 48 hours.
-
-*Executing autonomous ledger adjustments...*`;
 
 export default function StrategyConsultantTerminal() {
   const [displayText, setDisplayText] = useState('');
-  const [isTyping, setIsTyping] = useState(true);
+  const [isTyping, setIsTyping] = useState(false);
+  const [strategy, setStrategy] = useState('');
+  const [provider, setProvider] = useState('{provider}'); // Default
+
+  useEffect(() => {
+    const fetchLatestStrategy = async () => {
+      const { data, error } = await supabase
+        .from('financial_recommendations')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (data) {
+        setStrategy(data.strategy_payload || '');
+        if (data.provider_used) {
+           setProvider(data.provider_used.toUpperCase());
+        }
+      }
+    };
+
+    fetchLatestStrategy();
+
+    const channel = supabase
+      .channel('strategy-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'financial_recommendations' }, (payload) => {
+        setStrategy(payload.new.strategy_payload || '');
+        if (payload.new.provider_used) {
+           setProvider(payload.new.provider_used.toUpperCase());
+        }
+        setDisplayText(''); // Reset typing
+      })
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
 
   // Typewriter effect for the terminal
   useEffect(() => {
+    if (!strategy) return;
+
+    setIsTyping(true);
     let i = 0;
     const interval = setInterval(() => {
-      setDisplayText(MOCK_STRATEGY.slice(0, i));
+      setDisplayText(strategy.slice(0, i));
       i++;
-      if (i > MOCK_STRATEGY.length) {
+      if (i > strategy.length) {
         clearInterval(interval);
         setIsTyping(false);
       }
     }, 15);
     return () => clearInterval(interval);
-  }, []);
+  }, [strategy]);
 
   return (
     <div className="bg-[#0A0F15] border border-slate-800 rounded-xl flex flex-col h-full shadow-2xl overflow-hidden relative">

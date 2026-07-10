@@ -10,11 +10,41 @@ export interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
   GREEN_STATE: KVNamespace; // DLQ Namespace
+  MARKET_CACHE: KVNamespace;
 }
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/api/market-cache') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401 });
+      }
+
+      const latestPrices = await env.MARKET_CACHE.get('latest_prices');
+      if (!latestPrices) {
+        return new Response(JSON.stringify({ error: 'Cache miss' }), {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+          }
+        });
+      }
+
+      return new Response(latestPrices, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
+
     // 1. HMAC Validation (The Ingress Token Isolation Rule)
+
     const signature = request.headers.get('X-Axim-Signature');
     if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
       return new Response('Unauthorized Edge Ingress', { status: 401 });

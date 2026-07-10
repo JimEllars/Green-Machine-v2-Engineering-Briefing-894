@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
+import { supabase } from './supabaseClient';
 import StrategyConsultantTerminal from './components/planner/StrategyConsultantTerminal';
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
-import LiquidityAllocation from './components/planner/LiquidityAllocation';
-import EdgeStatus from './components/planner/EdgeStatus';
-import MarketAlerts from './components/planner/MarketAlerts';
-import AuditHistory from './components/planner/AuditHistory';
-import TransactionDetailsModal from './components/planner/TransactionDetailsModal';
-import EdgeLogsTerminal from './components/planner/EdgeLogsTerminal';
 import SafeIcon from './common/SafeIcon';
 
 function App() {
@@ -15,24 +10,43 @@ function App() {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isSweeping, setIsSweeping] = useState(false);
 
-  const handleManualSweep = () => {
+  const handleManualSweep = async () => {
     setIsSweeping(true);
-    setTimeout(() => setIsSweeping(false), 3000);
+
+    try {
+      // In a real environment, you'd use a service role key for this sensitive operation if the Edge Function requires it,
+      // but for this prototype, we'll use the anon key if that's what's available, or a specific env var.
+      const authHeader = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
+        ? `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY}`
+        : `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`;
+
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1/financial-audit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({
+          trigger_source: 'manual_sweep_dashboard',
+          timestamp: new Date().toISOString()
+        })
+      });
+
+      if (!response.ok) {
+        console.error('Sweep failed:', response.statusText);
+      }
+    } catch (error) {
+       console.error('Sweep error:', error);
+    } finally {
+      setIsSweeping(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#05080f] text-slate-200 font-sans selection:bg-emerald-500/30">
       
       {/* Overlays */}
-      <TransactionDetailsModal 
-        tx={selectedTx} 
-        isOpen={!!selectedTx} 
-        onClose={() => setSelectedTx(null)} 
-      />
-      <EdgeLogsTerminal 
-        isOpen={isLogsOpen} 
-        onClose={() => setIsLogsOpen(false)} 
-      />
+
 
       <nav className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -95,9 +109,7 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Alerts & Stats */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            <MarketAlerts />
-            <LiquidityAllocation />
-            <AuditHistory />
+
           </div>
 
           {/* Center Column: Market & Ledger */}
@@ -109,7 +121,7 @@ function App() {
           {/* Right Column: AI Strategy Terminal */}
           <div className="lg:col-span-3 flex flex-col min-h-[600px] sticky top-24">
             <StrategyConsultantTerminal />
-            <EdgeStatus />
+
             
             <div className="mt-6 bg-slate-900 border border-slate-800 rounded-xl p-6">
               <h3 className="text-white font-bold mb-4 flex items-center gap-2 text-sm">
