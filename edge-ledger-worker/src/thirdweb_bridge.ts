@@ -78,7 +78,7 @@ export default {
         let cursor = undefined;
         let listComplete = false;
         let processedCount = 0;
-        const MAX_PROCESS = 50;
+        const MAX_PROCESS = 25;
 
         while (!listComplete && processedCount < MAX_PROCESS) {
           const dlqList = await env.GREEN_STATE.list(cursor ? { cursor } : undefined);
@@ -152,7 +152,14 @@ export default {
           }
         }
 
-        return new Response(JSON.stringify({ success: true, processed: processedCount }), {
+        let remaining = false;
+        if (processedCount >= MAX_PROCESS) {
+            remaining = true;
+        } else if (!listComplete) {
+            remaining = true;
+        }
+
+        return new Response(JSON.stringify({ success: true, processed: processedCount, remaining }), {
           status: 200,
           headers: {
             'Content-Type': 'application/json',

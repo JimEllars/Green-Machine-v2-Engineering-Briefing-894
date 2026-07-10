@@ -12,6 +12,7 @@ function App() {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isSweeping, setIsSweeping] = useState(false);
   const [dlqStatus, setDlqStatus] = useState({ active: false, count: 0 });
+  const [isFlushing, setIsFlushing] = useState(false);
 
   useEffect(() => {
     const checkDlq = async () => {
@@ -37,6 +38,7 @@ function App() {
   }, []);
 
   const handleFlushDLQ = async () => {
+    setIsFlushing(true);
     try {
       const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
       const res = await fetch(`${workerUrl}/api/dlq-flush`, {
@@ -46,11 +48,20 @@ function App() {
         }
       });
       if (res.ok) {
-        // Will refresh automatically via interval, but can reset here
-        setDlqStatus({ active: false, count: 0 });
+        const data = await res.json();
+        if (data.remaining) {
+          setTimeout(handleFlushDLQ, 2000);
+        } else {
+          setIsFlushing(false);
+          // Will refresh automatically via interval, but can reset here
+          setDlqStatus({ active: false, count: 0 });
+        }
+      } else {
+        setIsFlushing(false);
       }
     } catch(e) {
       console.error('Failed to flush DLQ:', e);
+      setIsFlushing(false);
     }
   };
 
@@ -185,10 +196,10 @@ function App() {
                 ))}
                 <button
                   onClick={handleFlushDLQ}
-                  className="col-span-2 p-3 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg border border-amber-500/50 text-[10px] font-bold text-amber-500 transition-colors uppercase tracking-wider flex items-center justify-center gap-2"
+                  className={`col-span-2 p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isFlushing ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/50 text-amber-500'}`}
                 >
-                  <SafeIcon name="RefreshCw" className="w-3 h-3" />
-                  Flush DLQ Buffer
+                  <SafeIcon name="RefreshCw" className={`w-3 h-3 ${isFlushing ? 'animate-spin' : ''}`} />
+                  {isFlushing ? 'Flushing Batch...' : 'Flush DLQ Buffer'}
                 </button>
               </div>
             </div>
