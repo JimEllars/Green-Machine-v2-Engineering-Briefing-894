@@ -32,6 +32,11 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/api/dlq-status') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
       // Endpoint for app diagnostics
       try {
         let totalCount = 0;
@@ -73,11 +78,15 @@ export default {
         let cursor = undefined;
         let listComplete = false;
         let processedCount = 0;
+        const MAX_PROCESS = 50;
 
-        while (!listComplete) {
+        while (!listComplete && processedCount < MAX_PROCESS) {
           const dlqList = await env.GREEN_STATE.list(cursor ? { cursor } : undefined);
 
           for (const key of dlqList.keys) {
+            if (processedCount >= MAX_PROCESS) {
+               break;
+            }
             const rawPayload = await env.GREEN_STATE.get(key.name);
             if (rawPayload) {
               try {
@@ -133,6 +142,9 @@ export default {
             }
           }
 
+          if (processedCount >= MAX_PROCESS) {
+            break;
+          }
           if (dlqList.list_complete) {
             listComplete = true;
           } else {
@@ -249,7 +261,7 @@ export default {
       const rawPayload = await request.clone().text().catch(() => '{"error": "unparseable"}');
       
       await env.GREEN_STATE.put(errorId, rawPayload, {
-        metadata: { error: error.message, timestamp: Date.now() }
+        metadata: { error: (error as Error).message, timestamp: Date.now() }
       });
 
       return new Response(JSON.stringify({ 

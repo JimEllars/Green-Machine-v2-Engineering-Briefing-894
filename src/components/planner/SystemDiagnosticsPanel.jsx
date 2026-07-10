@@ -28,7 +28,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
 
         // Check edge cache availability
         try {
-          const workerUrl = import.meta.env.VITE_WORKER_URL || '';
+          const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
           const res = await fetch(`${workerUrl}/api/market-cache`, {
             headers: {
               'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
