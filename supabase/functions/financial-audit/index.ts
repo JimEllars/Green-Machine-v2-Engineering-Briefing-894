@@ -27,8 +27,29 @@ serve(async (req) => {
     // b. Active affiliate records
     const { data: affiliates } = await supabase.from('blockchain_transactions').select('*').eq('status', 'minted');
 
-    // c. Fetch Market Cache (Simulated external KV read via API)
-    const marketCache = { BTC: 64000, ETH: 3400 }; 
+    // c. Fetch Market Cache (Live external KV read via API)
+    let marketCache = { BTC: 0, ETH: 0 }; // Fallback
+    try {
+      const workerUrl = Deno.env.get('WORKER_URL');
+      if (workerUrl) {
+        const cacheResponse = await fetch(`${workerUrl}/api/market-cache`, {
+          headers: {
+            'X-Axim-Signature': Deno.env.get('AXIM_INTERNAL_KEY') || ''
+          }
+        });
+        if (cacheResponse.ok) {
+          const liveData = await cacheResponse.json();
+          if (liveData?.crypto?.BTC?.price && liveData?.crypto?.ETH?.price) {
+             marketCache = {
+                BTC: liveData.crypto.BTC.price,
+                ETH: liveData.crypto.ETH.price
+             };
+          }
+        }
+      }
+    } catch(e) {
+      console.error("Failed to fetch live market cache:", e);
+    }
 
     // 3. Channel to LLM Proxy (DeepSeek Priority)
     const systemContext = {
