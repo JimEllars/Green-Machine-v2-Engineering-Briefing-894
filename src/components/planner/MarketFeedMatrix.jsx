@@ -4,6 +4,7 @@ import SafeIcon from '../../common/SafeIcon';
 
 export default function MarketFeedMatrix() {
   const [marketData, setMarketData] = useState([]);
+  const [isStale, setIsStale] = useState(false);
 
 
   useEffect(() => {
@@ -19,6 +20,16 @@ export default function MarketFeedMatrix() {
         
         if (response.ok) {
           const data = await response.json();
+          // Check telemetry timestamp
+          if (data && data._telemetry_timestamp) {
+            const ageMs = Date.now() - data._telemetry_timestamp;
+            if (ageMs > 60000) {
+              setIsStale(true);
+            } else {
+              setIsStale(false);
+            }
+          }
+
           // Transform edge data to UI format
           if (data && data.crypto && data.equities) {
              const formattedData = [
@@ -53,13 +64,21 @@ export default function MarketFeedMatrix() {
           </h2>
           <p className="text-slate-400 text-sm mt-1">Sub-10ms edge cache reads via Cloudflare KV</p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          KV Cache: ACTIVE
+        <div className="flex items-center gap-2">
+          {isStale && (
+            <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-amber-500/10 text-amber-400 rounded-full border border-amber-500/20">
+              <SafeIcon name="AlertTriangle" className="w-3 h-3" />
+              Telemetry Stale
+            </div>
+          )}
+          <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            KV Cache: ACTIVE
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isStale ? 'opacity-80 blur-[1px]' : ''}`}>
         {marketData.map((asset) => (
           <motion.div
             key={asset.symbol}

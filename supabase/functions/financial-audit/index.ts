@@ -51,11 +51,17 @@ serve(async (req) => {
       console.error("Failed to fetch live market cache:", e);
     }
 
+    // Calculate Node Health Index (H = 0.7 * M - 0.3 * D)
+    const M = affiliates?.length || 0; // Marginal proxy
+    const D = usageLogs?.length || 0; // Debt proxy
+    const nodeHealthIndex = (0.7 * M) - (0.3 * D);
+
     // 3. Channel to LLM Proxy (DeepSeek Priority)
     const systemContext = {
-      usage_debts: usageLogs?.length || 0,
-      recent_minted_payouts: affiliates?.length || 0,
-      market_state: marketCache
+      usage_debts: D,
+      recent_minted_payouts: M,
+      market_state: marketCache,
+      node_health_index: nodeHealthIndex
     };
 
     // Determine if macro reallocation is needed (Complex reasoning -> Claude)
@@ -73,10 +79,20 @@ serve(async (req) => {
 
     const recommendation = await llmProxyResponse.json();
 
+    // Try to parse the recommendation output as JSON to append the optimized value
+    let strategyPayload = recommendation.output;
+    try {
+      const parsedOut = JSON.parse(strategyPayload);
+      parsedOut._node_health_index = nodeHealthIndex;
+      strategyPayload = JSON.stringify(parsedOut, null, 2);
+    } catch(e) {
+      // If it's not JSON, append it textually or ignore
+    }
+
     // 4. Write to Ledger & Trigger Realtime
     await supabase.from('financial_recommendations').insert({
       provider_used: provider,
-      strategy_payload: recommendation.output,
+      strategy_payload: strategyPayload,
       created_at: new Date().toISOString()
     });
 
