@@ -9,10 +9,30 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
   const [tickerStream, setTickerStream] = useState([]);
 
   const streamEndRef = useRef(null);
+  const activeChannelRef = useRef(null);
+
+  const checkEdgeHealth = async () => {
+    try {
+      const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
+      const res = await fetch(`${workerUrl}/api/market-cache`, {
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      setEdgeCacheAvailable(res.ok);
+    } catch (e) {
+      setEdgeCacheAvailable(false);
+    }
+  };
 
   useEffect(() => {
-    let subscription;
+    checkEdgeHealth();
+    const intervalId = setInterval(checkEdgeHealth, 15000);
+    return () => clearInterval(intervalId);
+  }, []);
 
+
+  useEffect(() => {
     const initDiagnostics = async () => {
       try {
         // Query recent transactions count
@@ -28,21 +48,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
           setDbConnected(true);
         }
 
-        // Check edge cache availability
-        try {
-          const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
-          const res = await fetch(`${workerUrl}/api/market-cache`, {
-            headers: {
-              'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
-            }
-          });
-          setEdgeCacheAvailable(res.ok);
-        } catch (e) {
-          setEdgeCacheAvailable(false);
-        }
-
         // Setup WebSocket for realtime ticker stream
-        subscription = supabase
+        activeChannelRef.current = supabase
           .channel('public:blockchain_transactions')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, payload => {
              const newTx = `[${new Date().toLocaleTimeString()}] ${payload.eventType.toUpperCase()} - ${payload.new?.transaction_hash?.substring(0,8) || 'Unknown'}`;
@@ -66,8 +73,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
     initDiagnostics();
 
     return () => {
-      if (subscription) {
-        supabase.removeChannel(subscription);
+      if (activeChannelRef.current) {
+        supabase.removeChannel(activeChannelRef.current);
       }
     };
   }, []);
@@ -114,6 +121,14 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
             <span className="text-lg font-bold text-white">{dlqStatus.count}</span>
             <div className={`w-2 h-2 rounded-full ${dlqStatus.active ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
           </div>
+        </div>
+
+
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+          <span className="text-sm text-slate-300">Fin-Ops Margin Ratio</span>
+          <span className={`text-lg font-bold drop-shadow-md ${((txCount / (txCount + (dlqStatus?.count || 0) + 1)) * 100) >= 95 ? 'text-emerald-500' : 'text-amber-500'}`}>
+            {((txCount / (txCount + (dlqStatus?.count || 0) + 1)) * 100).toFixed(1)}%
+          </span>
         </div>
 
         <div className="mt-4 flex-grow bg-black/40 rounded-lg p-4 border border-slate-700 font-mono text-[10px] text-slate-400 overflow-y-auto">

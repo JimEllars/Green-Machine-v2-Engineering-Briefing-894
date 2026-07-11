@@ -231,6 +231,23 @@ export default {
       });
     }
 
+
+    // Strict Edge Route Catch-All Termination
+    if (url.pathname !== '/' && !url.pathname.startsWith('/api/')) {
+       return new Response('404 Not Found', { status: 404, headers: corsHeaders });
+    }
+
+    // Explicit Fallback Route Evaluation
+    if (
+        url.pathname !== '/' &&
+        url.pathname !== '/api/dlq-status' &&
+        url.pathname !== '/api/cache-sync' &&
+        url.pathname !== '/api/dlq-flush' &&
+        url.pathname !== '/api/market-cache'
+    ) {
+        return new Response('404 Not Found', { status: 404, headers: corsHeaders });
+    }
+
     // 1. HMAC Validation (The Ingress Token Isolation Rule)
 
     const signature = request.headers.get('X-Axim-Signature');
