@@ -214,7 +214,13 @@ function App() {
                 Quick Actions
               </h3>
               <div className="grid grid-cols-2 gap-3">
-                {['Mint Batch', 'Pause Bridge', 'Sync KV', 'Audit Logs'].map((action) => (
+                <button
+                  onClick={handleSyncKV}
+                  className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider ${isSyncing ? 'bg-emerald-500/20 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] text-emerald-400' : syncSuccess ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-slate-700/50 text-slate-300'}`}
+                >
+                  {isSyncing ? 'Syncing...' : syncSuccess ? 'Synced!' : 'Sync KV'}
+                </button>
+                {['Mint Batch', 'Pause Bridge', 'Audit Logs'].map((action) => (
                   <button key={action} className="p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider">
                     {action}
                   </button>

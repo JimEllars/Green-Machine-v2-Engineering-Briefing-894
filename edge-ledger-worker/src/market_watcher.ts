@@ -71,10 +71,6 @@ async function fetchExternalOracles(apiKey: string) {
       BTC: { price: data.bitcoin?.usd || 0, change_24h: data.bitcoin?.usd_24h_change || 0 },
       ETH: { price: data.ethereum?.usd || 0, change_24h: data.ethereum?.usd_24h_change || 0 },
       SOL: { price: data.solana?.usd || 0, change_24h: data.solana?.usd_24h_change || 0 }
-    },
-    equities: {
-      AAPL: { price: 189.45, change_24h: 0.8 },
-      MSFT: { price: 420.15, change_24h: 1.1 }
     }
   };
 }
