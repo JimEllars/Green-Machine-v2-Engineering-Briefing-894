@@ -73,16 +73,16 @@ export default function StrategyConsultantTerminal() {
              setParsedStrategyData(null);
              newPayload = `# Recommendation Payload (Raw)\n\n` + newPayload;
           }
+          if (typingIntervalRef.current) {
+            clearInterval(typingIntervalRef.current);
+          }
+          typedLengthRef.current = 0;
+          setDisplayText('');
           setStrategyHistory(prev => {
             const updatedHistory = [...prev, newPayload].slice(-3);
             const fullText = updatedHistory.join('\n\n');
 
-            // Adjust typewriter index to not break
-            if (prev.length >= 3) {
-                // If we shifted an element out, subtract its length + 2 (for '\n\n')
-                const shiftedTextLength = prev[0].length + 2;
-                typedLengthRef.current = Math.max(0, typedLengthRef.current - shiftedTextLength);
-            }
+            // Explicitly resetting the typewriter in this update block handled above.
 
             setStrategy(fullText);
             return updatedHistory;
@@ -118,6 +118,7 @@ export default function StrategyConsultantTerminal() {
   }, []);
 
   const typedLengthRef = useRef(0);
+  const typingIntervalRef = useRef(null);
 
   // Typewriter effect for the terminal
   useEffect(() => {
@@ -127,16 +128,16 @@ export default function StrategyConsultantTerminal() {
     }
 
     setIsTyping(true);
-    const interval = setInterval(() => {
+    typingIntervalRef.current = setInterval(() => {
       typedLengthRef.current++;
       setDisplayText(strategy.slice(0, typedLengthRef.current));
 
       if (typedLengthRef.current >= strategy.length) {
-        clearInterval(interval);
+        clearInterval(typingIntervalRef.current);
         setIsTyping(false);
       }
     }, 15);
-    return () => clearInterval(interval);
+    return () => clearInterval(typingIntervalRef.current);
   }, [strategy]);
 
   return (

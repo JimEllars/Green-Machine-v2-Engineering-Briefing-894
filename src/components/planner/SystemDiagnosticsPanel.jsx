@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import SafeIcon from '../../common/SafeIcon';
 
-const SystemDiagnosticsPanel = ({ dlqStatus }) => {
+const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   const [txCount, setTxCount] = useState(0);
   const [dbConnected, setDbConnected] = useState(true);
   const [edgeCacheAvailable, setEdgeCacheAvailable] = useState(true);
@@ -16,7 +16,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
 
   const checkEdgeHealth = async () => {
     try {
-      const workerUrl = import.meta.env.VITE_WORKER_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8787' : window.location.origin);
+      const workerUrl = import.meta.env.VITE_WORKER_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')) ? 'http://localhost:8787' : window.location.origin);
       const start = performance.now();
       const res = await fetch(`${workerUrl}/api/market-cache`, {
         headers: {
@@ -29,9 +29,11 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
       prevLatencyRef.current = currentLatency;
       setEdgeLatency(currentLatency);
       setEdgeCacheAvailable(res.ok);
+      if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: res.ok });
     } catch (e) {
       setEdgeCacheAvailable(false);
       setEdgeLatency(0);
+      if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: false });
     }
 
     // Check Database Node Health State
@@ -42,11 +44,14 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
 
         if (error) {
             setDbConnected(false);
+            if (onDiagnosticsUpdate) onDiagnosticsUpdate({ dbConnected: false });
         } else {
             setDbConnected(true);
+            if (onDiagnosticsUpdate) onDiagnosticsUpdate({ dbConnected: true });
         }
     } catch (e) {
         setDbConnected(false);
+        if (onDiagnosticsUpdate) onDiagnosticsUpdate({ dbConnected: false });
     }
   };
 
