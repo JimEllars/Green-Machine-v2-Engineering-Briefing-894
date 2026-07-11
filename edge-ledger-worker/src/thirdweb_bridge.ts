@@ -34,6 +34,24 @@ export default {
 
     const url = new URL(request.url);
 
+    if (request.method === 'GET' && url.pathname === '/') {
+      return new Response(JSON.stringify({ status: "online", engine: "axim-green-machine-core", tier: "edge_ingress" }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        }
+      });
+    }
+
+    if (request.method === 'POST' && url.pathname === '/') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+    }
+
+
     if (request.method === 'GET' && url.pathname === '/api/dlq-status') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {

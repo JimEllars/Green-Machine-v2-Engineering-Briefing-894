@@ -6,6 +6,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
   const [txCount, setTxCount] = useState(0);
   const [dbConnected, setDbConnected] = useState(true);
   const [edgeCacheAvailable, setEdgeCacheAvailable] = useState(true);
+  const [edgeLatency, setEdgeLatency] = useState(0);
   const [tickerStream, setTickerStream] = useState([]);
 
   const streamEndRef = useRef(null);
@@ -13,15 +14,34 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
 
   const checkEdgeHealth = async () => {
     try {
-      const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
+      const workerUrl = import.meta.env.VITE_WORKER_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8787' : window.location.origin);
+      const start = performance.now();
       const res = await fetch(`${workerUrl}/api/market-cache`, {
         headers: {
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         }
       });
+      const end = performance.now();
+      setEdgeLatency(Math.round(end - start));
       setEdgeCacheAvailable(res.ok);
     } catch (e) {
       setEdgeCacheAvailable(false);
+      setEdgeLatency(0);
+    }
+
+    // Check Database Node Health State
+    try {
+        const { error } = await supabase
+          .from('blockchain_transactions')
+          .select('*', { count: 'exact', head: true });
+
+        if (error) {
+            setDbConnected(false);
+        } else {
+            setDbConnected(true);
+        }
+    } catch (e) {
+        setDbConnected(false);
     }
   };
 
@@ -35,46 +55,32 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
   useEffect(() => {
     const initDiagnostics = async () => {
       try {
-        let isCountResolved = false;
-        let pendingEventsOffset = 0;
-
         // Setup WebSocket for realtime ticker stream FIRST
         activeChannelRef.current = supabase
-          .channel('public:blockchain_transactions')
+          .channel('ledger-realtime')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, payload => {
              const newTx = `[${new Date().toLocaleTimeString()}] ${payload.eventType.toUpperCase()} - ${payload.new?.transaction_hash?.substring(0,8) || 'Unknown'}`;
              setTickerStream(prev => [...prev, newTx].slice(-50)); // keep last 50
 
-             if (!isCountResolved) {
-               // Backlog buffer variable
-               if (payload.eventType === 'INSERT') {
-                 pendingEventsOffset += 1;
-               } else if (payload.eventType === 'DELETE') {
-                 pendingEventsOffset -= 1;
-               }
-             } else {
-               // Normal operation
-               if (payload.eventType === 'INSERT') {
-                 setTxCount(prev => prev + 1);
-               } else if (payload.eventType === 'DELETE') {
-                 setTxCount(prev => prev - 1);
-               }
+             // Normal operation
+             if (payload.eventType === 'INSERT') {
+               setTxCount(prev => prev + 1);
+             } else if (payload.eventType === 'DELETE') {
+               setTxCount(prev => prev - 1);
              }
           })
           .subscribe();
 
-        // Query recent transactions count SECOND
+        // Query initial transactions count
         const { count, error } = await supabase
           .from('blockchain_transactions')
           .select('*', { count: 'exact', head: true });
 
-        if (error) {
-          setDbConnected(false);
-          console.error("Failed to fetch tx count", error);
-        } else {
-          setTxCount((count || 0) + pendingEventsOffset);
+        if (!error) {
+          setTxCount(count || 0);
           setDbConnected(true);
-          isCountResolved = true;
+        } else {
+          setDbConnected(false);
         }
 
       } catch (e) {
@@ -120,6 +126,11 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
             <span className="text-xs font-mono">{edgeCacheAvailable ? 'ACTIVE' : 'DEGRADED'}</span>
             <div className={`w-2 h-2 rounded-full ${edgeCacheAvailable ? 'bg-emerald-500' : 'bg-amber-500'}`} />
           </div>
+        </div>
+
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+          <span className="text-sm text-slate-300">Edge Fetch Latency</span>
+          <span className="text-lg font-bold text-emerald-400 font-mono drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{edgeLatency}ms</span>
         </div>
 
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
