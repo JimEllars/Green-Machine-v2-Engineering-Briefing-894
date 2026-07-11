@@ -17,7 +17,8 @@ export async function syncMarketCache(env: Env): Promise<void> {
 
     // 2. Cache in KV with strict 30-second TTL
     await env.MARKET_CACHE.put('latest_prices', JSON.stringify(multiSourceData), {
-      expirationTtl: 60 // Minimum CF KV TTL is 60s, but we update every 30s via cron
+      expirationTtl: 60,
+      metadata: { updated_at: Date.now() }
     });
 
     console.log(`[MARKET_WATCHER] Market cache updated at ${new Date().toISOString()}`);
@@ -30,7 +31,8 @@ export async function syncMarketCache(env: Env): Promise<void> {
       const oldCache = await env.MARKET_CACHE.get('latest_prices');
       if (oldCache) {
         await env.MARKET_CACHE.put('latest_prices', oldCache, {
-          expirationTtl: 60
+          expirationTtl: 60,
+          metadata: { updated_at: Date.now() }
         });
         console.log(`[MARKET_WATCHER] Fallback to historical cache successful`);
       }
@@ -51,11 +53,18 @@ async function fetchExternalOracles(apiKey: string) {
     'Accept': 'application/json'
   };
 
+  let baseUrl = 'https://api.coingecko.com/api/v3';
+
   if (apiKey) {
-    headers['x-cg-demo-api-key'] = apiKey; // Common header for CoinGecko API keys
+    if (apiKey.startsWith('pro_')) {
+      baseUrl = 'https://pro-api.coingecko.com/api/v3';
+      headers['x-cg-pro-api-key'] = apiKey;
+    } else {
+      headers['x-cg-demo-api-key'] = apiKey;
+    }
   }
 
-  const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true', {
+  const response = await fetch(`${baseUrl}/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true`, {
     headers
   });
 

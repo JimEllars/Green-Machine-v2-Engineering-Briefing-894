@@ -90,6 +90,8 @@ function App() {
     }
   };
 
+  const [sweepSuccess, setSweepSuccess] = useState(false);
+
   const handleManualSweep = async () => {
     setIsSweeping(true);
 
@@ -114,6 +116,9 @@ function App() {
 
       if (!response.ok) {
         console.error('Sweep failed:', response.statusText);
+      } else {
+        setSweepSuccess(true);
+        setTimeout(() => setSweepSuccess(false), 1500);
       }
     } catch (error) {
        console.error('Sweep error:', error);
@@ -176,10 +181,10 @@ function App() {
             <button 
               onClick={handleManualSweep}
               disabled={isSweeping}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white rounded-lg text-sm font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center gap-2"
+              className={`px-4 py-2 ${isSweeping ? 'bg-indigo-600 shadow-[0_0_15px_rgba(79,70,229,0.5)]' : sweepSuccess ? 'bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]' : 'bg-emerald-600 hover:bg-emerald-500'} disabled:opacity-90 text-white rounded-lg text-sm font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)] flex items-center gap-2`}
             >
               {isSweeping ? <SafeIcon name="Loader" className="w-4 h-4 animate-spin" /> : <SafeIcon name="Zap" className="w-4 h-4" />}
-              {isSweeping ? 'Sweeping...' : 'Manual Sweep'}
+              {isSweeping ? 'Scraping Multi-App Resource Debts...' : 'Manual Sweep'}
             </button>
             <button 
               onClick={() => setIsLogsOpen(true)}

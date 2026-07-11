@@ -35,7 +35,35 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
   useEffect(() => {
     const initDiagnostics = async () => {
       try {
-        // Query recent transactions count
+        let isCountResolved = false;
+        let pendingEventsOffset = 0;
+
+        // Setup WebSocket for realtime ticker stream FIRST
+        activeChannelRef.current = supabase
+          .channel('public:blockchain_transactions')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, payload => {
+             const newTx = `[${new Date().toLocaleTimeString()}] ${payload.eventType.toUpperCase()} - ${payload.new?.transaction_hash?.substring(0,8) || 'Unknown'}`;
+             setTickerStream(prev => [...prev, newTx].slice(-50)); // keep last 50
+
+             if (!isCountResolved) {
+               // Backlog buffer variable
+               if (payload.eventType === 'INSERT') {
+                 pendingEventsOffset += 1;
+               } else if (payload.eventType === 'DELETE') {
+                 pendingEventsOffset -= 1;
+               }
+             } else {
+               // Normal operation
+               if (payload.eventType === 'INSERT') {
+                 setTxCount(prev => prev + 1);
+               } else if (payload.eventType === 'DELETE') {
+                 setTxCount(prev => prev - 1);
+               }
+             }
+          })
+          .subscribe();
+
+        // Query recent transactions count SECOND
         const { count, error } = await supabase
           .from('blockchain_transactions')
           .select('*', { count: 'exact', head: true });
@@ -44,26 +72,10 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
           setDbConnected(false);
           console.error("Failed to fetch tx count", error);
         } else {
-          setTxCount(count || 0);
+          setTxCount((count || 0) + pendingEventsOffset);
           setDbConnected(true);
+          isCountResolved = true;
         }
-
-        // Setup WebSocket for realtime ticker stream
-        activeChannelRef.current = supabase
-          .channel('public:blockchain_transactions')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, payload => {
-             const newTx = `[${new Date().toLocaleTimeString()}] ${payload.eventType.toUpperCase()} - ${payload.new?.transaction_hash?.substring(0,8) || 'Unknown'}`;
-             // Removing the slice(0,5) to allow scrolling if we want, or keeping it but scrolling anyway.
-             // We'll append it to the end so scrolling to bottom makes sense.
-             setTickerStream(prev => [...prev, newTx].slice(-50)); // keep last 50
-
-             if (payload.eventType === 'INSERT') {
-               setTxCount(prev => prev + 1);
-             } else if (payload.eventType === 'DELETE') {
-               setTxCount(prev => prev - 1);
-             }
-          })
-          .subscribe();
 
       } catch (e) {
         console.error("Init diagnostics failed", e);
