@@ -12,7 +12,7 @@ export default function MarketFeedMatrix() {
     const fetchMarketData = async () => {
       try {
         // Calling Cloudflare Worker Endpoint
-        const workerUrl = import.meta.env.VITE_WORKER_URL || window.location.origin;
+        const workerUrl = import.meta.env.VITE_WORKER_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8787' : window.location.origin);
         const response = await fetch(`${workerUrl}/api/market-cache`, {
           headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY
