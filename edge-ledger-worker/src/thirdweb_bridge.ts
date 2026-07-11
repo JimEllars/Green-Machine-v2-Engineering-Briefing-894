@@ -216,7 +216,7 @@ export default {
       try {
         parsedData = JSON.parse(cacheResult.value);
         // Track data freshness
-        parsedData._telemetry_timestamp = (cacheResult.metadata && cacheResult.metadata.updated_at) ? cacheResult.metadata.updated_at : Date.now();
+        parsedData._telemetry_timestamp = (cacheResult.metadata && (cacheResult.metadata as any).updated_at) ? (cacheResult.metadata as any).updated_at : Date.now();
       } catch (e) {
         // Fallback if parsing fails
         parsedData = { error: 'Invalid JSON in cache' };
@@ -256,7 +256,7 @@ export default {
     }
 
     try {
-      const payload = await request.json();
+      const payload = (await request.json()) as any;
       
       // 2. Extract and rigorously transform variables
       const { 
