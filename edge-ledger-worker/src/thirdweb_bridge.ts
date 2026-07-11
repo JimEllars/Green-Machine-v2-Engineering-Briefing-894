@@ -129,6 +129,8 @@ export default {
             if (processedCount >= MAX_PROCESS) {
                break;
             }
+            if (key.name.endsWith('_failing_poison_pill')) continue; // Skip poison pills
+
             const rawPayload = await env.GREEN_STATE.get(key.name);
             if (rawPayload) {
               try {
@@ -177,6 +179,24 @@ export default {
                 if (dbResponse.ok) {
                   await env.GREEN_STATE.delete(key.name);
                   processedCount++;
+                } else {
+                  // Task 1: Neutralize Poison-Pill DLQ Stagnation
+                  // Implement retry count metadata check and threshold logic
+                  const metadata: any = key.metadata || {};
+                  const retryCount = (metadata.retry_count || 0) + 1;
+
+                  if (retryCount >= 3) {
+                     // Tag as poison pill to ignore in the future, delete original
+                     await env.GREEN_STATE.put(`${key.name}_failing_poison_pill`, rawPayload, {
+                         metadata: { ...metadata, retry_count: retryCount, error: 'poison_pill_threshold_reached' }
+                     });
+                     await env.GREEN_STATE.delete(key.name);
+                  } else {
+                     // Increment retry count
+                     await env.GREEN_STATE.put(key.name, rawPayload, {
+                         metadata: { ...metadata, retry_count: retryCount }
+                     });
+                  }
                 }
               } catch (parseError) {
                 console.error('Parse or upsert error', parseError);

@@ -9,6 +9,7 @@ export default function StrategyConsultantTerminal() {
   const [displayText, setDisplayText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [strategy, setStrategy] = useState('');
+  const [strategyHistory, setStrategyHistory] = useState([]);
   const [provider, setProvider] = useState('{provider}'); // Default
 
   const [connectionStatus, setConnectionStatus] = useState('CONNECTING');
@@ -44,6 +45,7 @@ export default function StrategyConsultantTerminal() {
            payload = `# Recommendation Payload (Raw)\n\n` + payload;
         }
         setStrategy(payload);
+        setStrategyHistory([payload]);
         if (data.provider_used) {
            setProvider(data.provider_used.toUpperCase());
         }
@@ -71,7 +73,21 @@ export default function StrategyConsultantTerminal() {
              setParsedStrategyData(null);
              newPayload = `# Recommendation Payload (Raw)\n\n` + newPayload;
           }
-          setStrategy(prev => prev + '\n\n' + newPayload);
+          setStrategyHistory(prev => {
+            const updatedHistory = [...prev, newPayload].slice(-3);
+            const fullText = updatedHistory.join('\n\n');
+
+            // Adjust typewriter index to not break
+            if (prev.length >= 3) {
+                // If we shifted an element out, subtract its length + 2 (for '\n\n')
+                const shiftedTextLength = prev[0].length + 2;
+                typedLengthRef.current = Math.max(0, typedLengthRef.current - shiftedTextLength);
+            }
+
+            setStrategy(fullText);
+            return updatedHistory;
+          });
+
           if (payload.new.provider_used) {
              setProvider(payload.new.provider_used.toUpperCase());
           }
