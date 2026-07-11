@@ -7,6 +7,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
   const [dbConnected, setDbConnected] = useState(true);
   const [edgeCacheAvailable, setEdgeCacheAvailable] = useState(true);
   const [edgeLatency, setEdgeLatency] = useState(0);
+  const [edgeJitter, setEdgeJitter] = useState(0);
+  const prevLatencyRef = useRef(0);
   const [tickerStream, setTickerStream] = useState([]);
 
   const streamEndRef = useRef(null);
@@ -22,7 +24,10 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
         }
       });
       const end = performance.now();
-      setEdgeLatency(Math.round(end - start));
+      const currentLatency = Math.round(end - start);
+      setEdgeJitter(Math.abs(currentLatency - prevLatencyRef.current));
+      prevLatencyRef.current = currentLatency;
+      setEdgeLatency(currentLatency);
       setEdgeCacheAvailable(res.ok);
     } catch (e) {
       setEdgeCacheAvailable(false);
@@ -130,7 +135,10 @@ const SystemDiagnosticsPanel = ({ dlqStatus }) => {
 
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
           <span className="text-sm text-slate-300">Edge Fetch Latency</span>
-          <span className="text-lg font-bold text-emerald-400 font-mono drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{edgeLatency}ms</span>
+          <div className="flex items-center gap-3">
+             <span className="text-xs font-mono text-emerald-500/80 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20" title="Edge Jitter">±{edgeJitter}ms</span>
+             <span className="text-lg font-bold text-emerald-400 font-mono drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{edgeLatency}ms</span>
+          </div>
         </div>
 
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">

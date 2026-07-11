@@ -22,7 +22,7 @@ serve(async (req: Request) => {
   try {
     // 2. Scrape System Variables (Exact count structures for blueprint)
     // a. Compute debts from api_usage_logs
-    const { count: usageLogsCount } = await supabase.from('api_usage_logs').select('*', { count: 'exact', head: true });
+    const { data: aggregatedDebt } = await supabase.from('api_usage_logs').select('token_count.sum(), execution_time_ms.sum()').single();
     
     // b. Active affiliate records
     const { count: affiliatesCount } = await supabase.from('blockchain_transactions').select('*', { count: 'exact', head: true }).eq('status', 'minted');
@@ -53,12 +53,24 @@ serve(async (req: Request) => {
 
     // Calculate Node Health Index (H = 0.7 * M - 0.3 * D)
     const M = affiliatesCount || 0; // Marginal proxy
-    const D = usageLogsCount || 0; // Debt proxy
+
+    // Extract fine-grained sums
+    const totalTokens = aggregatedDebt?.sum?.token_count || aggregatedDebt?.token_count || 0;
+    const totalExecutionTime = aggregatedDebt?.sum?.execution_time_ms || aggregatedDebt?.execution_time_ms || 0;
+
+    // Keep D as a proxy for the formula using sum values (adjusting magnitude for the same formula, or using tokens/time as proxy)
+    // Since instructions say "Map these fine-grained compute numbers directly into the context configurations", we will add them to systemContext.
+    // We will keep D as a generalized debt scalar from the new fine-grained data, or just use the raw sums. Let's use totalTokens / 100 + totalExecutionTime / 1000 for D if we need a number, but we can also just compute it. The requirements say:
+    // "Map these fine-grained compute numbers directly into the context configurations funneled to the central llm-proxy."
+    const D = totalTokens; // Debt proxy updated to token sums instead of row counts for the index
     const nodeHealthIndex = (0.7 * M) - (0.3 * D);
 
     // 3. Channel to LLM Proxy (DeepSeek Priority)
     const systemContext = {
-      usage_debts: D,
+      usage_debts: {
+        total_tokens: totalTokens,
+        total_execution_time_ms: totalExecutionTime
+      },
       recent_minted_payouts: M,
       market_state: marketCache,
       node_health_index: nodeHealthIndex
