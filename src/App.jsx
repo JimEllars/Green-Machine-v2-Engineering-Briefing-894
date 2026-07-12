@@ -16,10 +16,30 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
 
+  const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+  const [showCriticalAlert, setShowCriticalAlert] = useState(false);
+
+  const handleDiagnosticsUpdate = (status) => {
+    setConsecutiveFailures(prev => {
+      let isFailure = false;
+      if (status.dbConnected === false || status.edgeCacheAvailable === false) {
+        isFailure = true;
+      }
+
+      const newCount = isFailure ? prev + 1 : 0;
+      if (newCount >= 3) {
+        setShowCriticalAlert(true);
+      } else if (newCount === 0) {
+        setShowCriticalAlert(false);
+      }
+      return newCount;
+    });
+  };
+
   useEffect(() => {
     const checkDlq = async () => {
       try {
-        const workerUrl = import.meta.env.VITE_WORKER_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8787' : window.location.origin);
+        const workerUrl = import.meta.env.VITE_WORKER_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')) ? 'http://localhost:8787' : window.location.origin);
         const res = await fetch(`${workerUrl}/api/dlq-status`, {
           headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
@@ -42,7 +62,7 @@ function App() {
   const handleFlushDLQ = async () => {
     setIsFlushing(true);
     try {
-      const workerUrl = import.meta.env.VITE_WORKER_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8787' : window.location.origin);
+      const workerUrl = import.meta.env.VITE_WORKER_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')) ? 'http://localhost:8787' : window.location.origin);
       const res = await fetch(`${workerUrl}/api/dlq-flush`, {
         method: 'POST',
         headers: {
@@ -72,7 +92,7 @@ function App() {
     setIsSyncing(true);
     setSyncSuccess(false);
     try {
-      const workerUrl = import.meta.env.VITE_WORKER_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8787' : window.location.origin);
+      const workerUrl = import.meta.env.VITE_WORKER_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')) ? 'http://localhost:8787' : window.location.origin);
       const res = await fetch(`${workerUrl}/api/cache-sync`, {
         method: 'POST',
         headers: {
@@ -171,6 +191,15 @@ function App() {
         </div>
       </nav>
 
+      {showCriticalAlert && (
+        <div className="bg-rose-900/90 border-b border-rose-500/50 text-rose-100 px-4 py-3 shadow-[0_4px_20px_rgba(225,29,72,0.3)] sticky top-16 z-40 transition-all duration-300">
+          <div className="max-w-7xl mx-auto flex items-center gap-3">
+            <SafeIcon name="AlertTriangle" className="w-5 h-5 text-rose-400 animate-pulse" />
+            <p className="text-sm font-bold tracking-wide">CRITICAL PIPELINE DISRUPTION DETECTED: Core Infrastructure Tier Degraded. Ledger Safely Buffered to Edge KV DLQ Cache Node.</p>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <header className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
@@ -199,7 +228,7 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Alerts & Stats */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            <SystemDiagnosticsPanel dlqStatus={dlqStatus} />
+            <SystemDiagnosticsPanel dlqStatus={dlqStatus} onDiagnosticsUpdate={handleDiagnosticsUpdate} />
           </div>
 
           {/* Center Column: Market & Ledger */}

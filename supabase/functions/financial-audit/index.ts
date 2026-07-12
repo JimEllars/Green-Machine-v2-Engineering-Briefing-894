@@ -22,7 +22,7 @@ serve(async (req: Request) => {
   try {
     // 2. Scrape System Variables (Exact count structures for blueprint)
     // a. Compute debts from api_usage_logs
-    const { data: aggregatedDebt } = await supabase.from('api_usage_logs').select('token_count.sum(), execution_time_ms.sum()').single();
+    const { data: aggregatedDebt } = await supabase.from('api_usage_summary').select('*').single();
     
     // b. Active affiliate records
     const { count: affiliatesCount } = await supabase.from('blockchain_transactions').select('*', { count: 'exact', head: true }).eq('status', 'minted');
@@ -55,8 +55,8 @@ serve(async (req: Request) => {
     const M = affiliatesCount || 0; // Marginal proxy
 
     // Extract fine-grained sums
-    const totalTokens = aggregatedDebt?.sum?.token_count || aggregatedDebt?.token_count || 0;
-    const totalExecutionTime = aggregatedDebt?.sum?.execution_time_ms || aggregatedDebt?.execution_time_ms || 0;
+    const totalTokens = aggregatedDebt?.total_tokens || 0;
+    const totalExecutionTime = aggregatedDebt?.total_execution_time_ms || 0;
 
     // Keep D as a proxy for the formula using sum values (adjusting magnitude for the same formula, or using tokens/time as proxy)
     // Since instructions say "Map these fine-grained compute numbers directly into the context configurations", we will add them to systemContext.
