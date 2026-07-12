@@ -165,11 +165,17 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
           <span className="text-lg font-bold text-white">{txCount}</span>
         </div>
 
-        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
-          <span className="text-sm text-slate-300">DLQ Depth</span>
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-white">{dlqStatus.count}</span>
-            <div className={`w-2 h-2 rounded-full ${dlqStatus.active ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex flex-col justify-center gap-2">
+          <div className="flex justify-between items-center w-full">
+            <span className="text-sm text-slate-300">DLQ Depth</span>
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold text-white">{dlqStatus.count}</span>
+              <div className={`w-2 h-2 rounded-full ${dlqStatus.active ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
+            </div>
+          </div>
+          <div className="flex justify-between items-center w-full pt-2 border-t border-slate-700/50">
+            <span className="text-xs text-amber-500/80 uppercase tracking-widest">Quarantined</span>
+            <span className="text-sm font-bold text-amber-400 font-mono">{dlqStatus.quarantine_count || 0}</span>
           </div>
         </div>
 

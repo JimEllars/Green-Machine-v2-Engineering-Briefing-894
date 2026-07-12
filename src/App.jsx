@@ -15,10 +15,12 @@ function App() {
   const [selectedTx, setSelectedTx] = useState(null);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isSweeping, setIsSweeping] = useState(false);
-  const [dlqStatus, setDlqStatus] = useState({ active: false, count: 0 });
+  const [dlqStatus, setDlqStatus] = useState({ active: false, count: 0, quarantine_count: 0 });
   const [isFlushing, setIsFlushing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
+  const [isPurgingQuarantine, setIsPurgingQuarantine] = useState(false);
+  const [purgeSuccess, setPurgeSuccess] = useState(false);
 
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
   const [showCriticalAlert, setShowCriticalAlert] = useState(false);
@@ -51,7 +53,7 @@ function App() {
         });
         if (res.ok) {
            const data = await res.json();
-           setDlqStatus({ active: data.active, count: data.count });
+           setDlqStatus({ active: data.active, count: data.count, quarantine_count: data.quarantine_count || 0 });
         }
       } catch (e) {
         console.error("Failed to fetch DLQ status", e);
@@ -80,7 +82,7 @@ function App() {
         } else {
           setIsFlushing(false);
           // Will refresh automatically via interval, but can reset here
-          setDlqStatus({ active: false, count: 0 });
+          setDlqStatus({ active: false, count: 0, quarantine_count: 0 });
         }
       } else {
         setIsFlushing(false);
@@ -115,6 +117,27 @@ function App() {
   };
 
   const [sweepSuccess, setSweepSuccess] = useState(false);
+
+  const handlePurgeQuarantine = async () => {
+    setIsPurgingQuarantine(true);
+    try {
+      const workerUrl = WORKER_URL;
+      const res = await fetch(`${workerUrl}/api/quarantine-purge`, {
+        method: 'POST',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        setPurgeSuccess(true);
+        setTimeout(() => setPurgeSuccess(false), 2000);
+      }
+    } catch(e) {
+      console.error('Failed to purge quarantine:', e);
+    } finally {
+      setIsPurgingQuarantine(false);
+    }
+  };
 
   const handleManualSweep = async () => {
     setIsSweeping(true);
@@ -258,7 +281,13 @@ function App() {
                 >
                   {isSyncing ? 'Syncing...' : syncSuccess ? 'Synced!' : 'Sync KV'}
                 </button>
-                {['Mint Batch', 'Pause Bridge', 'Audit Logs'].map((action) => (
+                <button
+                  onClick={handlePurgeQuarantine}
+                  className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider ${isPurgingQuarantine ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : purgeSuccess ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-amber-500/50 text-slate-300'}`}
+                >
+                  {isPurgingQuarantine ? 'Purging...' : purgeSuccess ? 'Purged!' : 'Purge Quarantined Pills'}
+                </button>
+                {['Mint Batch', 'Audit Logs'].map((action) => (
                   <button key={action} className="p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider">
                     {action}
                   </button>
