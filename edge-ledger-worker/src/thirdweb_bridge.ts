@@ -61,13 +61,23 @@ export default {
       // Endpoint for app diagnostics
       try {
         let totalCount = 0;
+        let standardCount = 0;
+        let quarantineCount = 0;
         let cursor = undefined;
         let listComplete = false;
 
         while (!listComplete) {
           const listOptions: any = cursor ? { cursor } : undefined;
           const dlqList: any = await env.GREEN_STATE.list(listOptions);
-          totalCount += dlqList.keys.length;
+
+          for (const key of dlqList.keys) {
+            if (key.name.startsWith('quarantine:')) {
+              quarantineCount++;
+            } else {
+              standardCount++;
+            }
+            totalCount++;
+          }
 
           if (dlqList.list_complete) {
             listComplete = true;
@@ -77,7 +87,7 @@ export default {
         }
 
         const hasDlqItems = totalCount > 0;
-        return new Response(JSON.stringify({ active: hasDlqItems, count: totalCount }), {
+        return new Response(JSON.stringify({ active: hasDlqItems, count: standardCount, quarantine_count: quarantineCount }), {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
@@ -270,6 +280,45 @@ export default {
     }
 
 
+
+    if (request.method === 'POST' && url.pathname === '/api/quarantine-purge') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        let cursor = undefined;
+        let listComplete = false;
+        let totalPurged = 0;
+
+        while (!listComplete) {
+          const listRes: any = await env.GREEN_STATE.list({ prefix: 'quarantine:', cursor });
+
+          for (const key of listRes.keys) {
+            await env.GREEN_STATE.delete(key.name);
+            totalPurged++;
+          }
+
+          if (listRes.list_complete) {
+            listComplete = true;
+          } else {
+            cursor = listRes.cursor;
+          }
+        }
+
+        return new Response(JSON.stringify({ success: true, purged_count: totalPurged }), {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to purge quarantine' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
     // Strict Edge Route Catch-All Termination
     if (url.pathname !== '/' && !url.pathname.startsWith('/api/')) {
        return new Response('404 Not Found', { status: 404, headers: corsHeaders });
@@ -281,7 +330,8 @@ export default {
         url.pathname !== '/api/dlq-status' &&
         url.pathname !== '/api/cache-sync' &&
         url.pathname !== '/api/dlq-flush' &&
-        url.pathname !== '/api/market-cache'
+        url.pathname !== '/api/market-cache' &&
+        url.pathname !== '/api/quarantine-purge'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }
