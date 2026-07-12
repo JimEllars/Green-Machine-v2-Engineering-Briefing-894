@@ -129,7 +129,7 @@ export default {
             if (processedCount >= MAX_PROCESS) {
                break;
             }
-            if (key.name.endsWith('_failing_poison_pill')) continue; // Skip poison pills
+            if (key.name.startsWith('quarantine:')) continue; // Skip poison pills
 
             const rawPayload = await env.GREEN_STATE.get(key.name);
             if (rawPayload) {
@@ -187,7 +187,7 @@ export default {
 
                   if (retryCount >= 3) {
                      // Tag as poison pill to ignore in the future, delete original
-                     await env.GREEN_STATE.put(`${key.name}_failing_poison_pill`, rawPayload, {
+                     await env.GREEN_STATE.put(`quarantine:${key.name}`, rawPayload, {
                          metadata: { ...metadata, retry_count: retryCount, error: 'poison_pill_threshold_reached' }
                      });
                      await env.GREEN_STATE.delete(key.name);

@@ -2,6 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import SafeIcon from '../../common/SafeIcon';
 
+const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || (IS_LOCAL ? 'http://localhost:8787' : window.location.origin);
+
+
 const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   const [txCount, setTxCount] = useState(0);
   const [dbConnected, setDbConnected] = useState(true);
@@ -10,13 +14,16 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   const [edgeJitter, setEdgeJitter] = useState(0);
   const prevLatencyRef = useRef(0);
   const [tickerStream, setTickerStream] = useState([]);
+  const [healthTickerLogs, setHealthTickerLogs] = useState([]);
 
   const streamEndRef = useRef(null);
   const activeChannelRef = useRef(null);
 
   const checkEdgeHealth = async () => {
+    let edgeOk = false;
+    let dbOk = false;
     try {
-      const workerUrl = import.meta.env.VITE_WORKER_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')) ? 'http://localhost:8787' : window.location.origin);
+      const workerUrl = WORKER_URL;
       const start = performance.now();
       const res = await fetch(`${workerUrl}/api/market-cache`, {
         headers: {
@@ -29,6 +36,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
       prevLatencyRef.current = currentLatency;
       setEdgeLatency(currentLatency);
       setEdgeCacheAvailable(res.ok);
+      edgeOk = res.ok;
       if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: res.ok });
     } catch (e) {
       setEdgeCacheAvailable(false);
@@ -48,10 +56,16 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
         } else {
             setDbConnected(true);
             if (onDiagnosticsUpdate) onDiagnosticsUpdate({ dbConnected: true });
+            dbOk = true;
         }
     } catch (e) {
         setDbConnected(false);
         if (onDiagnosticsUpdate) onDiagnosticsUpdate({ dbConnected: false });
+    }
+
+    if (edgeOk && dbOk) {
+       const logMsg = `[HEALTH_CHECK] DB and Edge nodes synchronized. Status: 200 OK`;
+       setHealthTickerLogs(prev => [...prev, logMsg].slice(-2));
     }
   };
 
@@ -180,6 +194,20 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
             <div ref={streamEndRef} />
           </div>
         </div>
+
+        <div className="mt-4 flex-grow bg-black/40 rounded-lg p-4 border border-slate-700 font-mono text-[10px] text-slate-400 overflow-y-auto">
+          <div className="mb-2 text-emerald-500 font-bold uppercase tracking-wider">Heartbeat Ticker</div>
+          <div className="max-h-[50px] overflow-y-auto">
+            {healthTickerLogs.length === 0 ? (
+              <div className="text-slate-600 italic">Waiting for heartbeat...</div>
+            ) : (
+              healthTickerLogs.map((msg, idx) => (
+                <div key={idx} className="mb-1 text-emerald-400/80 truncate">{msg}</div>
+              ))
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   );

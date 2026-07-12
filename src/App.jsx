@@ -3,6 +3,10 @@ import { supabase } from './supabaseClient';
 import StrategyConsultantTerminal from './components/planner/StrategyConsultantTerminal';
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
+
+const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
+const WORKER_URL = import.meta.env.VITE_WORKER_URL || (IS_LOCAL ? 'http://localhost:8787' : window.location.origin);
+
 import SafeIcon from './common/SafeIcon';
 import SystemDiagnosticsPanel from './components/planner/SystemDiagnosticsPanel';
 
@@ -39,7 +43,7 @@ function App() {
   useEffect(() => {
     const checkDlq = async () => {
       try {
-        const workerUrl = import.meta.env.VITE_WORKER_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')) ? 'http://localhost:8787' : window.location.origin);
+        const workerUrl = WORKER_URL;
         const res = await fetch(`${workerUrl}/api/dlq-status`, {
           headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
@@ -62,7 +66,7 @@ function App() {
   const handleFlushDLQ = async () => {
     setIsFlushing(true);
     try {
-      const workerUrl = import.meta.env.VITE_WORKER_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')) ? 'http://localhost:8787' : window.location.origin);
+      const workerUrl = WORKER_URL;
       const res = await fetch(`${workerUrl}/api/dlq-flush`, {
         method: 'POST',
         headers: {
@@ -92,7 +96,7 @@ function App() {
     setIsSyncing(true);
     setSyncSuccess(false);
     try {
-      const workerUrl = import.meta.env.VITE_WORKER_URL || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.')) ? 'http://localhost:8787' : window.location.origin);
+      const workerUrl = WORKER_URL;
       const res = await fetch(`${workerUrl}/api/cache-sync`, {
         method: 'POST',
         headers: {
