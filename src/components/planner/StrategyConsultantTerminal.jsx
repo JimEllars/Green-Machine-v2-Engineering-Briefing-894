@@ -16,6 +16,7 @@ export default function StrategyConsultantTerminal() {
   const [isJsonValid, setIsJsonValid] = useState(false);
   const [parsedStrategyData, setParsedStrategyData] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [exportFormat, setExportFormat] = useState('Markdown');
 
   useEffect(() => {
     let channel;
@@ -126,7 +127,11 @@ export default function StrategyConsultantTerminal() {
   const handleCopyPlan = async () => {
     if (!strategy) return;
     try {
-      await navigator.clipboard.writeText(strategy);
+      let textToCopy = strategy;
+      if (exportFormat === 'JSON' && isJsonValid && parsedStrategyData) {
+        textToCopy = JSON.stringify(parsedStrategyData, null, 2);
+      }
+      await navigator.clipboard.writeText(textToCopy);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
@@ -187,18 +192,21 @@ export default function StrategyConsultantTerminal() {
             <SafeIcon name={isCopied ? "CheckCircle" : (isCopyUnavailable ? "AlertTriangle" : "Copy")} className="w-3 h-3" />
             {isCopyUnavailable ? "Copy Unavailable" : isCopied ? "Copied!" : "Copy Plan"}
           </button>
-          <button
-            className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${isJsonValid ? 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer' : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
-            disabled={!isJsonValid}
-            onClick={() => {
-               if (isJsonValid && parsedStrategyData) {
-                  navigator.clipboard.writeText(JSON.stringify(parsedStrategyData, null, 2));
-               }
-            }}
-          >
-            <SafeIcon name="Copy" className="w-3 h-3" />
-            Copy Recommendations JSON
-          </button>
+          <div className="flex bg-slate-800 rounded border border-slate-700 overflow-hidden">
+            <button
+              onClick={() => setExportFormat('Markdown')}
+              className={`px-2 py-1 text-xs font-medium transition-colors ${exportFormat === 'Markdown' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'}`}
+            >
+              Markdown
+            </button>
+            <button
+              onClick={() => setExportFormat('JSON')}
+              disabled={!isJsonValid}
+              className={`px-2 py-1 text-xs font-medium transition-colors ${exportFormat === 'JSON' ? 'bg-slate-700 text-white' : !isJsonValid ? 'text-slate-600 cursor-not-allowed' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700/50'}`}
+            >
+              JSON
+            </button>
+          </div>
           <span className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded border border-blue-500/20">
             <SafeIcon name="Shield" className="w-3 h-3" />
             {provider !== '{provider}' ? provider : 'DeepSeek-V3'}

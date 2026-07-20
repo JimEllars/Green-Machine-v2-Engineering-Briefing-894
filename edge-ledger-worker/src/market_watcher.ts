@@ -36,7 +36,7 @@ export async function syncMarketCache(env: Env): Promise<void> {
       if (oldCache) {
         await env.MARKET_CACHE.put('latest_prices', oldCache, {
           expirationTtl: 60,
-          metadata: { updated_at: Date.now() }
+          metadata: { updated_at: Date.now(), rate_limited: true }
         });
         console.log(`[MARKET_WATCHER] Fallback to historical cache successful`);
       }

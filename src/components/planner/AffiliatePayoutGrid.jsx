@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns';
 export default function AffiliatePayoutGrid() {
   const [transactions, setTransactions] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('CONNECTING'); // CONNECTING, SUBSCRIBED, TIMED_OUT, CLOSED
+  const [recentTxIds, setRecentTxIds] = useState(new Set());
 
   useEffect(() => {
     let channel;
@@ -40,6 +41,18 @@ export default function AffiliatePayoutGrid() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'blockchain_transactions' }, (payload) => {
           setTransactions(prev => {
             if (payload.eventType === 'INSERT') {
+              setRecentTxIds(prev => {
+                const next = new Set(prev);
+                next.add(payload.new.id);
+                return next;
+              });
+              setTimeout(() => {
+                setRecentTxIds(prev => {
+                  const next = new Set(prev);
+                  next.delete(payload.new.id);
+                  return next;
+                });
+              }, 2500);
               return [mapTransaction(payload.new), ...prev].slice(0, 10);
             }
             if (payload.eventType === 'UPDATE') {
@@ -144,7 +157,7 @@ export default function AffiliatePayoutGrid() {
                       backgroundColor: tx.status === 'minted' ? ['rgba(16, 185, 129, 0.4)', 'rgba(30, 41, 59, 0)'] : 'rgba(30, 41, 59, 0)'
                     }}
                     transition={{ duration: 0.5 }}
-                    className="hover:bg-slate-800/30 transition-colors"
+                    className={`hover:bg-slate-800/30 transition-colors ${recentTxIds.has(tx.id) ? 'bg-emerald-500/10 border border-emerald-500/30 animate-pulse' : ''}`}
                   >
                     <td className="px-6 py-4 font-mono text-emerald-400">{tx.partner}</td>
                     <td className="px-6 py-4 font-mono text-slate-300">{tx.wallet}</td>
