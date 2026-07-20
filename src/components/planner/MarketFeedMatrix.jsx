@@ -6,6 +6,7 @@ export default function MarketFeedMatrix() {
   const [marketData, setMarketData] = useState([]);
   const [isStale, setIsStale] = useState(false);
   const [isDegraded, setIsDegraded] = useState(false);
+  const [isRateLimited, setIsRateLimited] = useState(false);
 
 
   useEffect(() => {
@@ -25,6 +26,11 @@ export default function MarketFeedMatrix() {
 
         const data = await response.json();
         setIsDegraded(false);
+        if (data.metadata?.rate_limited) {
+          setIsRateLimited(true);
+        } else {
+          setIsRateLimited(false);
+        }
         // Check telemetry timestamp
         if (data && data._telemetry_timestamp) {
           const ageMs = Date.now() - data._telemetry_timestamp;
@@ -84,6 +90,12 @@ export default function MarketFeedMatrix() {
           <p className="text-slate-400 text-sm mt-1">Sub-10ms edge cache reads via Cloudflare KV</p>
         </div>
         <div className="flex items-center gap-2">
+          {isRateLimited && (
+            <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-amber-500/10 text-amber-400 rounded-full border border-amber-500/20">
+              <SafeIcon name="AlertTriangle" className="w-3 h-3" />
+              Oracle Rate-Limited
+            </div>
+          )}
           {isStale && (
             <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-amber-500/10 text-amber-400 rounded-full border border-amber-500/20">
               <SafeIcon name="AlertTriangle" className="w-3 h-3" />
