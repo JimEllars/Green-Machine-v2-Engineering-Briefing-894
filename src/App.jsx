@@ -42,24 +42,24 @@ function App() {
     });
   };
 
-  useEffect(() => {
-    const checkDlq = async () => {
-      try {
-        const workerUrl = WORKER_URL;
-        const res = await fetch(`${workerUrl}/api/dlq-status`, {
-          headers: {
-            'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
-          }
-        });
-        if (res.ok) {
-           const data = await res.json();
-           setDlqStatus({ active: data.active, count: data.count, quarantine_count: data.quarantine_count || 0 });
+const checkDlq = async () => {
+    try {
+      const workerUrl = WORKER_URL;
+      const res = await fetch(`${workerUrl}/api/dlq-status`, {
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         }
-      } catch (e) {
-        console.error("Failed to fetch DLQ status", e);
+      });
+      if (res.ok) {
+         const data = await res.json();
+         setDlqStatus({ active: data.active, count: data.count, quarantine_count: data.quarantine_count || 0 });
       }
-    };
+    } catch (e) {
+      console.error("Failed to fetch DLQ status", e);
+    }
+  };
 
+  useEffect(() => {
     checkDlq();
     const interval = setInterval(checkDlq, 15000); // Check every 15s
     return () => clearInterval(interval);
@@ -81,9 +81,8 @@ function App() {
           setTimeout(handleFlushDLQ, 2000);
         } else {
           setIsFlushing(false);
-          // Will refresh automatically via interval, but can reset here
-          setDlqStatus({ active: false, count: 0, quarantine_count: 0 });
         }
+        await checkDlq();
       } else {
         setIsFlushing(false);
       }
@@ -131,6 +130,7 @@ function App() {
       if (res.ok) {
         setPurgeSuccess(true);
         setTimeout(() => setPurgeSuccess(false), 2000);
+        await checkDlq();
       }
     } catch(e) {
       console.error('Failed to purge quarantine:', e);

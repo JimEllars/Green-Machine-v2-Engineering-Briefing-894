@@ -46,10 +46,11 @@ export default function MarketFeedMatrix() {
           ];
           setMarketData(formattedData);
         }
-      } catch (error) {
+            } catch (error) {
         console.error("Failed to fetch market data", error);
         setIsDegraded(true);
-        setMarketData([
+        // Only set fallback data if no existing data is present
+        setMarketData(prev => prev.length > 0 ? prev : [
           { symbol: 'BTC', name: 'Bitcoin', price: 65000, change: 0, type: 'crypto', icon: 'DollarSign' },
           { symbol: 'ETH', name: 'Ethereum', price: 3500, change: 0, type: 'crypto', icon: 'Activity' },
           { symbol: 'SOL', name: 'Solana', price: 150, change: 0, type: 'crypto', icon: 'Zap' },
@@ -68,10 +69,10 @@ export default function MarketFeedMatrix() {
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-      {isDegraded && (
+            {isDegraded && (
         <div className="mb-4 bg-amber-500/20 border border-amber-500/50 rounded-lg p-3 text-amber-400 text-sm font-medium flex items-center justify-center gap-2">
           <SafeIcon name="AlertTriangle" className="w-4 h-4" />
-          Edge Connection Degraded - Displaying Local Baseline Snapshot
+          Telemetry Signal Degraded - Retrying...
         </div>
       )}
       <div className="flex items-center justify-between mb-6">
