@@ -346,8 +346,8 @@ export default {
     try {
       const payload = (await request.json()) as any;
       
-      // 2. Extract and rigorously transform variables
-      const { 
+            // 2. Extract and rigorously transform variables
+      let {
         partner_id, 
         wallet_address, 
         smart_contract_address, 
@@ -356,6 +356,16 @@ export default {
         event_type, 
         transaction_hash 
       } = payload;
+
+      // Expand partner_id assignment logic
+      if (!partner_id) {
+         partner_id = payload.metadata?.linked_affiliate_id || payload.metadata?.promo_code || null;
+      }
+      if (typeof partner_id === 'string') {
+          // Sanitize
+          partner_id = partner_id.trim();
+      }
+
 
       let status = 'pending';
       if (event_type === 'minted' || event_type === 'settled') status = 'minted';

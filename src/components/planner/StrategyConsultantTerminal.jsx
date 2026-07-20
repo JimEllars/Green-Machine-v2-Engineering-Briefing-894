@@ -15,6 +15,7 @@ export default function StrategyConsultantTerminal() {
   const [connectionStatus, setConnectionStatus] = useState('CONNECTING');
   const [isJsonValid, setIsJsonValid] = useState(false);
   const [parsedStrategyData, setParsedStrategyData] = useState(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   useEffect(() => {
     let channel;
@@ -120,6 +121,17 @@ export default function StrategyConsultantTerminal() {
   const typedLengthRef = useRef(0);
   const typingIntervalRef = useRef(null);
 
+  const handleCopyPlan = async () => {
+    if (!strategy) return;
+    try {
+      await navigator.clipboard.writeText(strategy);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy plan:', err);
+    }
+  };
+
   // Typewriter effect for the terminal
   useEffect(() => {
     if (!strategy || strategy.length <= typedLengthRef.current) {
@@ -163,6 +175,14 @@ export default function StrategyConsultantTerminal() {
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${strategy ? 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer' : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
+            disabled={!strategy}
+            onClick={handleCopyPlan}
+          >
+            <SafeIcon name={isCopied ? "CheckCircle" : "Copy"} className="w-3 h-3" />
+            {isCopied ? "Copied!" : "Copy Plan"}
+          </button>
           <button
             className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${isJsonValid ? 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer' : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
             disabled={!isJsonValid}
