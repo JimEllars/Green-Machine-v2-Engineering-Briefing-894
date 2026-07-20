@@ -22,8 +22,12 @@ export async function syncMarketCache(env: Env): Promise<void> {
     });
 
     console.log(`[MARKET_WATCHER] Market cache updated at ${new Date().toISOString()}`);
-  } catch (error) {
-    console.error(`[MARKET_WATCHER] Oracle fetch failed:`, error);
+  } catch (error: any) {
+    if (error.status === 429) {
+      console.warn(`[ORACLE_RATE_LIMIT] 429 received from oracle. Preserving cached prices. Retry-After: ${error.retryAfter || 'unknown'}`);
+    } else {
+      console.error(`[MARKET_WATCHER] Oracle fetch failed:`, error);
+    }
 
     // Fallback gracefully to historical keys without overwriting valid data blocks
     // By re-putting the old cache, we prevent KV from expiring it.
@@ -69,6 +73,13 @@ async function fetchExternalOracles(apiKey: string) {
   });
 
   if (!response.ok) {
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('Retry-After');
+      const err = new Error(`Oracle fetch failed with status 429`);
+      (err as any).status = 429;
+      (err as any).retryAfter = retryAfter;
+      throw err;
+    }
     throw new Error(`Oracle fetch failed with status ${response.status}`);
   }
 
