@@ -121,6 +121,8 @@ export default function StrategyConsultantTerminal() {
   const typedLengthRef = useRef(0);
   const typingIntervalRef = useRef(null);
 
+  const [isCopyUnavailable, setIsCopyUnavailable] = useState(false);
+
   const handleCopyPlan = async () => {
     if (!strategy) return;
     try {
@@ -128,7 +130,9 @@ export default function StrategyConsultantTerminal() {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
-      console.error('Failed to copy plan:', err);
+      console.warn('Failed to copy plan: Clipboard access denied or unavailable', err);
+      setIsCopyUnavailable(true);
+      setTimeout(() => setIsCopyUnavailable(false), 3000);
     }
   };
 
@@ -176,12 +180,12 @@ export default function StrategyConsultantTerminal() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${strategy ? 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer' : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
-            disabled={!strategy}
+            className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${strategy ? (isCopyUnavailable ? 'bg-amber-900/50 text-amber-400 border-amber-700' : 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer') : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
+            disabled={!strategy || isCopyUnavailable}
             onClick={handleCopyPlan}
           >
-            <SafeIcon name={isCopied ? "CheckCircle" : "Copy"} className="w-3 h-3" />
-            {isCopied ? "Copied!" : "Copy Plan"}
+            <SafeIcon name={isCopied ? "CheckCircle" : (isCopyUnavailable ? "AlertTriangle" : "Copy")} className="w-3 h-3" />
+            {isCopyUnavailable ? "Copy Unavailable" : isCopied ? "Copied!" : "Copy Plan"}
           </button>
           <button
             className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${isJsonValid ? 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer' : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}

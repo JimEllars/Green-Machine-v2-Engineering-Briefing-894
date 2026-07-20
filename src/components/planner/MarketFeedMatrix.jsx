@@ -129,6 +129,14 @@ export default function MarketFeedMatrix() {
                 ${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </motion.div>
             </div>
+            {asset.high_24h !== undefined && asset.low_24h !== undefined && asset.high_24h > asset.low_24h && (
+              <div className="mt-3 h-[2px] w-full bg-slate-700/50 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] transition-all duration-500"
+                  style={{ width: `${Math.min(Math.max(((asset.price - asset.low_24h) / (asset.high_24h - asset.low_24h)) * 100, 0), 100)}%` }}
+                />
+              </div>
+            )}
           </motion.div>
         ))}
       </div>
