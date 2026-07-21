@@ -9,6 +9,11 @@ export interface Env {
   ORACLE_API_KEY: string;
 }
 
+/**
+ * Synchronizes the market cache with upstream oracles.
+ * If a 429 rate-limit is encountered, it preserves the existing cache and updates
+ * the metadata to reflect the rate-limited status.
+ */
 export async function syncMarketCache(env: Env): Promise<void> {
   try {
     // 1. Fetch from Upstream Oracles (Simulated aggregation)
