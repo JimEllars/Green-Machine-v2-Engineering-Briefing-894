@@ -7,6 +7,8 @@ export default function MarketFeedMatrix() {
   const [isStale, setIsStale] = useState(false);
   const [isDegraded, setIsDegraded] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [telemetryTimestamp, setTelemetryTimestamp] = useState(null);
+  const [ageDisplay, setAgeDisplay] = useState('');
 
 
   useEffect(() => {
@@ -33,6 +35,7 @@ export default function MarketFeedMatrix() {
         }
         // Check telemetry timestamp
         if (data && data._telemetry_timestamp) {
+          setTelemetryTimestamp(data._telemetry_timestamp);
           const ageMs = Date.now() - data._telemetry_timestamp;
           if (ageMs > 60000) {
             setIsStale(true);
@@ -72,6 +75,25 @@ export default function MarketFeedMatrix() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    if (!telemetryTimestamp) return;
+
+    const updateAgeDisplay = () => {
+      const ageMs = Date.now() - telemetryTimestamp;
+      const ageSecs = Math.floor(ageMs / 1000);
+
+      if (ageSecs > 60) {
+        setAgeDisplay('Stale (60s+)');
+      } else {
+        setAgeDisplay(`Updated ${ageSecs}s ago`);
+      }
+    };
+
+    updateAgeDisplay();
+    const ticker = setInterval(updateAgeDisplay, 1000);
+    return () => clearInterval(ticker);
+  }, [telemetryTimestamp]);
+
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -86,6 +108,11 @@ export default function MarketFeedMatrix() {
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <SafeIcon name="TrendingUp" className="text-emerald-500" />
             Live Market Telemetry
+            {ageDisplay && (
+              <span className={`ml-3 text-[10px] uppercase tracking-wider font-mono px-2 py-1 rounded-md border ${isStale ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'}`}>
+                {ageDisplay}
+              </span>
+            )}
           </h2>
           <p className="text-slate-400 text-sm mt-1">Sub-10ms edge cache reads via Cloudflare KV</p>
         </div>
