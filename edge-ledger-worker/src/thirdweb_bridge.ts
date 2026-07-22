@@ -91,6 +91,7 @@ export default {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
+            'Cache-Control': 'public, max-age=15, s-maxage=30',
             ...corsHeaders
           }
         });
@@ -235,6 +236,7 @@ export default {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
             ...corsHeaders
           }
         });
@@ -280,6 +282,7 @@ export default {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=15, s-maxage=30',
           ...corsHeaders
         }
       });
@@ -317,6 +320,7 @@ export default {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
             ...corsHeaders
           }
         });
