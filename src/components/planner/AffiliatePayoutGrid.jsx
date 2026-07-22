@@ -8,13 +8,14 @@ import { formatDistanceToNow } from 'date-fns';
 
 export default function AffiliatePayoutGrid() {
   const [transactions, setTransactions] = useState([]);
-  const [connectionStatus, setConnectionStatus] = useState('CONNECTING'); // CONNECTING, SUBSCRIBED, TIMED_OUT, CLOSED
+  const [connectionStatus, setConnectionStatus] = useState('CONNECTING'); // CONNECTING, SUBSCRIBED, TIMED_OUT, CLOSED, DISCONNECTED
   const [recentTxIds, setRecentTxIds] = useState(new Set());
+  const reconnectCountRef = React.useRef(0);
+  const [manualReconnectTrigger, setManualReconnectTrigger] = useState(0);
 
   useEffect(() => {
     let channel;
     let retryTimeout;
-    let retryCount = 0;
     const maxBackoff = 30000;
 
     const fetchInitialData = async () => {
@@ -63,19 +64,23 @@ export default function AffiliatePayoutGrid() {
           });
         })
         .subscribe((status) => {
-          setConnectionStatus(status);
-
           if (status === 'SUBSCRIBED') {
-            retryCount = 0; // Reset exponential backoff counter on successful subscription
+            setConnectionStatus(status);
+            reconnectCountRef.current = 0; // Reset exponential backoff counter on successful subscription
           } else if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-            // Implement exponential backoff for ledger-realtime channel
-            // This prevents silent stream drops from freezing the live payout grid
-            const delay = Math.min(1000 * Math.pow(2, retryCount), maxBackoff);
-            retryCount++;
-            clearTimeout(retryTimeout);
-            retryTimeout = setTimeout(() => {
-              subscribeToChanges();
-            }, delay);
+            if (reconnectCountRef.current >= 5) {
+              setConnectionStatus('DISCONNECTED');
+            } else {
+              setConnectionStatus(status);
+              // Implement exponential backoff for ledger-realtime channel
+              // This prevents silent stream drops from freezing the live payout grid
+              const delay = Math.min(1000 * Math.pow(2, reconnectCountRef.current), maxBackoff);
+              reconnectCountRef.current++;
+              clearTimeout(retryTimeout);
+              retryTimeout = setTimeout(() => {
+                subscribeToChanges();
+              }, delay);
+            }
           }
         });
     };
@@ -87,7 +92,7 @@ export default function AffiliatePayoutGrid() {
       clearTimeout(retryTimeout);
       if (channel) supabase.removeChannel(channel);
     };
-  }, []);
+  }, [manualReconnectTrigger]);
 
   const mapTransaction = (dbTx) => ({
     id: dbTx.id,
@@ -115,7 +120,7 @@ export default function AffiliatePayoutGrid() {
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <SafeIcon name="Layers" className="text-emerald-500" />
             Thirdweb Ledger Sync
-            <div className="flex items-center ml-3">
+            <div className="flex items-center ml-3 gap-2">
               <div
                 className={`w-2.5 h-2.5 rounded-full ${
                   connectionStatus === 'SUBSCRIBED' ? 'bg-emerald-500' :
@@ -124,6 +129,17 @@ export default function AffiliatePayoutGrid() {
                 }`}
                 title={`Connection Status: ${connectionStatus}`}
               />
+              {connectionStatus === 'DISCONNECTED' && (
+                <button
+                  onClick={() => {
+                    reconnectCountRef.current = 0;
+                    setManualReconnectTrigger(prev => prev + 1);
+                  }}
+                  className="text-[10px] px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded hover:bg-rose-500/20 transition-colors"
+                >
+                  Reconnect Socket
+                </button>
+              )}
             </div>
           </h2>
           <p className="text-slate-400 text-sm mt-1">Real-time smart contract settlements</p>

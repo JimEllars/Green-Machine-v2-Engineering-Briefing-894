@@ -7,11 +7,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-axim-signature',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+
 serve(async (req: Request) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   // 1. Strict RBAC / Header Validation
   const authHeader = req.headers.get('Authorization');
   if (!authHeader || !authHeader.includes(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string)) {
-    return new Response('Unauthorized Access', { status: 401 });
+    return new Response('Unauthorized Access', { status: 401, headers: corsHeaders });
   }
 
   const supabase = createClient(
@@ -118,9 +129,9 @@ serve(async (req: Request) => {
       created_at: new Date().toISOString()
     });
 
-    return new Response(JSON.stringify({ success: true, routed_to: provider }), { status: 200 });
+    return new Response(JSON.stringify({ success: true, routed_to: provider }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
   } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
   }
 })

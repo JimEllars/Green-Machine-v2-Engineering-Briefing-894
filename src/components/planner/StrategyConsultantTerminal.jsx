@@ -16,7 +16,11 @@ export default function StrategyConsultantTerminal() {
   const [isJsonValid, setIsJsonValid] = useState(false);
   const [parsedStrategyData, setParsedStrategyData] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
-  const [exportFormat, setExportFormat] = useState('Markdown');
+  const [exportFormat, setExportFormat] = useState(() => localStorage.getItem('terminal_export_format') || 'Markdown');
+
+  useEffect(() => {
+    localStorage.setItem('terminal_export_format', exportFormat);
+  }, [exportFormat]);
 
   useEffect(() => {
     let channel;
