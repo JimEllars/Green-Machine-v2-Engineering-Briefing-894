@@ -124,13 +124,19 @@ export default function StrategyConsultantTerminal() {
 
   const [isCopyUnavailable, setIsCopyUnavailable] = useState(false);
 
+  // Handles copying the recommendation strategy to the clipboard
+  // Supports switching between Markdown and JSON formats with defensive fallbacks
   const handleCopyPlan = async () => {
     if (!strategy) return;
     try {
-      let textToCopy = strategy;
+      let textToCopy = strategy || '';
+      // If JSON is selected, format the underlying recommendation payload using JSON.stringify
       if (exportFormat === 'JSON' && isJsonValid && parsedStrategyData) {
-        textToCopy = JSON.stringify(parsedStrategyData, null, 2);
+        textToCopy = JSON.stringify(parsedStrategyData, null, 2) || '';
       }
+
+      if (!textToCopy) return; // Defensive fallback if stringification fails
+
       await navigator.clipboard.writeText(textToCopy);
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);

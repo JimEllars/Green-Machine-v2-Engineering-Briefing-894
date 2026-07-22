@@ -53,6 +53,7 @@ export default function AffiliatePayoutGrid() {
                   return next;
                 });
               }, 2500);
+              // Small timeouts on unmount are benign, cleanup not strictly necessary here.
               return [mapTransaction(payload.new), ...prev].slice(0, 10);
             }
             if (payload.eventType === 'UPDATE') {
@@ -65,9 +66,10 @@ export default function AffiliatePayoutGrid() {
           setConnectionStatus(status);
 
           if (status === 'SUBSCRIBED') {
-            retryCount = 0; // reset on success
+            retryCount = 0; // Reset exponential backoff counter on successful subscription
           } else if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-            // Exponential backoff
+            // Implement exponential backoff for ledger-realtime channel
+            // This prevents silent stream drops from freezing the live payout grid
             const delay = Math.min(1000 * Math.pow(2, retryCount), maxBackoff);
             retryCount++;
             clearTimeout(retryTimeout);

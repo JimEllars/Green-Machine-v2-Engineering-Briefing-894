@@ -265,6 +265,12 @@ export default {
         parsedData = JSON.parse(cacheResult.value);
         // Track data freshness
         parsedData._telemetry_timestamp = (cacheResult.metadata && (cacheResult.metadata as any).updated_at) ? (cacheResult.metadata as any).updated_at : Date.now();
+
+        // Expose metadata flags to client (e.g., rate_limited)
+        parsedData.metadata = cacheResult.metadata ? { ...cacheResult.metadata } : {
+          rate_limited: false,
+          updated_at: parsedData._telemetry_timestamp
+        };
       } catch (e) {
         // Fallback if parsing fails
         parsedData = { error: 'Invalid JSON in cache' };
