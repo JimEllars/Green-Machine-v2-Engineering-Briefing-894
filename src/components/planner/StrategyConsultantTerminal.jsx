@@ -17,6 +17,7 @@ export default function StrategyConsultantTerminal() {
   const [parsedStrategyData, setParsedStrategyData] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
   const [exportFormat, setExportFormat] = useState(() => localStorage.getItem('terminal_export_format') || 'Markdown');
+  const [isHighVolatilityOnly, setIsHighVolatilityOnly] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('terminal_export_format', exportFormat);
@@ -151,25 +152,48 @@ export default function StrategyConsultantTerminal() {
     }
   };
 
+  const filteredStrategy = React.useMemo(() => {
+    if (!isHighVolatilityOnly) return strategy;
+
+    const filteredHistory = strategyHistory.filter(s =>
+      s.includes('[HIGH VOLATILITY DETECTED]') || s.includes('"isHighVolatility": true')
+    );
+
+    return filteredHistory.join('\n\n');
+  }, [strategy, strategyHistory, isHighVolatilityOnly]);
+
   // Typewriter effect for the terminal
   useEffect(() => {
-    if (!strategy || strategy.length <= typedLengthRef.current) {
+    if (!filteredStrategy || filteredStrategy.length <= typedLengthRef.current) {
       setIsTyping(false);
+      if (filteredStrategy) {
+         setDisplayText(filteredStrategy.slice(0, typedLengthRef.current));
+      } else {
+         setDisplayText('');
+      }
       return;
     }
 
     setIsTyping(true);
     typingIntervalRef.current = setInterval(() => {
       typedLengthRef.current++;
-      setDisplayText(strategy.slice(0, typedLengthRef.current));
+      setDisplayText(filteredStrategy.slice(0, typedLengthRef.current));
 
-      if (typedLengthRef.current >= strategy.length) {
+      if (typedLengthRef.current >= filteredStrategy.length) {
         clearInterval(typingIntervalRef.current);
         setIsTyping(false);
       }
     }, 15);
     return () => clearInterval(typingIntervalRef.current);
-  }, [strategy]);
+  }, [filteredStrategy]);
+
+  // Update displayText immediately on toggle if we are past the length
+  useEffect(() => {
+     if (!isTyping) {
+        setDisplayText(filteredStrategy ? filteredStrategy.slice(0, typedLengthRef.current) : '');
+     }
+  }, [isHighVolatilityOnly, filteredStrategy, isTyping]);
+
 
   return (
     <div className="bg-[#0A0F15] border border-slate-800 rounded-xl flex flex-col h-full shadow-2xl overflow-hidden relative">
@@ -201,6 +225,13 @@ export default function StrategyConsultantTerminal() {
           >
             <SafeIcon name={isCopied ? "CheckCircle" : (isCopyUnavailable ? "AlertTriangle" : "Copy")} className="w-3 h-3" />
             {isCopyUnavailable ? "Copy Unavailable" : isCopied ? "Copied!" : "Copy Plan"}
+          </button>
+          <button
+            onClick={() => setIsHighVolatilityOnly(!isHighVolatilityOnly)}
+            className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border transition-colors ${isHighVolatilityOnly ? 'bg-rose-500/20 text-rose-400 border-rose-500/40' : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'}`}
+          >
+            <SafeIcon name="Activity" className="w-3 h-3" />
+            High Volatility Only
           </button>
           <div className="flex bg-slate-800 rounded border border-slate-700 overflow-hidden">
             <button

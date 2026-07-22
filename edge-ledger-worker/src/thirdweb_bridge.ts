@@ -47,7 +47,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized Edge Ingress', code: 'ERR_UNAUTHORIZED' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
@@ -55,7 +55,7 @@ export default {
     if (request.method === 'GET' && url.pathname === '/api/dlq-status') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized Edge Ingress', code: 'ERR_UNAUTHORIZED' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
       // Endpoint for app diagnostics
@@ -96,7 +96,7 @@ export default {
           }
         });
       } catch(e) {
-        return new Response(JSON.stringify({ error: 'Failed to read DLQ' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+        return new Response(JSON.stringify({ success: false, error: 'Failed to read DLQ', code: 'ERR_DLQ_READ' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
 
@@ -104,7 +104,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/api/cache-sync') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized', code: 'ERR_UNAUTHORIZED' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
       try {
@@ -117,14 +117,14 @@ export default {
           }
         });
       } catch (e) {
-        return new Response(JSON.stringify({ error: 'Failed to sync cache' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+        return new Response(JSON.stringify({ success: false, error: 'Failed to sync cache', code: 'ERR_CACHE_SYNC' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
 
     if (request.method === 'POST' && url.pathname === '/api/dlq-flush') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized', code: 'ERR_UNAUTHORIZED' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
       try {
@@ -241,19 +241,19 @@ export default {
           }
         });
       } catch (e) {
-        return new Response(JSON.stringify({ error: 'Failed to flush DLQ' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+        return new Response(JSON.stringify({ success: false, error: 'Failed to flush DLQ', code: 'ERR_DLQ_FLUSH' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
 
     if (request.method === 'GET' && url.pathname === '/api/market-cache') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized Edge Ingress', code: 'ERR_UNAUTHORIZED' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
       const cacheResult = await env.MARKET_CACHE.getWithMetadata('latest_prices');
       if (!cacheResult.value) {
-        return new Response(JSON.stringify({ error: 'Cache miss' }), {
+        return new Response(JSON.stringify({ success: false, error: 'Cache miss', code: 'ERR_CACHE_MISS' }), {
           status: 404,
           headers: {
             'Content-Type': 'application/json',
@@ -293,7 +293,7 @@ export default {
     if (request.method === 'POST' && url.pathname === '/api/quarantine-purge') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized', code: 'ERR_UNAUTHORIZED' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
 
       try {
@@ -325,13 +325,13 @@ export default {
           }
         });
       } catch (e) {
-        return new Response(JSON.stringify({ error: 'Failed to purge quarantine' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+        return new Response(JSON.stringify({ success: false, error: 'Failed to purge quarantine', code: 'ERR_QUARANTINE_PURGE' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
 
     // Strict Edge Route Catch-All Termination
     if (url.pathname !== '/' && !url.pathname.startsWith('/api/')) {
-       return new Response('404 Not Found', { status: 404, headers: corsHeaders });
+       return new Response(JSON.stringify({ success: false, error: 'Not Found', code: 'ERR_NOT_FOUND' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
     // Explicit Fallback Route Evaluation
@@ -343,14 +343,14 @@ export default {
         url.pathname !== '/api/market-cache' &&
         url.pathname !== '/api/quarantine-purge'
     ) {
-        return new Response('404 Not Found', { status: 404, headers: corsHeaders });
+        return new Response(JSON.stringify({ success: false, error: 'Not Found', code: 'ERR_NOT_FOUND' }), { status: 404, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
     // 1. HMAC Validation (The Ingress Token Isolation Rule)
 
     const signature = request.headers.get('X-Axim-Signature');
     if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-      return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ success: false, error: 'Unauthorized Edge Ingress', code: 'ERR_UNAUTHORIZED' }), { status: 401, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
     }
 
     try {

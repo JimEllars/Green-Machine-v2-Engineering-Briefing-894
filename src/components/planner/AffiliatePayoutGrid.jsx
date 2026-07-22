@@ -18,7 +18,7 @@ export default function AffiliatePayoutGrid() {
     let retryTimeout;
     const maxBackoff = 30000;
 
-    const fetchInitialData = async () => {
+    const fetchTransactions = async (append = false) => {
       const { data, error } = await supabase
         .from('blockchain_transactions')
         .select('*')
@@ -26,7 +26,22 @@ export default function AffiliatePayoutGrid() {
         .limit(10);
 
       if (data) {
-        setTransactions(data.map(mapTransaction));
+        setTransactions(prev => {
+          if (!append) return data.map(mapTransaction);
+
+          const newTxs = data.map(mapTransaction);
+          const combined = [...newTxs, ...prev];
+
+          // Deduplicate by ID
+          const uniqueIds = new Set();
+          const deduped = combined.filter(tx => {
+            if (uniqueIds.has(tx.id)) return false;
+            uniqueIds.add(tx.id);
+            return true;
+          });
+
+          return deduped.slice(0, 10);
+        });
       }
     };
 
@@ -66,6 +81,9 @@ export default function AffiliatePayoutGrid() {
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             setConnectionStatus(status);
+            if (reconnectCountRef.current > 0) {
+              fetchTransactions(true); // Fetch missed deltas post-reconnect
+            }
             reconnectCountRef.current = 0; // Reset exponential backoff counter on successful subscription
           } else if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
             if (reconnectCountRef.current >= 5) {
@@ -85,7 +103,7 @@ export default function AffiliatePayoutGrid() {
         });
     };
 
-    fetchInitialData();
+    fetchTransactions();
     subscribeToChanges();
 
     return () => {
