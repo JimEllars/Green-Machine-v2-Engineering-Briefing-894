@@ -4,11 +4,10 @@ import StrategyConsultantTerminal from './components/planner/StrategyConsultantT
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
 
-const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
-const WORKER_URL = import.meta.env.VITE_WORKER_URL || (IS_LOCAL ? 'http://localhost:8787' : window.location.origin);
 
 import SafeIcon from './common/SafeIcon';
 import SystemDiagnosticsPanel from './components/planner/SystemDiagnosticsPanel';
+import { getWorkerUrl } from './utils/workerUrl';
 
 
 function App() {
@@ -44,7 +43,7 @@ function App() {
 
 const checkDlq = async () => {
     try {
-      const workerUrl = WORKER_URL;
+      const workerUrl = getWorkerUrl();
       const res = await fetch(`${workerUrl}/api/dlq-status`, {
         headers: {
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
@@ -68,7 +67,7 @@ const checkDlq = async () => {
   const handleFlushDLQ = async () => {
     setIsFlushing(true);
     try {
-      const workerUrl = WORKER_URL;
+      const workerUrl = getWorkerUrl();
       const res = await fetch(`${workerUrl}/api/dlq-flush`, {
         method: 'POST',
         headers: {
@@ -97,7 +96,7 @@ const checkDlq = async () => {
     setIsSyncing(true);
     setSyncSuccess(false);
     try {
-      const workerUrl = WORKER_URL;
+      const workerUrl = getWorkerUrl();
       const res = await fetch(`${workerUrl}/api/cache-sync`, {
         method: 'POST',
         headers: {
@@ -120,7 +119,7 @@ const checkDlq = async () => {
   const handlePurgeQuarantine = async () => {
     setIsPurgingQuarantine(true);
     try {
-      const workerUrl = WORKER_URL;
+      const workerUrl = getWorkerUrl();
       const res = await fetch(`${workerUrl}/api/quarantine-purge`, {
         method: 'POST',
         headers: {

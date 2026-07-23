@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import SafeIcon from '../../common/SafeIcon';
+import { getWorkerUrl } from '../../utils/workerUrl';
 
-const IS_LOCAL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.');
-const WORKER_URL = import.meta.env.VITE_WORKER_URL || (IS_LOCAL ? 'http://localhost:8787' : window.location.origin);
 
 
 const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
@@ -23,7 +22,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
     let edgeOk = false;
     let dbOk = false;
     try {
-      const workerUrl = WORKER_URL;
+      const workerUrl = getWorkerUrl();
       const start = performance.now();
       const res = await fetch(`${workerUrl}/api/market-cache`, {
         headers: {
@@ -71,8 +70,26 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
 
   useEffect(() => {
     checkEdgeHealth();
-    const intervalId = setInterval(checkEdgeHealth, 15000);
-    return () => clearInterval(intervalId);
+    let intervalId = setInterval(checkEdgeHealth, 15000);
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        clearInterval(intervalId);
+        // Throttle to 60s when hidden to save resources, or we could just clear it
+        intervalId = setInterval(checkEdgeHealth, 60000);
+      } else {
+        clearInterval(intervalId);
+        checkEdgeHealth(); // Immediate check on return
+        intervalId = setInterval(checkEdgeHealth, 15000);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
 
@@ -130,10 +147,17 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 h-full flex flex-col">
-      <h3 className="text-white font-bold mb-4 flex items-center gap-2 text-sm">
-        <SafeIcon name="Activity" className="text-emerald-500 w-4 h-4" />
-        System Diagnostics
-      </h3>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-white font-bold flex items-center gap-2 text-sm">
+          <SafeIcon name="Activity" className="text-emerald-500 w-4 h-4" />
+          System Diagnostics
+        </h3>
+
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${edgeCacheAvailable ? 'bg-amber-500/10 border-amber-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(225,29,72,0.3)]'}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${edgeCacheAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+          {edgeCacheAvailable ? 'CF Worker: Active | KV Synced' : 'CF Worker: Unreachable'}
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 flex-grow">
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
