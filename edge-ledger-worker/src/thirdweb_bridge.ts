@@ -14,6 +14,7 @@ export interface Env {
   SUPABASE_SERVICE_KEY: string;
   GREEN_STATE: KVNamespace; // DLQ Namespace
   MARKET_CACHE: KVNamespace;
+  AI: any;
 }
 
 const corsHeaders = {
@@ -351,6 +352,39 @@ export default {
       }
     }
 
+
+    if (request.method === 'POST' && url.pathname === '/api/strategy-consult') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      const { prompt, session_id } = await request.json() as any;
+
+      if (!env.AI) {
+        return new Response(JSON.stringify({ error: "AI binding not configured" }), { status: 503, headers: corsHeaders });
+      }
+
+      try {
+        const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          messages: [
+            { role: 'system', content: 'You are the AXiM Green Machine Strategy Consultant. Respond in strict JSON with fields: "analysis" (string), "riskLevel" (string), and "actionItems" (array of strings).' },
+            { role: 'user', content: prompt }
+          ],
+          response_format: { type: 'json_object' }
+        }, {
+          extraHeaders: {
+            "x-session-affinity": `ses_${session_id || 'default'}`
+          }
+        });
+
+        let parsed = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
+        return new Response(JSON.stringify({ success: true, data: parsed }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: 'AI Evaluation Failed' }), { status: 500, headers: corsHeaders });
+      }
+    }
+
     // Strict Edge Route Catch-All Termination
     if (url.pathname !== '/' && !url.pathname.startsWith('/api/')) {
        return new Response('404 Not Found', { status: 404, headers: corsHeaders });
@@ -363,6 +397,7 @@ export default {
         url.pathname !== '/api/cache-sync' &&
         url.pathname !== '/api/dlq-flush' &&
         url.pathname !== '/api/market-cache' &&
+        url.pathname !== '/api/strategy-consult' &&
         url.pathname !== '/api/quarantine-purge'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });

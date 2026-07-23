@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
 import { supabase } from '../../supabaseClient';
+import { getWorkerUrl } from '../../utils/workerUrl';
+
 
 
 
@@ -17,6 +19,10 @@ export default function StrategyConsultantTerminal() {
   const [parsedStrategyData, setParsedStrategyData] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
   const [exportFormat, setExportFormat] = useState(() => localStorage.getItem('terminal_export_format') || 'Markdown');
+  const [promptInput, setPromptInput] = useState('');
+  const [sessionId] = useState(() => Math.random().toString(36).substring(2, 15));
+  const [isConsulting, setIsConsulting] = useState(false);
+
 
   useEffect(() => {
     localStorage.setItem('terminal_export_format', exportFormat);
@@ -127,6 +133,62 @@ export default function StrategyConsultantTerminal() {
   const typingIntervalRef = useRef(null);
 
   const [isCopyUnavailable, setIsCopyUnavailable] = useState(false);
+
+  const handleConsultSubmit = async (e) => {
+    e.preventDefault();
+    if (!promptInput.trim()) return;
+
+    setIsConsulting(true);
+    setDisplayText('');
+    setIsTyping(true);
+
+    // Clear typing intervals when starting a new generation
+    if (typingIntervalRef.current) {
+        clearInterval(typingIntervalRef.current);
+    }
+    typedLengthRef.current = 0;
+
+    // Simulate "Routing context to DeepSeek proxy..." equivalent text
+    const initText = "> Initializing consultant session...\n> Routing prompt to Edge AI (Llama 3.1 8B)...\n> AWAITING RESPONSE\n\n";
+    setDisplayText(initText);
+
+    try {
+      const response = await fetch(`${getWorkerUrl()}/api/strategy-consult`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        },
+        body: JSON.stringify({
+          prompt: promptInput,
+          session_id: sessionId
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.data) {
+        setIsJsonValid(true);
+        setParsedStrategyData(data.data);
+        const payload = JSON.stringify(data.data, null, 2);
+        setStrategy(payload);
+        setStrategyHistory(prev => [...prev, payload].slice(-3));
+        setProvider('EDGE-LLAMA-3.1-8B');
+      } else {
+        setIsJsonValid(false);
+        setParsedStrategyData(null);
+        setStrategy("Error: " + (data.error || "Unknown error during AI consultation."));
+      }
+    } catch (err) {
+      setIsJsonValid(false);
+      setParsedStrategyData(null);
+      setStrategy("Error: " + err.message);
+    } finally {
+      setIsConsulting(false);
+      setPromptInput('');
+    }
+  };
+
 
   // Handles copying the recommendation strategy to the clipboard
   // Supports switching between Markdown and JSON formats with defensive fallbacks
@@ -247,6 +309,26 @@ export default function StrategyConsultantTerminal() {
           {isTyping && <span className="inline-block w-2 h-4 bg-emerald-500 ml-1 animate-pulse" />}
         </div>
       </div>
+
+
+      {/* Input Area */}
+      <form onSubmit={handleConsultSubmit} className="flex gap-2 p-4 bg-slate-900 border-t border-slate-800">
+        <input
+          type="text"
+          value={promptInput}
+          onChange={(e) => setPromptInput(e.target.value)}
+          placeholder="Consult Strategy AI..."
+          className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
+          disabled={isConsulting}
+        />
+        <button
+          type="submit"
+          disabled={isConsulting || !promptInput.trim()}
+          className="px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-sm font-medium hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {isConsulting ? 'Consulting...' : 'Submit'}
+        </button>
+      </form>
 
       {/* Glow effect */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-px bg-gradient-to-r from-transparent via-emerald-500/50 to-transparent"></div>
