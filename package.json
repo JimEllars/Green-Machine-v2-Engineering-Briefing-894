@@ -5,10 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build:web": "vite build",
     "build": "npm run lint && vite build",
     "lint": "eslint .",
     "lint:error": "eslint . --quiet",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cf:whoami": "wrangler whoami",
+    "cf:worker:dev": "wrangler dev --config edge-ledger-worker/wrangler.jsonc --port 8787",
+    "cf:worker:types": "wrangler types --config edge-ledger-worker/wrangler.jsonc edge-ledger-worker/src/worker-configuration.d.ts",
+    "cf:worker:deploy": "wrangler deploy --config edge-ledger-worker/wrangler.jsonc",
+    "cf:pages:deploy": "wrangler pages deploy dist"
   },
   "dependencies": {
     "@questlabs/react-sdk": "^2.2.92",
@@ -34,6 +40,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^7.0.2",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "wrangler": "^4.27.0"
   }
 }

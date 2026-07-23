@@ -1,0 +1,28 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "green-machine-edge-ledger",
+  "main": "src/thirdweb_bridge.ts",
+  "compatibility_date": "2026-07-23",
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "kv_namespaces": [
+    {
+      "binding": "GREEN_STATE",
+      "id": "0eba9146b31f4f7d9f9d6f5113df003b"
+    },
+    {
+      "binding": "MARKET_CACHE",
+      "id": "e95cf76c78bb4270974c870a30d35131"
+    }
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://pvbcdndqjguzqeafhwhw.supabase.co"
+  },
+  "triggers": {
+    "crons": [
+      "*/1 * * * *"
+    ]
+  }
+}

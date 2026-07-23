@@ -1,0 +1,3 @@
+AXIM_INTERNAL_KEY=replace-with-shared-internal-signature
+ORACLE_API_KEY=replace-with-coingecko-key-or-leave-empty
+SUPABASE_SERVICE_KEY=replace-with-supabase-service-role-key

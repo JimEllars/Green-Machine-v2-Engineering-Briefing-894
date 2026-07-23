@@ -23,6 +23,10 @@ const corsHeaders = {
 };
 
 export default {
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(syncMarketCache(env));
+  },
+
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 
     if (request.method === 'OPTIONS') {
