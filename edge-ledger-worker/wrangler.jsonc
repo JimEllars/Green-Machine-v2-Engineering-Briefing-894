@@ -20,6 +20,9 @@
   "vars": {
     "SUPABASE_URL": "https://pvbcdndqjguzqeafhwhw.supabase.co"
   },
+  "ai": {
+    "binding": "AI"
+  },
   "triggers": {
     "crons": [
       "*/1 * * * *"
