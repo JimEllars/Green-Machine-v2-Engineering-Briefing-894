@@ -22,12 +22,30 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
+
+function assertKvBindings(env: Env): Response | null {
+  if (!env.GREEN_STATE || typeof env.GREEN_STATE.get !== 'function' ||
+      !env.MARKET_CACHE || typeof env.MARKET_CACHE.get !== 'function') {
+    return new Response(JSON.stringify({ success: false, error: "Cloudflare KV namespace bindings uninitialized", code: "ERR_KV_NOT_BOUND" }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...corsHeaders
+      }
+    });
+  }
+  return null;
+}
+
 export default {
+
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     ctx.waitUntil(syncMarketCache(env));
   },
 
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const kvError = assertKvBindings(env);
+    if (kvError) return kvError;
 
     if (request.method === 'OPTIONS') {
       return new Response(null, {

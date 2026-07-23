@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
+import { getWorkerUrl } from '../../utils/workerUrl';
 
 export default function MarketFeedMatrix() {
   const [marketData, setMarketData] = useState([]);
@@ -13,7 +14,7 @@ export default function MarketFeedMatrix() {
     const fetchMarketData = async () => {
       try {
         // Calling Cloudflare Worker Endpoint
-        const workerUrl = import.meta.env.VITE_WORKER_URL || (window.location.hostname === 'localhost' ? 'http://localhost:8787' : window.location.origin);
+        const workerUrl = getWorkerUrl();
         const response = await fetch(`${workerUrl}/api/market-cache`, {
           headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY
