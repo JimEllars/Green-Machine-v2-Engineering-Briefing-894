@@ -6,6 +6,8 @@ import { getWorkerUrl } from '../../utils/workerUrl';
 
 
 const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
+  const [benchmarking, setBenchmarking] = useState(false);
+  const [benchmarkResults, setBenchmarkResults] = useState(null);
   const [txCount, setTxCount] = useState(0);
   const [dbConnected, setDbConnected] = useState(true);
   const [edgeCacheAvailable, setEdgeCacheAvailable] = useState(true);
@@ -24,7 +26,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
     try {
       const workerUrl = getWorkerUrl();
       const start = performance.now();
-      const res = await fetch(`${workerUrl}/api/market-cache`, {
+      const res = await fetch(`${workerUrl}/health`, {
         headers: {
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         }
@@ -146,7 +148,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   }, [tickerStream]);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 h-full flex flex-col">
+    <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 shadow-2xl rounded-xl p-6 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-white font-bold flex items-center gap-2 text-sm">
           <SafeIcon name="Activity" className="text-emerald-500 w-4 h-4" />
@@ -194,6 +196,62 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
           <span className="text-sm text-slate-300">Total Transactions</span>
           <span className="text-lg font-bold text-white">{txCount}</span>
+        </div>
+
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex flex-col gap-3">
+          <div className="flex justify-between items-center w-full">
+             <span className="text-sm text-slate-300">System Benchmark</span>
+             <button
+                onClick={async () => {
+                  setBenchmarking(true);
+                  const workerUrl = getWorkerUrl();
+
+                  // Edge Ping
+                  const edgeStart = performance.now();
+                  let edgePing = 0;
+                  try {
+                    await fetch(`${workerUrl}/api/health`, { method: 'GET' });
+                    edgePing = Math.round(performance.now() - edgeStart);
+                  } catch(e) {
+                    edgePing = -1;
+                  }
+
+                  // DB Ping
+                  const dbStart = performance.now();
+                  let dbPing = 0;
+                  try {
+                    await supabase.from('blockchain_transactions').select('id').limit(1);
+                    dbPing = Math.round(performance.now() - dbStart);
+                  } catch(e) {
+                    dbPing = -1;
+                  }
+
+                  setBenchmarkResults({ edgePing, dbPing });
+                  setBenchmarking(false);
+                }}
+                disabled={benchmarking}
+                className="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/50 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
+             >
+                <SafeIcon name="Zap" className={`w-3 h-3 ${benchmarking ? 'animate-pulse' : ''}`} />
+                {benchmarking ? 'Running...' : 'Run Edge Benchmark'}
+             </button>
+          </div>
+          {benchmarkResults && (
+             <div className="flex justify-between items-center bg-slate-900/50 p-2 rounded border border-slate-700/50">
+               <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">Edge KV RTT</span>
+                  <span className={`text-sm font-mono font-bold ${benchmarkResults.edgePing < 100 ? 'text-emerald-400' : benchmarkResults.edgePing < 300 ? 'text-amber-400' : 'text-rose-400'}`}>
+                    {benchmarkResults.edgePing === -1 ? 'FAIL' : `${benchmarkResults.edgePing}ms`}
+                  </span>
+               </div>
+               <div className="flex flex-col text-right">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold">DB Node RTT</span>
+                  <span className={`text-sm font-mono font-bold ${benchmarkResults.dbPing < 100 ? 'text-emerald-400' : benchmarkResults.dbPing < 300 ? 'text-amber-400' : 'text-rose-400'}`}>
+                    {benchmarkResults.dbPing === -1 ? 'FAIL' : `${benchmarkResults.dbPing}ms`}
+                  </span>
+               </div>
+             </div>
+          )}
         </div>
 
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex flex-col justify-center gap-2">

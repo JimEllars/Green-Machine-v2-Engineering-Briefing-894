@@ -535,6 +535,21 @@ export default {
        return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/health') {
+      return new Response(JSON.stringify({
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+        environment: "production",
+        cloudflareEdge: true
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        }
+      });
+    }
+
     // Explicit Fallback Route Evaluation
     if (
         url.pathname !== '/' &&
@@ -545,7 +560,8 @@ export default {
         url.pathname !== '/api/dlq-flush' &&
         url.pathname !== '/api/market-cache' &&
         url.pathname !== '/api/strategy-consult' &&
-        url.pathname !== '/api/quarantine-purge'
+        url.pathname !== '/api/quarantine-purge' &&
+        url.pathname !== '/api/health'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }
@@ -614,6 +630,28 @@ export default {
       return new Response(JSON.stringify({ success: true, status: 'ledger_updated' }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
     } catch (error) {
+      // Aggregate usage/errors asynchronously
+      ctx.waitUntil((async () => {
+        try {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+              'apikey': env.SUPABASE_SERVICE_KEY
+            },
+            body: JSON.stringify({
+              endpoint: url.pathname,
+              status_code: 500,
+              error_message: (error as Error).message,
+              count: 1
+            })
+          });
+        } catch (e) {
+          console.error('Failed to log to api_usage_aggregates:', e);
+        }
+      })());
+
       // 4. Fail-Open Edge Buffer (DLQ)
       const errorId = `dlq_tx_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       
@@ -627,6 +665,7 @@ export default {
       return new Response(JSON.stringify({ 
         success: false, 
         status: 'buffered_to_dlq',
+        error: (error as Error).message,
         dlq_id: errorId 
       }), { status: 202, headers: { 'Content-Type': 'application/json', ...corsHeaders } }); // Accepted but deferred
     }

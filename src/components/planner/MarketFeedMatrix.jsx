@@ -75,7 +75,7 @@ export default function MarketFeedMatrix() {
 
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+    <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 rounded-xl p-6 shadow-2xl">
             {isDegraded && (
         <div className="mb-4 bg-amber-500/20 border border-amber-500/50 rounded-lg p-3 text-amber-400 text-sm font-medium flex items-center justify-center gap-2">
           <SafeIcon name="AlertTriangle" className="w-4 h-4" />
