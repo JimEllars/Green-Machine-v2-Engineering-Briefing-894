@@ -40,13 +40,31 @@ async function sendEmailItNotification(
         text: params.text || ""
       })
     });
+    let result: { success: boolean; error?: string };
     if (!response.ok) {
       const errText = await response.text();
-      return { success: false, error: `EmailIt HTTP ${response.status}: ${errText}` };
+      result = { success: false, error: `EmailIt HTTP ${response.status}: ${errText}` };
+    } else {
+      result = { success: true };
     }
-    return { success: true };
+
+    const telemetry = {
+       last_attempt: Date.now(),
+       status: result.success ? "OK" : "ERROR",
+       last_error: result.error || null
+    };
+    await env.GREEN_STATE.put("emailit_telemetry", JSON.stringify(telemetry));
+
+    return result;
   } catch (err: any) {
-    return { success: false, error: err.message || "EmailIt dispatch failed" };
+    const errorStr = err.message || "EmailIt dispatch failed";
+    const telemetry = {
+       last_attempt: Date.now(),
+       status: "ERROR",
+       last_error: errorStr
+    };
+    await env.GREEN_STATE.put("emailit_telemetry", JSON.stringify(telemetry));
+    return { success: false, error: errorStr };
   }
 }
 
@@ -66,8 +84,58 @@ function assertKvBindings(env: Env): Response | null {
 
 export default {
 
-  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(syncMarketCache(env));
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    if (event.cron === "30 4 * * *") {
+        ctx.waitUntil((async () => {
+          try {
+            const cacheResult = await env.MARKET_CACHE.getWithMetadata('latest_prices');
+            let parsedData: any = {};
+            if (cacheResult.value) {
+                try {
+                    parsedData = JSON.parse(cacheResult.value as string);
+                } catch (e) { console.error('Parse error', e); }
+            }
+
+            const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
+            let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:')).length;
+            let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
+
+            const btc = parsedData?.crypto?.BTC?.price || 'N/A';
+            const eth = parsedData?.crypto?.ETH?.price || 'N/A';
+            const sol = parsedData?.crypto?.SOL?.price || 'N/A';
+
+            const html = `
+              <html>
+                <head><style>body { font-family: sans-serif; }</style></head>
+                <body>
+                  <h2>Executive Daily Briefing</h2>
+                  <h3>App Development Progress Summary</h3>
+                  <p>Sprint 1.3: Telemetry Integration & Polish is active.</p>
+                  <h3>System Work & Operations Summary</h3>
+                  <ul>
+                    <li>DLQ Buffered Count: ${bufferedCount}</li>
+                    <li>Quarantined Count: ${quarantinedCount}</li>
+                    <li>Market Cache - BTC: ${btc}, ETH: ${eth}, SOL: ${sol}</li>
+                  </ul>
+                  <h3>Executive Inquiry Block</h3>
+                  <p>Please reply directly to this email to provide feedback or inquiries.</p>
+                </body>
+              </html>
+            `;
+
+            const dispatchResult = await sendEmailItNotification({
+                to: "james.ellars@axim.us.com",
+                subject: "Daily Executive Briefing",
+                html: html
+            }, env);
+
+          } catch (err) {
+            console.error("Scheduled briefing error", err);
+          }
+        })());
+    } else {
+        ctx.waitUntil(syncMarketCache(env));
+    }
   },
 
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -89,14 +157,25 @@ export default {
 
       try {
         const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
-        let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:')).length;
+        let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:') && k.name !== 'emailit_telemetry' && !k.name.startsWith('exec_feedback:')).length;
         let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
+
+        let emailitTelemetry = null;
+        try {
+            const telemetryRaw = await env.GREEN_STATE.get('emailit_telemetry');
+            if (telemetryRaw) {
+                emailitTelemetry = JSON.parse(telemetryRaw);
+            }
+        } catch (e) {
+            console.error('Failed to parse emailit telemetry', e);
+        }
 
         const duration = Math.round(performance.now() - startTime);
         return new Response(JSON.stringify({
            success: true,
            buffered_count: bufferedCount,
-           quarantined_count: quarantinedCount
+           quarantined_count: quarantinedCount,
+           emailit_telemetry: emailitTelemetry
         }), {
           status: 200,
           headers: {
@@ -421,7 +500,15 @@ export default {
           marketContextString = `Live Telemetry: BTC: $${btc}, ETH: $${eth}, SOL: $${sol}`;
         }
 
-        const systemMessage = `You are the AXiM Green Machine Strategy Consultant. Current Market Context: [${marketContextString}]. Respond in strict JSON with fields: "analysis" (string), "riskLevel" (string: 'Low'|'Medium'|'High'|'Critical'), and "actionItems" (array of strings).`;
+        let systemMessage = `You are the AXiM Green Machine Strategy Consultant. Current Market Context: [${marketContextString}]. Respond in strict JSON with fields: "analysis" (string), "riskLevel" (string: 'Low'|'Medium'|'High'|'Critical'), and "actionItems" (array of strings).`;
+
+        const feedbackList = await env.GREEN_STATE.list({ prefix: 'exec_feedback:', limit: 1 });
+        if (feedbackList.keys && feedbackList.keys.length > 0) {
+          const feedbackContent = await env.GREEN_STATE.get(feedbackList.keys[0].name);
+          if (feedbackContent) {
+            systemMessage += ` Latest Executive Guidance from Mr. Ellars: [${feedbackContent}]. Incorporate this directive into your strategy evaluation.`;
+          }
+        }
 
         const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
           messages: [
