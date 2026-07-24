@@ -1,6 +1,7 @@
 import { syncMarketCache } from './market_watcher';
 
 export interface Env {
+  EMAILIT_API_KEY?: string;
   ORACLE_API_KEY: string;
   AXIM_INTERNAL_KEY: string;
   SUPABASE_URL: string;
@@ -16,6 +17,38 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
+
+async function sendEmailItNotification(
+  params: { to: string; subject: string; html: string; text?: string },
+  env: Env
+): Promise<{ success: boolean; error?: string }> {
+  if (!env.EMAILIT_API_KEY) {
+    return { success: false, error: "EMAILIT_API_KEY not configured" };
+  }
+  try {
+    const response = await fetch("https://api.emailit.com/v1/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${env.EMAILIT_API_KEY}`
+      },
+      body: JSON.stringify({
+        from: "Green Machine <system@axim.us.com>",
+        to: [params.to],
+        subject: params.subject,
+        html: params.html,
+        text: params.text || ""
+      })
+    });
+    if (!response.ok) {
+      const errText = await response.text();
+      return { success: false, error: `EmailIt HTTP ${response.status}: ${errText}` };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message || "EmailIt dispatch failed" };
+  }
+}
 
 function assertKvBindings(env: Env): Response | null {
   if (!env.GREEN_STATE || typeof env.GREEN_STATE.get !== 'function' ||
@@ -94,6 +127,83 @@ export default {
               status: 500,
               headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
+      }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/webhooks/emailit-inbound') {
+      try {
+        const payload = await request.json() as any;
+        const from = payload.from || 'unknown';
+        const subject = payload.subject || 'No Subject';
+        const text = payload.text || '';
+        const responseToken = payload.response_token || '';
+
+        const feedbackId = `exec_feedback:${Date.now()}`;
+        await env.GREEN_STATE.put(feedbackId, JSON.stringify({ from, subject, text, responseToken, timestamp: Date.now() }), {
+            expirationTtl: 604800 // 7 days
+        });
+
+        return new Response(JSON.stringify({ success: true, ingested: true }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to ingest inbound webhook' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/admin/send-exec-briefing') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        const cacheResult = await env.MARKET_CACHE.getWithMetadata('latest_prices');
+        let parsedData: any = {};
+        if (cacheResult.value) {
+            try {
+                parsedData = JSON.parse(cacheResult.value);
+            } catch (e) { console.error('Parse error', e); }
+        }
+
+        const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
+        let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:')).length;
+        let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
+
+        const btc = parsedData?.crypto?.BTC?.price || 'N/A';
+        const eth = parsedData?.crypto?.ETH?.price || 'N/A';
+        const sol = parsedData?.crypto?.SOL?.price || 'N/A';
+
+        const html = `
+          <html>
+            <head><style>body { font-family: sans-serif; }</style></head>
+            <body>
+              <h2>Executive Daily Briefing</h2>
+              <h3>App Development Progress Summary</h3>
+              <p>Sprint 1.3: Telemetry Integration & Polish is active.</p>
+              <h3>System Work & Operations Summary</h3>
+              <ul>
+                <li>DLQ Buffered Count: ${bufferedCount}</li>
+                <li>Quarantined Count: ${quarantinedCount}</li>
+                <li>Market Cache - BTC: $${btc}, ETH: $${eth}, SOL: $${sol}</li>
+              </ul>
+              <h3>Executive Inquiry Block</h3>
+              <p>Please reply directly to this email to provide feedback or inquiries.</p>
+            </body>
+          </html>
+        `;
+
+        const dispatchResult = await sendEmailItNotification({
+            to: "james.ellars@axim.us.com",
+            subject: "Daily Executive Briefing",
+            html: html
+        }, env);
+
+        if (dispatchResult.success) {
+            return new Response(JSON.stringify({ success: true, recipient: "james.ellars@axim.us.com" }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        } else {
+            return new Response(JSON.stringify({ error: dispatchResult.error }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        }
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to send exec briefing' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
 
@@ -343,6 +453,8 @@ export default {
         url.pathname !== '/' &&
         url.pathname !== '/api/dlq-status' &&
         url.pathname !== '/api/cache-sync' &&
+        url.pathname !== '/api/admin/send-exec-briefing' &&
+        url.pathname !== '/api/webhooks/emailit-inbound' &&
         url.pathname !== '/api/dlq-flush' &&
         url.pathname !== '/api/market-cache' &&
         url.pathname !== '/api/strategy-consult' &&

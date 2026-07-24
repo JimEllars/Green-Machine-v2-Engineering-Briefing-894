@@ -20,6 +20,8 @@ function App() {
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [isPurgingQuarantine, setIsPurgingQuarantine] = useState(false);
   const [purgeSuccess, setPurgeSuccess] = useState(false);
+  const [isSendingBriefing, setIsSendingBriefing] = useState(false);
+  const [briefingSuccess, setBriefingSuccess] = useState(false);
 
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
   const [showCriticalAlert, setShowCriticalAlert] = useState(false);
@@ -118,6 +120,7 @@ const checkDlq = async () => {
 
   const handlePurgeQuarantine = async () => {
     setIsPurgingQuarantine(true);
+    setPurgeSuccess(false);
     try {
       const workerUrl = getWorkerUrl();
       const res = await fetch(`${workerUrl}/api/quarantine-purge`, {
@@ -135,6 +138,28 @@ const checkDlq = async () => {
       console.error('Failed to purge quarantine:', e);
     } finally {
       setIsPurgingQuarantine(false);
+    }
+  };
+
+  const handleSendExecBriefing = async () => {
+    setIsSendingBriefing(true);
+    setBriefingSuccess(false);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/send-exec-briefing`, {
+        method: 'POST',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        setBriefingSuccess(true);
+        setTimeout(() => setBriefingSuccess(false), 2000);
+      }
+    } catch(e) {
+      console.error('Failed to send exec briefing:', e);
+    } finally {
+      setIsSendingBriefing(false);
     }
   };
 
@@ -291,6 +316,13 @@ const checkDlq = async () => {
                     {action}
                   </button>
                 ))}
+                <button
+                  onClick={handleSendExecBriefing}
+                  className={`col-span-2 p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isSendingBriefing ? 'bg-indigo-500/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)] text-indigo-400' : briefingSuccess ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-indigo-500/50 text-slate-300'}`}
+                >
+                  <SafeIcon name="Mail" className={`w-3 h-3 ${isSendingBriefing ? 'animate-pulse' : ''}`} />
+                  {isSendingBriefing ? 'Dispatching...' : briefingSuccess ? 'Briefing Sent!' : 'Dispatch Exec Briefing'}
+                </button>
                 <button
                   onClick={handleFlushDLQ}
                   className={`col-span-2 p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isFlushing ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/50 text-amber-500'}`}
