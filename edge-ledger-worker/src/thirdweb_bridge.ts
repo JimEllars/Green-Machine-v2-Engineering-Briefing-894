@@ -1,10 +1,3 @@
-/**
- * Target: Cloudflare Worker Runtime
- * Role: thirdweb_bridge.ts
- * Description: Intercepts Thirdweb lifecycle hooks, validates HMAC, and upserts to Supabase.
- * Enforces Zero Data Loss via KV Dead Letter Queue (DLQ).
- */
-
 import { syncMarketCache } from './market_watcher';
 
 export interface Env {
@@ -45,102 +38,62 @@ export default {
   },
 
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const startTime = performance.now();
     const kvError = assertKvBindings(env);
     if (kvError) return kvError;
 
-    if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 200,
-        headers: corsHeaders
-      });
-    }
-
     const url = new URL(request.url);
 
-    if (request.method === 'GET' && url.pathname === '/') {
-      return new Response(JSON.stringify({ status: "online", engine: "axim-green-machine-core", tier: "edge_ingress" }), {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          ...corsHeaders
-        }
-      });
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
     }
-
-    if (request.method === 'POST' && url.pathname === '/') {
-      const signature = request.headers.get('X-Axim-Signature');
-      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
-      }
-    }
-
 
     if (request.method === 'GET' && url.pathname === '/api/dlq-status') {
-      const signature = request.headers.get('X-Axim-Signature');
-      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
-      }
-
-      // Endpoint for app diagnostics
-      try {
-        let totalCount = 0;
-        let standardCount = 0;
-        let quarantineCount = 0;
-        let cursor = undefined;
-        let listComplete = false;
-
-        while (!listComplete) {
-          const listOptions: any = cursor ? { cursor } : undefined;
-          const dlqList: any = await env.GREEN_STATE.list(listOptions);
-
-          for (const key of dlqList.keys) {
-            if (key.name.startsWith('quarantine:')) {
-              quarantineCount++;
-            } else {
-              standardCount++;
-            }
-            totalCount++;
-          }
-
-          if (dlqList.list_complete) {
-            listComplete = true;
-          } else {
-            cursor = dlqList.cursor;
-          }
-        }
-
-        const hasDlqItems = totalCount > 0;
-        return new Response(JSON.stringify({ active: hasDlqItems, count: standardCount, quarantine_count: quarantineCount }), {
-          status: 200,
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'public, max-age=15, s-maxage=30',
-            ...corsHeaders
-          }
-        });
-      } catch(e) {
-        return new Response(JSON.stringify({ error: 'Failed to read DLQ' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
-      }
-    }
-
-
-    if (request.method === 'POST' && url.pathname === '/api/cache-sync') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
         return new Response('Unauthorized', { status: 401, headers: corsHeaders });
       }
 
       try {
-        await syncMarketCache(env);
-        return new Response(JSON.stringify({ success: true, status: 'synced' }), {
+        const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
+        let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:')).length;
+        let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
+
+        const duration = Math.round(performance.now() - startTime);
+        return new Response(JSON.stringify({
+           success: true,
+           buffered_count: bufferedCount,
+           quarantined_count: quarantinedCount
+        }), {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+            'Server-Timing': `worker;dur=${duration};desc="Cloudflare Edge Execution"`,
             ...corsHeaders
           }
         });
       } catch (e) {
-        return new Response(JSON.stringify({ error: 'Failed to sync cache' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+        return new Response(JSON.stringify({ error: 'Failed to read DLQ status' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/cache-sync') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      }
+      try {
+          await syncMarketCache(env);
+          return new Response(JSON.stringify({ success: true, message: 'Cache synced successfully' }), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+      } catch (e) {
+          return new Response(JSON.stringify({ error: 'Failed to sync cache', details: (e as Error).message }), {
+              status: 500,
+              headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
       }
     }
 
@@ -151,52 +104,32 @@ export default {
       }
 
       try {
+        let processedCount = 0;
+        const MAX_PROCESS = 50;
+
         let cursor = undefined;
         let listComplete = false;
-        let processedCount = 0;
-        const MAX_PROCESS = 25;
 
         while (!listComplete && processedCount < MAX_PROCESS) {
-          const dlqList: any = await env.GREEN_STATE.list(cursor ? { cursor } : undefined);
+          const dlqList: any = await env.GREEN_STATE.list({ cursor });
 
           for (const key of dlqList.keys) {
-            if (processedCount >= MAX_PROCESS) {
-               break;
-            }
-            if (key.name.startsWith('quarantine:')) continue; // Skip poison pills
+            if (processedCount >= MAX_PROCESS) break;
+            if (key.name.startsWith('quarantine:')) continue; // Skip quarantined items
 
             const rawPayload = await env.GREEN_STATE.get(key.name);
             if (rawPayload) {
               try {
                 const payload = JSON.parse(rawPayload);
-                if (payload.error === 'unparseable') {
-                   // Delete unparseable from DLQ
-                   await env.GREEN_STATE.delete(key.name);
-                   continue;
-                }
 
-                const {
-                  partner_id,
-                  wallet_address,
-                  smart_contract_address,
-                  amount,
-                  currency,
-                  event_type,
-                  transaction_hash
-                } = payload;
-
-                let status = 'pending';
-                if (event_type === 'minted' || event_type === 'settled') status = 'minted';
-                if (event_type === 'failed') status = 'failed';
-
-                const ledgerEntry = {
-                  partner_id,
-                  wallet_address,
-                  smart_contract_address,
-                  amount,
-                  currency,
-                  status,
-                  ...(transaction_hash && { transaction_hash })
+                // Add retry flag to metadata
+                const enrichedPayload = {
+                   ...payload,
+                   metadata: {
+                     ...(payload.metadata || {}),
+                     is_dlq_retry: true,
+                     dlq_id: key.name
+                   }
                 };
 
                 const dbResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions?on_conflict=transaction_hash`, {
@@ -207,7 +140,7 @@ export default {
                     'apikey': env.SUPABASE_SERVICE_KEY,
                     'Prefer': 'resolution=merge-duplicates'
                   },
-                  body: JSON.stringify([ledgerEntry])
+                  body: JSON.stringify([enrichedPayload])
                 });
 
                 if (dbResponse.ok) {
@@ -301,11 +234,13 @@ export default {
         parsedData = { error: 'Invalid JSON in cache' };
       }
 
+      const duration = Math.round(performance.now() - startTime);
       return new Response(JSON.stringify(parsedData), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
           'Cache-Control': 'public, max-age=15, s-maxage=30',
+          'Server-Timing': `worker;dur=${duration};desc="Cloudflare Edge Execution"`,
           ...corsHeaders
         }
       });
@@ -366,9 +301,21 @@ export default {
       }
 
       try {
+        const marketCacheRaw = await env.MARKET_CACHE.get('latest_prices', { type: 'json' }) as any;
+        let marketContextString = "";
+
+        if (marketCacheRaw && marketCacheRaw.crypto) {
+          const btc = marketCacheRaw.crypto.BTC?.price || 'N/A';
+          const eth = marketCacheRaw.crypto.ETH?.price || 'N/A';
+          const sol = marketCacheRaw.crypto.SOL?.price || 'N/A';
+          marketContextString = `Live Telemetry: BTC: $${btc}, ETH: $${eth}, SOL: $${sol}`;
+        }
+
+        const systemMessage = `You are the AXiM Green Machine Strategy Consultant. Current Market Context: [${marketContextString}]. Respond in strict JSON with fields: "analysis" (string), "riskLevel" (string: 'Low'|'Medium'|'High'|'Critical'), and "actionItems" (array of strings).`;
+
         const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
           messages: [
-            { role: 'system', content: 'You are the AXiM Green Machine Strategy Consultant. Respond in strict JSON with fields: "analysis" (string), "riskLevel" (string), and "actionItems" (array of strings).' },
+            { role: 'system', content: systemMessage },
             { role: 'user', content: prompt }
           ],
           response_format: { type: 'json_object' }
@@ -379,7 +326,8 @@ export default {
         });
 
         let parsed = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
-        return new Response(JSON.stringify({ success: true, data: parsed }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+        const duration = Math.round(performance.now() - startTime);
+        return new Response(JSON.stringify({ success: true, data: parsed }), { status: 200, headers: { 'Content-Type': 'application/json', 'Server-Timing': `worker;dur=${duration};desc="Cloudflare Edge Execution"`, ...corsHeaders } });
       } catch (err) {
         return new Response(JSON.stringify({ error: 'AI Evaluation Failed' }), { status: 500, headers: corsHeaders });
       }

@@ -20,7 +20,7 @@ export default function StrategyConsultantTerminal() {
   const [isCopied, setIsCopied] = useState(false);
   const [exportFormat, setExportFormat] = useState(() => localStorage.getItem('terminal_export_format') || 'Markdown');
   const [promptInput, setPromptInput] = useState('');
-  const [sessionId] = useState(() => Math.random().toString(36).substring(2, 15));
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [isConsulting, setIsConsulting] = useState(false);
 
 
@@ -90,6 +90,7 @@ export default function StrategyConsultantTerminal() {
           }
           typedLengthRef.current = 0;
           setDisplayText('');
+              setSessionId(crypto.randomUUID());
           setStrategyHistory(prev => {
             const updatedHistory = [...prev, newPayload].slice(-3);
             const fullText = updatedHistory.join('\n\n');
@@ -257,6 +258,26 @@ export default function StrategyConsultantTerminal() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => {
+              setDisplayText('');
+              setStrategyHistory([]);
+              setStrategy('');
+              setPromptInput('');
+              setParsedStrategyData(null);
+              setIsJsonValid(false);
+              if (typingIntervalRef.current) {
+                clearInterval(typingIntervalRef.current);
+              }
+              typedLengthRef.current = 0;
+              setIsTyping(false);
+              setSessionId(crypto.randomUUID());
+            }}
+            className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 bg-slate-800 text-blue-400 border border-slate-700 hover:bg-slate-700 rounded transition-colors"
+          >
+            <SafeIcon name="RefreshCw" className="w-3 h-3" />
+            New Session
+          </button>
+          <button
             className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${strategy ? (isCopyUnavailable ? 'bg-amber-900/50 text-amber-400 border-amber-700' : 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer') : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
             disabled={!strategy || isCopyUnavailable}
             onClick={handleCopyPlan}
@@ -296,10 +317,22 @@ export default function StrategyConsultantTerminal() {
         </div>
         
         {parsedStrategyData && parsedStrategyData._node_health_index !== undefined && (
-           <div className="absolute top-6 right-6">
+           <div className="absolute top-6 right-6 flex flex-col gap-2 items-end">
               <div className="bg-slate-900/80 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.2)] rounded-lg p-3 flex flex-col items-end backdrop-blur-sm">
                  <span className="text-[10px] uppercase text-emerald-500/80 tracking-wider font-bold mb-1">Node Health Index</span>
                  <span className="text-2xl font-bold text-emerald-400">{Number(parsedStrategyData._node_health_index).toFixed(2)}</span>
+              </div>
+           </div>
+        )}
+        {parsedStrategyData && parsedStrategyData.riskLevel && (
+           <div className="absolute top-6 right-6 mt-20 flex flex-col gap-2 items-end">
+              <div className={`bg-slate-900/80 border rounded-lg p-3 flex flex-col items-end backdrop-blur-sm ${
+                parsedStrategyData.riskLevel === 'Low' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' :
+                parsedStrategyData.riskLevel === 'Medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' :
+                'bg-rose-500/10 text-rose-400 border-rose-500/30'
+              }`}>
+                 <span className="text-[10px] uppercase tracking-wider font-bold mb-1 opacity-80">Risk Level</span>
+                 <span className="text-xl font-bold">{parsedStrategyData.riskLevel}</span>
               </div>
            </div>
         )}
