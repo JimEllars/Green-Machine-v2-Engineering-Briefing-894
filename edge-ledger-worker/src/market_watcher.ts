@@ -48,10 +48,44 @@ export async function syncMarketCache(env: Env): Promise<void> {
     } catch (fallbackError) {
       console.error(`[MARKET_WATCHER] Fallback also failed:`, fallbackError);
     }
+
+    // Log error to supabase usage aggregates if env is passed properly
+    // This function doesn't have ctx here, so we will just return gracefully.
   }
 }
 
 export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    if (request.method === 'GET' && url.pathname === '/health') {
+      return new Response(JSON.stringify({
+        status: "healthy",
+        timestamp: new Date().toISOString(),
+        environment: "production",
+        cloudflareEdge: true
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, X-Axim-Signature'
+        }
+      });
+    }
+    if (request.method === 'OPTIONS') {
+        return new Response(null, {
+            status: 204,
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, X-Axim-Signature'
+            }
+        });
+    }
+    return new Response('Not Found', { status: 404 });
+  },
+
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     await syncMarketCache(env);
   }

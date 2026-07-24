@@ -235,7 +235,7 @@ export default function StrategyConsultantTerminal() {
   }, [strategy]);
 
   return (
-    <div className="bg-[#0A0F15] border border-slate-800 rounded-xl flex flex-col h-full shadow-2xl overflow-hidden relative">
+    <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 rounded-xl flex flex-col h-full shadow-2xl overflow-hidden relative">
       {/* Terminal Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-3">

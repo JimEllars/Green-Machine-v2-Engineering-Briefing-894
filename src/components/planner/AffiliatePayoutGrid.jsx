@@ -114,7 +114,7 @@ export default function AffiliatePayoutGrid() {
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col h-full">
+    <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 shadow-2xl rounded-xl overflow-hidden flex flex-col h-full">
       <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">

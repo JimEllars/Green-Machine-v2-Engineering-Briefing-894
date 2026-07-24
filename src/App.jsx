@@ -199,12 +199,12 @@ const checkDlq = async () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#05080f] text-slate-200 font-sans selection:bg-emerald-500/30">
+    <div className="min-h-screen bg-zinc-950 text-slate-200 font-sans selection:bg-emerald-500/30">
       
       {/* Overlays */}
 
 
-      <nav className="border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
+      <nav className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -293,7 +293,7 @@ const checkDlq = async () => {
             <StrategyConsultantTerminal />
 
             
-            <div className="mt-6 bg-slate-900 border border-slate-800 rounded-xl p-6">
+            <div className="mt-6 bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 rounded-xl p-6 shadow-2xl">
               <h3 className="text-white font-bold mb-4 flex items-center gap-2 text-sm">
                 <SafeIcon name="Tool" className="text-emerald-500 w-4 h-4" />
                 Quick Actions
