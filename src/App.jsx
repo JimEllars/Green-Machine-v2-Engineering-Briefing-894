@@ -53,7 +53,7 @@ const checkDlq = async () => {
       });
       if (res.ok) {
          const data = await res.json();
-         setDlqStatus({ active: data.active, count: data.count, quarantine_count: data.quarantine_count || 0 });
+         setDlqStatus({ active: data.active, count: data.count, quarantine_count: data.quarantine_count || 0, emailit_telemetry: data.emailit_telemetry });
       }
     } catch (e) {
       console.error("Failed to fetch DLQ status", e);

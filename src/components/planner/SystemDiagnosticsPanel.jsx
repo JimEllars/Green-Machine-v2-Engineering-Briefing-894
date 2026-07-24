@@ -153,9 +153,16 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
           System Diagnostics
         </h3>
 
-        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${edgeCacheAvailable ? 'bg-amber-500/10 border-amber-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(225,29,72,0.3)]'}`}>
+
+        <div className="flex gap-2">
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${dlqStatus?.emailit_telemetry?.status === 'OK' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-slate-500/10 border-slate-500/50 text-slate-400'}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${dlqStatus?.emailit_telemetry?.status === 'OK' ? 'bg-emerald-500 animate-pulse' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
+              {dlqStatus?.emailit_telemetry?.status === 'OK' ? 'Email Relay: Active' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'Email Relay: Degraded' : 'Email Relay: Unconfigured'}
+            </div>
+<div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${edgeCacheAvailable ? 'bg-amber-500/10 border-amber-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(225,29,72,0.3)]'}`}>
           <div className={`w-1.5 h-1.5 rounded-full ${edgeCacheAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
           {edgeCacheAvailable ? 'CF Worker: Active | KV Synced' : 'CF Worker: Unreachable'}
+        </div>
         </div>
       </div>
 
