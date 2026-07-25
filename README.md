@@ -18,6 +18,10 @@ Set values in `.env`:
 3. `VITE_WORKER_URL`
 4. `VITE_AXIM_INTERNAL_KEY`
 
+Known non-secret values for this project:
+1. `VITE_SUPABASE_URL=https://pvbcdndqjguzqeafhwhw.supabase.co`
+2. `VITE_WORKER_URL=https://green-machine-edge-ledger.jrellars.workers.dev`
+
 Run locally:
 
 ```bash
