@@ -129,11 +129,28 @@ export default {
                 html: html
             }, env);
 
+            const execFeedbacks = await env.GREEN_STATE.list({ prefix: 'exec_feedback:' });
+            let prunedCount = 0;
+            const now = Date.now();
+            for (const key of execFeedbacks.keys) {
+                const parts = key.name.split(':');
+                const tsStr = parts[1];
+                if (tsStr) {
+                    const ts = parseInt(tsStr, 10);
+                    if (now - ts > 604800000) {
+                        await env.GREEN_STATE.delete(key.name);
+                        prunedCount++;
+                    }
+                }
+            }
+            console.log(`Pruned ${prunedCount} stale executive feedbacks.`);
+
           } catch (err) {
             console.error("Scheduled briefing error", err);
           }
         })());
     } else {
+
         ctx.waitUntil(syncMarketCache(env));
     }
   },
@@ -222,11 +239,33 @@ export default {
             expirationTtl: 604800 // 7 days
         });
 
+        ctx.waitUntil((async () => {
+            try {
+                await sendEmailItNotification({
+                    to: "james.ellars@axim.us.com",
+                    subject: "Directive Received & Ingested — AXiM Green Machine AI",
+                    html: `
+                        <html>
+                          <head><style>body { font-family: sans-serif; }</style></head>
+                          <body>
+                            <h2>Executive Directive Acknowledged</h2>
+                            <p>Thank you, Mr. Ellars.</p>
+                            <p>Your guidance has been successfully ingested and will be injected into active AI strategy prompts.</p>
+                          </body>
+                        </html>
+                    `
+                }, env);
+            } catch (err) {
+                console.error("Failed to send auto-reply receipt", err);
+            }
+        })());
+
         return new Response(JSON.stringify({ success: true, ingested: true }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to ingest inbound webhook' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
+
 
     if (request.method === 'POST' && url.pathname === '/api/admin/send-exec-briefing') {
       const signature = request.headers.get('X-Axim-Signature');

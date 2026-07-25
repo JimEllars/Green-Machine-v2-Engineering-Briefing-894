@@ -26,13 +26,22 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
     try {
       const workerUrl = getWorkerUrl();
       const start = performance.now();
-      const res = await fetch(`${workerUrl}/health`, {
+      const res = await fetch(`${workerUrl}/api/health`, {
         headers: {
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         }
       });
       const end = performance.now();
-      const currentLatency = Math.round(end - start);
+      let currentLatency = Math.round(end - start);
+
+      const serverTiming = res.headers.get('Server-Timing');
+      if (serverTiming) {
+          const match = serverTiming.match(/dur=([0-9.]+)/);
+          if (match && match[1]) {
+              currentLatency = Math.round(parseFloat(match[1]));
+          }
+      }
+
       setEdgeJitter(Math.abs(currentLatency - prevLatencyRef.current));
       prevLatencyRef.current = currentLatency;
       setEdgeLatency(currentLatency);
@@ -40,6 +49,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
       edgeOk = res.ok;
       if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: res.ok });
     } catch (e) {
+
       setEdgeCacheAvailable(false);
       setEdgeLatency(0);
       if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: false });
@@ -157,7 +167,11 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
 
 
         <div className="flex gap-2">
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${edgeLatency < 100 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : edgeLatency <= 300 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
+              Edge Latency: {edgeLatency}ms
+            </div>
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${dlqStatus?.emailit_telemetry?.status === 'OK' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-slate-500/10 border-slate-500/50 text-slate-400'}`}>
+
               <div className={`w-1.5 h-1.5 rounded-full ${dlqStatus?.emailit_telemetry?.status === 'OK' ? 'bg-emerald-500 animate-pulse' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
               {dlqStatus?.emailit_telemetry?.status === 'OK' ? 'Email Relay: Active' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'Email Relay: Degraded' : 'Email Relay: Unconfigured'}
             </div>

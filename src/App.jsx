@@ -22,8 +22,10 @@ function App() {
   const [purgeSuccess, setPurgeSuccess] = useState(false);
   const [isSendingBriefing, setIsSendingBriefing] = useState(false);
   const [briefingSuccess, setBriefingSuccess] = useState(false);
+  const [showBriefingPreview, setShowBriefingPreview] = useState(false);
 
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
+
   const [showCriticalAlert, setShowCriticalAlert] = useState(false);
 
   const handleDiagnosticsUpdate = (status) => {
@@ -202,9 +204,68 @@ const checkDlq = async () => {
     <div className="min-h-screen bg-zinc-950 text-slate-200 font-sans selection:bg-emerald-500/30">
       
       {/* Overlays */}
-
+      {showBriefingPreview && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-950">
+              <h2 className="text-white font-bold flex items-center gap-2">
+                <SafeIcon name="Mail" className="w-4 h-4 text-emerald-500" />
+                Executive Briefing Preview
+              </h2>
+              <button onClick={() => setShowBriefingPreview(false)} className="text-slate-400 hover:text-white transition-colors">
+                <SafeIcon name="X" className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 bg-slate-100 flex-grow overflow-y-auto">
+              <iframe
+                title="Briefing Preview"
+                srcDoc={`
+                  <html>
+                    <head><style>body { font-family: sans-serif; color: #333; margin: 0; padding: 0; }</style></head>
+                    <body>
+                      <h2>Executive Daily Briefing</h2>
+                      <h3>App Development Progress Summary</h3>
+                      <p>Sprint 1.3: Telemetry Integration & Polish is active.</p>
+                      <h3>System Work & Operations Summary</h3>
+                      <ul>
+                        <li>DLQ Buffered Count: ${dlqStatus.count}</li>
+                        <li>Quarantined Count: ${dlqStatus.quarantine_count}</li>
+                        <li>Market Cache - BTC: Live, ETH: Live, SOL: Live (Resolved via Edge)</li>
+                      </ul>
+                      <h3>Executive Inquiry Block</h3>
+                      <p>Please reply directly to this email to provide feedback or inquiries.</p>
+                    </body>
+                  </html>
+                `}
+                className="w-full h-64 border-0 rounded"
+                sandbox=""
+              />
+            </div>
+            <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex justify-end gap-3">
+              <button
+                onClick={() => setShowBriefingPreview(false)}
+                className="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-sm transition-colors border border-zinc-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowBriefingPreview(false);
+                  handleSendExecBriefing();
+                }}
+                disabled={isSendingBriefing}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-colors shadow-[0_0_15px_rgba(99,102,241,0.5)] flex items-center gap-2"
+              >
+                {isSendingBriefing ? <SafeIcon name="Loader" className="w-4 h-4 animate-spin" /> : <SafeIcon name="Send" className="w-4 h-4" />}
+                Send Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <nav className="border-b border-zinc-800 bg-zinc-900/50 backdrop-blur-md sticky top-0 z-50">
+
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
@@ -317,13 +378,22 @@ const checkDlq = async () => {
                   </button>
                 ))}
                 <button
+                  onClick={() => setShowBriefingPreview(true)}
+                  className="p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 bg-slate-800/50 hover:bg-slate-800 border-indigo-500/50 text-indigo-300 preview-briefing-btn"
+                >
+                  <SafeIcon name="Eye" className="w-3 h-3" />
+                  Preview Briefing
+                </button>
+
+                <button
                   onClick={handleSendExecBriefing}
-                  className={`col-span-2 p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isSendingBriefing ? 'bg-indigo-500/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)] text-indigo-400' : briefingSuccess ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-indigo-500/50 text-slate-300'}`}
+                  className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isSendingBriefing ? 'bg-indigo-500/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)] text-indigo-400' : briefingSuccess ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-indigo-500/50 text-slate-300'}`}
                 >
                   <SafeIcon name="Mail" className={`w-3 h-3 ${isSendingBriefing ? 'animate-pulse' : ''}`} />
                   {isSendingBriefing ? 'Dispatching...' : briefingSuccess ? 'Briefing Sent!' : 'Dispatch Exec Briefing'}
                 </button>
                 <button
+
                   onClick={handleFlushDLQ}
                   className={`col-span-2 p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isFlushing ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/50 text-amber-500'}`}
                 >
