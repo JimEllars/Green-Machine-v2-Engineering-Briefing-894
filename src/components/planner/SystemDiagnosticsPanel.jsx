@@ -14,8 +14,31 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   const [edgeLatency, setEdgeLatency] = useState(0);
   const [edgeJitter, setEdgeJitter] = useState(0);
   const prevLatencyRef = useRef(0);
+  const [dbLatency, setDbLatency] = useState(0);
+  const [dbJitter, setDbJitter] = useState(0);
+  const prevDbLatencyRef = useRef(0);
   const [tickerStream, setTickerStream] = useState([]);
   const [healthTickerLogs, setHealthTickerLogs] = useState([]);
+
+  const handleExportAudit = () => {
+    const timestamp = new Date().toISOString();
+    const payload = {
+      timestamp,
+      edge_latency_ms: edgeLatency,
+      db_latency_ms: dbLatency,
+      dlq_backlog_count: dlqStatus?.count || 0,
+      quarantine_count: dlqStatus?.quarantine_count || 0,
+      email_relay_status: dlqStatus?.emailit_telemetry?.status || 'UNCONFIGURED'
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+    const a = document.createElement('a');
+    a.href = dataStr;
+    a.download = `green-machine-diagnostics-${timestamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
 
   const streamEndRef = useRef(null);
   const activeChannelRef = useRef(null);
@@ -160,15 +183,27 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   return (
     <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 shadow-2xl rounded-xl p-6 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-white font-bold flex items-center gap-2 text-sm">
-          <SafeIcon name="Activity" className="text-emerald-500 w-4 h-4" />
-          System Diagnostics
-        </h3>
+        <div className="flex items-center gap-4">
+          <h3 className="text-white font-bold flex items-center gap-2 text-sm">
+            <SafeIcon name="Activity" className="text-emerald-500 w-4 h-4" />
+            System Diagnostics
+          </h3>
+          <button
+            onClick={handleExportAudit}
+            title="Export Audit Snapshot"
+            className="p-1.5 rounded bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition-colors"
+          >
+            <SafeIcon name="Download" className="w-3 h-3" />
+          </button>
+        </div>
 
 
         <div className="flex gap-2">
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${edgeLatency < 100 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : edgeLatency <= 300 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
-              Edge Latency: {edgeLatency}ms
+              Edge RTT: {edgeLatency}ms
+            </div>
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${dbLatency < 150 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : dbLatency <= 400 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
+              DB RTT: {dbLatency}ms
             </div>
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${dlqStatus?.emailit_telemetry?.status === 'OK' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-slate-500/10 border-slate-500/50 text-slate-400'}`}>
 
@@ -220,25 +255,21 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
                   setBenchmarking(true);
                   const workerUrl = getWorkerUrl();
 
-                  // Edge Ping
-                  const edgeStart = performance.now();
-                  let edgePing = 0;
-                  try {
-                    await fetch(`${workerUrl}/api/health`, { method: 'GET' });
-                    edgePing = Math.round(performance.now() - edgeStart);
-                  } catch(e) {
-                    edgePing = -1;
-                  }
+                  const pings = await Promise.allSettled([
+                    (async () => {
+                      const edgeStart = performance.now();
+                      await fetch(`${workerUrl}/api/health`, { method: 'GET' });
+                      return Math.round(performance.now() - edgeStart);
+                    })(),
+                    (async () => {
+                      const dbStart = performance.now();
+                      await supabase.from('blockchain_transactions').select('id').limit(1);
+                      return Math.round(performance.now() - dbStart);
+                    })()
+                  ]);
 
-                  // DB Ping
-                  const dbStart = performance.now();
-                  let dbPing = 0;
-                  try {
-                    await supabase.from('blockchain_transactions').select('id').limit(1);
-                    dbPing = Math.round(performance.now() - dbStart);
-                  } catch(e) {
-                    dbPing = -1;
-                  }
+                  const edgePing = pings[0].status === 'fulfilled' ? pings[0].value : -1;
+                  const dbPing = pings[1].status === 'fulfilled' ? pings[1].value : -1;
 
                   setBenchmarkResults({ edgePing, dbPing });
                   setBenchmarking(false);

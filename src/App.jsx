@@ -55,7 +55,7 @@ const checkDlq = async () => {
       });
       if (res.ok) {
          const data = await res.json();
-         setDlqStatus({ active: data.active, count: data.count, quarantine_count: data.quarantine_count || 0, emailit_telemetry: data.emailit_telemetry });
+         setDlqStatus({ active: data.active || data.buffered_count > 0, count: data.count || data.buffered_count || 0, quarantine_count: data.quarantine_count || data.quarantined_count || 0, emailit_telemetry: data.emailit_telemetry, emailit_configured: data.emailit_configured });
       }
     } catch (e) {
       console.error("Failed to fetch DLQ status", e);
@@ -241,6 +241,12 @@ const checkDlq = async () => {
                 sandbox=""
               />
             </div>
+            {!dlqStatus.emailit_configured && (
+              <div className="bg-amber-500/20 border-b border-amber-500/50 p-2 text-center text-amber-400 text-xs font-bold flex justify-center items-center gap-2">
+                <SafeIcon name="AlertTriangle" className="w-4 h-4" />
+                ⚠️ EMAILIT_API_KEY secret is not set in Cloudflare Worker. Emails cannot be dispatched until configured.
+              </div>
+            )}
             <div className="p-4 border-t border-zinc-800 bg-zinc-950 flex justify-end gap-3">
               <button
                 onClick={() => setShowBriefingPreview(false)}
@@ -253,11 +259,11 @@ const checkDlq = async () => {
                   setShowBriefingPreview(false);
                   handleSendExecBriefing();
                 }}
-                disabled={isSendingBriefing}
-                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-colors shadow-[0_0_15px_rgba(99,102,241,0.5)] flex items-center gap-2"
+                disabled={isSendingBriefing || !dlqStatus.emailit_configured}
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-colors shadow-[0_0_15px_rgba(99,102,241,0.5)] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSendingBriefing ? <SafeIcon name="Loader" className="w-4 h-4 animate-spin" /> : <SafeIcon name="Send" className="w-4 h-4" />}
-                Send Now
+                {!dlqStatus.emailit_configured ? 'Relay Unconfigured' : 'Send Now'}
               </button>
             </div>
           </div>
