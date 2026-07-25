@@ -23,6 +23,7 @@ function App() {
   const [isSendingBriefing, setIsSendingBriefing] = useState(false);
   const [briefingSuccess, setBriefingSuccess] = useState(false);
   const [showBriefingPreview, setShowBriefingPreview] = useState(false);
+  const [toastError, setToastError] = useState(null);
 
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
 
@@ -154,12 +155,22 @@ const checkDlq = async () => {
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         }
       });
-      if (res.ok) {
+
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.success !== false) {
         setBriefingSuccess(true);
         setTimeout(() => setBriefingSuccess(false), 2000);
+      } else {
+        const errorMsg = data?.error || res.statusText || 'Unknown Error';
+        const errorCode = data?.code || res.status || 'ERR';
+        setToastError(`Briefing Error [${errorCode}]: ${errorMsg}`);
+        setTimeout(() => setToastError(null), 4000);
       }
     } catch(e) {
       console.error('Failed to send exec briefing:', e);
+      setToastError(`Briefing Error [NET_ERR]: ${e.message || 'Network failure'}`);
+      setTimeout(() => setToastError(null), 4000);
     } finally {
       setIsSendingBriefing(false);
     }
@@ -429,6 +440,12 @@ const checkDlq = async () => {
           </p>
         </div>
       </footer>
+      {toastError && (
+        <div className="fixed bottom-4 right-4 z-50 bg-slate-900 border border-red-500/80 shadow-[0_4px_20px_rgba(225,29,72,0.4)] text-rose-100 px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-300">
+          <SafeIcon name="AlertCircle" className="w-5 h-5 text-red-500" />
+          <p className="text-sm font-bold tracking-wide">{toastError}</p>
+        </div>
+      )}
     </div>
   );
 }
