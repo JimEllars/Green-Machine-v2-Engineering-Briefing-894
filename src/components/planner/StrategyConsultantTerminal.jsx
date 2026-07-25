@@ -22,6 +22,7 @@ export default function StrategyConsultantTerminal() {
   const [promptInput, setPromptInput] = useState('');
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [isConsulting, setIsConsulting] = useState(false);
+  const [consultError, setConsultError] = useState(null);
 
 
   useEffect(() => {
@@ -175,18 +176,15 @@ export default function StrategyConsultantTerminal() {
         setStrategy(payload);
         setStrategyHistory(prev => [...prev, payload].slice(-3));
         setProvider('EDGE-LLAMA-3.1-8B');
+        setPromptInput('');
       } else {
-        setIsJsonValid(false);
-        setParsedStrategyData(null);
-        setStrategy("Error: " + (data.error || "Unknown error during AI consultation."));
+        throw new Error(data.error || "Unknown error during AI consultation.");
       }
     } catch (err) {
-      setIsJsonValid(false);
-      setParsedStrategyData(null);
-      setStrategy("Error: " + err.message);
+      setIsTyping(false);
+      setConsultError(err.message || "Unknown error during AI consultation.");
     } finally {
       setIsConsulting(false);
-      setPromptInput('');
     }
   };
 
@@ -337,7 +335,25 @@ export default function StrategyConsultantTerminal() {
            </div>
         )}
 
-        <div className="text-slate-300 whitespace-pre-wrap">
+        <div className="text-slate-300 whitespace-pre-wrap relative">
+          {consultError && (
+            <div className="mb-4 bg-rose-500/10 border border-rose-500/50 p-4 rounded-lg flex flex-col items-start gap-3 shadow-[0_0_15px_rgba(225,29,72,0.2)]">
+              <span className="text-rose-400 font-bold flex items-center gap-2">
+                <SafeIcon name="AlertTriangle" className="w-4 h-4" />
+                AI Strategic Evaluation Unavailable: {consultError}
+              </span>
+              <button
+                onClick={(e) => {
+                   e.preventDefault();
+                   handleConsultSubmit();
+                }}
+                className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/50 rounded shadow-[0_0_10px_rgba(225,29,72,0.4)] text-xs font-bold transition-all hover:shadow-[0_0_15px_rgba(225,29,72,0.6)] flex items-center gap-2"
+              >
+                <SafeIcon name="RefreshCw" className="w-3 h-3" />
+                Retry Prompt
+              </button>
+            </div>
+          )}
           {displayText}
           {isTyping && <span className="inline-block w-2 h-4 bg-emerald-500 ml-1 animate-pulse" />}
         </div>

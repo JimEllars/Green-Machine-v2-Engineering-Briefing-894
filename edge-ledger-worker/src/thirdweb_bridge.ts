@@ -192,7 +192,8 @@ export default {
            success: true,
            buffered_count: bufferedCount,
            quarantined_count: quarantinedCount,
-           emailit_telemetry: emailitTelemetry
+           emailit_telemetry: emailitTelemetry,
+           emailit_configured: Boolean(env.EMAILIT_API_KEY)
         }), {
           status: 200,
           headers: {
