@@ -214,6 +214,10 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
           <div className={`w-1.5 h-1.5 rounded-full ${edgeCacheAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
           {edgeCacheAvailable ? 'CF Worker: Active | KV Synced' : 'CF Worker: Unreachable'}
         </div>
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${dlqStatus?.anny_oracle?.session_valid ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]'}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${dlqStatus?.anny_oracle?.session_valid ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+          {dlqStatus?.anny_oracle?.session_valid ? 'Anny Oracle: Active (KV Session Valid)' : 'Anny Oracle: Public Guest Mode'}
+        </div>
         </div>
       </div>
 
