@@ -8,6 +8,7 @@ export default function MarketFeedMatrix() {
   const [isStale, setIsStale] = useState(false);
   const [isDegraded, setIsDegraded] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [cfoFilter, setCfoFilter] = useState('All');
 
 
   useEffect(() => {
@@ -45,9 +46,9 @@ export default function MarketFeedMatrix() {
         // Transform edge data to UI format
         if (data && data.crypto && data.equities) {
            const formattedData = [
-            { symbol: 'BTC', name: 'Bitcoin', price: data.crypto.BTC.price, change: data.crypto.BTC.change_24h, type: 'crypto', icon: 'DollarSign' },
-            { symbol: 'ETH', name: 'Ethereum', price: data.crypto.ETH.price, change: data.crypto.ETH.change_24h, type: 'crypto', icon: 'Activity' },
-            { symbol: 'SOL', name: 'Solana', price: data.crypto.SOL.price, change: data.crypto.SOL.change_24h, type: 'crypto', icon: 'Zap' },
+            { symbol: 'BTC', name: 'Bitcoin', price: data.crypto.BTC.price, change: data.crypto.BTC.change_24h, type: 'crypto', icon: 'DollarSign', cfo_state: data.crypto.BTC.cfo_state, high_24h: data.crypto.BTC.high_24h, low_24h: data.crypto.BTC.low_24h },
+            { symbol: 'ETH', name: 'Ethereum', price: data.crypto.ETH.price, change: data.crypto.ETH.change_24h, type: 'crypto', icon: 'Activity', cfo_state: data.crypto.ETH.cfo_state, high_24h: data.crypto.ETH.high_24h, low_24h: data.crypto.ETH.low_24h },
+            { symbol: 'SOL', name: 'Solana', price: data.crypto.SOL.price, change: data.crypto.SOL.change_24h, type: 'crypto', icon: 'Zap', cfo_state: data.crypto.SOL.cfo_state, high_24h: data.crypto.SOL.high_24h, low_24h: data.crypto.SOL.low_24h },
             { symbol: 'AAPL', name: 'Apple Inc.', price: data.equities.AAPL.price, change: data.equities.AAPL.change_24h, type: 'equity', icon: 'Briefcase' },
             { symbol: 'MSFT', name: 'Microsoft', price: data.equities.MSFT.price, change: data.equities.MSFT.change_24h, type: 'equity', icon: 'Monitor' },
           ];
@@ -110,8 +111,30 @@ export default function MarketFeedMatrix() {
         </div>
       </div>
 
+      {/* CFO Trend Filter Toolbar */}
+      <div className="flex gap-2 mb-6">
+        <span className="text-slate-400 text-sm font-medium self-center mr-2">CFO Trend:</span>
+        {['All', 'Accumulate', 'Wait', 'Distribute'].map(filter => (
+          <button
+            key={filter}
+            onClick={() => setCfoFilter(filter)}
+            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+              cfoFilter === filter
+                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                : 'bg-zinc-800/50 text-slate-400 border-zinc-700 hover:border-slate-500'
+            }`}
+          >
+            {filter}
+          </button>
+        ))}
+      </div>
+
       <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isStale ? 'opacity-80 blur-[1px]' : ''}`}>
-        {marketData.map((asset) => (
+        {marketData.filter(asset => {
+          if (cfoFilter === 'All') return true;
+          if (!asset.cfo_state) return false;
+          return asset.cfo_state.toLowerCase() === cfoFilter.toLowerCase();
+        }).map((asset) => (
           <motion.div
             key={asset.symbol}
             layout
@@ -148,6 +171,19 @@ export default function MarketFeedMatrix() {
                   className="h-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] transition-all duration-500"
                   style={{ width: `${Math.min(Math.max(((asset.price - asset.low_24h) / (asset.high_24h - asset.low_24h)) * 100, 0), 100)}%` }}
                 />
+              </div>
+            )}
+
+            {asset.cfo_state && (
+              <div className="mt-3 flex justify-end">
+                <span className={`text-xs font-bold px-2 py-1 rounded-md ${
+                  asset.cfo_state === 'accumulate' ? 'bg-[#3ca691]/20 text-[#3ca691] border border-[#3ca691]/30 shadow-[0_0_8px_rgba(60,166,145,0.4)]' :
+                  asset.cfo_state === 'wait' ? 'bg-[#6B6588]/20 text-[#6B6588] border border-[#6B6588]/30 shadow-[0_0_8px_rgba(107,101,136,0.4)]' :
+                  asset.cfo_state === 'distribute' ? 'bg-[#B767DE]/20 text-[#B767DE] border border-[#B767DE]/30 shadow-[0_0_8px_rgba(183,103,222,0.4)]' :
+                  'bg-slate-700/50 text-slate-400'
+                }`}>
+                  CFO: {asset.cfo_state === 'accumulate' ? 'Accumulate' : asset.cfo_state === 'wait' ? 'Neutral' : asset.cfo_state === 'distribute' ? 'Distribute' : asset.cfo_state}
+                </span>
               </div>
             )}
           </motion.div>

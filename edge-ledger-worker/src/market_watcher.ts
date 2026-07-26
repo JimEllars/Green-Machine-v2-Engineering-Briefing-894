@@ -18,7 +18,49 @@ export async function syncMarketCache(env: Env): Promise<void> {
   try {
     // 1. Fetch from Upstream Oracles (Simulated aggregation)
     // In production, this hits CoinGecko, Alpaca, etc.
-    const multiSourceData = await fetchExternalOracles(env.ORACLE_API_KEY);
+
+    const assets = ['BTC', 'ETH', 'SOL'];
+    const results: any = {};
+    for (const asset of assets) {
+      const res = await fetch("https://api.anny.trade/backend/anny-line/chart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ asset, interval: "1d", tradeMarket: "USDT" })
+      });
+      if (res.status === 429) {
+         throw { status: 429, retryAfter: res.headers.get('Retry-After') };
+      }
+      if (!res.ok) {
+         throw new Error(`Failed to fetch ${asset} from anny.trade: ${res.status}`);
+      }
+      const data = await res.json();
+
+      const chartData = data?.payload?.data;
+      if (chartData && chartData.length > 0) {
+        const latest = chartData[chartData.length - 1];
+
+        let change_24h = 0;
+        if (chartData.length >= 2) {
+          const prev = chartData[chartData.length - 2];
+          change_24h = ((latest.close - prev.close) / prev.close) * 100;
+        }
+
+        results[asset] = {
+           price: latest.close,
+           cfo_state: latest.state,
+           change_24h: change_24h,
+           high_24h: latest.high,
+           low_24h: latest.low
+        };
+      }
+    }
+
+    const multiSourceData = {
+      crypto: results,
+      _telemetry_timestamp: Date.now(),
+      provider: "anny_trade_rest"
+    };
+
 
     // 2. Cache in KV with strict 30-second TTL
     await env.MARKET_CACHE.put('latest_prices', JSON.stringify(multiSourceData), {
@@ -41,7 +83,7 @@ export async function syncMarketCache(env: Env): Promise<void> {
       if (oldCache) {
         await env.MARKET_CACHE.put('latest_prices', oldCache, {
           expirationTtl: 60,
-          metadata: { updated_at: Date.now(), rate_limited: true }
+          metadata: { updated_at: Date.now(), rate_limited: true, provider: "anny_trade_rest" }
         });
         console.log(`[MARKET_WATCHER] Fallback to historical cache successful`);
       }

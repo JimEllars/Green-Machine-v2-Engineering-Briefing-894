@@ -1,6 +1,10 @@
 import { syncMarketCache } from './market_watcher';
 
 export interface Env {
+  ANNY_AUTH_MODE?: "session-token" | "bearer-pat";
+  ANNY_AUTH_TOKEN?: string;
+  ANNY_EMAIL?: string;
+  ANNY_PASSWORD?: string;
   EMAILIT_API_KEY?: string;
   ORACLE_API_KEY: string;
   AXIM_INTERNAL_KEY: string;
@@ -9,6 +13,69 @@ export interface Env {
   GREEN_STATE: KVNamespace; // DLQ Namespace
   MARKET_CACHE: KVNamespace;
   AI: any;
+}
+
+
+export type AnnyAuthMode = "session-token" | "bearer-pat";
+
+export interface AnnyAuthConfig {
+  mode: AnnyAuthMode;
+  token: string;
+}
+
+export function annyAuthHeaders(auth: AnnyAuthConfig): Record<string, string> {
+  return auth.mode === "session-token"
+    ? { "session-token": auth.token }
+    : { "Authorization": `Bearer ${auth.token}` };
+}
+
+export async function getOrRefreshAnnySessionToken(env: Env): Promise<string> {
+  if (env.ANNY_AUTH_TOKEN) return env.ANNY_AUTH_TOKEN;
+
+  const cachedToken = await env.GREEN_STATE.get("anny_session_token");
+  if (cachedToken) return cachedToken;
+
+  if (env.ANNY_EMAIL && env.ANNY_PASSWORD) {
+    try {
+      const res = await fetch("https://api.anny.trade/backend/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: env.ANNY_EMAIL, password: env.ANNY_PASSWORD })
+      });
+      const data = await res.json() as any;
+      if (data?.payload?.token) {
+        await env.GREEN_STATE.put("anny_session_token", data.payload.token, { expirationTtl: 518400 }); // 6-day TTL
+        return data.payload.token;
+      }
+    } catch (e) {
+      console.error("Anny login auto-refresh failed", e);
+    }
+  }
+  return "";
+}
+
+export async function annyBackendPost(path: string, body: unknown, env: Env) {
+  const token = await getOrRefreshAnnySessionToken(env);
+  const auth: AnnyAuthConfig = {
+    mode: env.ANNY_AUTH_MODE || "session-token",
+    token: token
+  };
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (auth.token) {
+    Object.assign(headers, annyAuthHeaders(auth));
+  }
+
+  const res = await fetch(`https://api.anny.trade${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body)
+  });
+  const data = await res.json() as any;
+  if (data?.result?.type === "UNAUTHORIZED") {
+    await env.GREEN_STATE.delete("anny_session_token");
+    throw new Error(`Anny auth rejected on ${path} — cleared stale session token`);
+  }
+  return data.payload;
 }
 
 const corsHeaders = {
@@ -585,6 +652,9 @@ export default {
         parsedData = { error: 'Invalid JSON in cache' };
       }
 
+
+      parsedData.oracle_provider = "anny_trade_rest";
+      parsedData.auth_mode = env.ANNY_AUTH_MODE || "session-token";
       const duration = Math.round(performance.now() - startTime);
       return new Response(JSON.stringify(parsedData), {
         status: 200,
@@ -702,7 +772,9 @@ export default {
         status: "healthy",
         timestamp: new Date().toISOString(),
         environment: "production",
-        cloudflareEdge: true
+        cloudflareEdge: true,
+        oracle_provider: "anny_trade_rest",
+        auth_mode: env.ANNY_AUTH_MODE || "session-token"
       }), {
         status: 200,
         headers: {
