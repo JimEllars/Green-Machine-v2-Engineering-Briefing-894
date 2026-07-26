@@ -40,7 +40,7 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
 }
 
 async function sendEmailItNotification(
-  params: { to: string; subject: string; html: string; text?: string },
+  params: { to: string; cc?: string[]; subject: string; html: string; text?: string; _retryId?: string },
   env: Env
 ): Promise<{ success: boolean; error?: string }> {
   if (!env.EMAILIT_API_KEY) {
@@ -56,6 +56,7 @@ async function sendEmailItNotification(
       body: JSON.stringify({
         from: "Green Machine <system@axim.us.com>",
         to: [params.to],
+        ...(params.cc && { cc: params.cc }),
         subject: params.subject,
         html: params.html,
         text: params.text || ""
@@ -76,6 +77,9 @@ async function sendEmailItNotification(
     };
     await env.GREEN_STATE.put("emailit_telemetry", JSON.stringify(telemetry));
 
+    if (!result.success && !params._retryId) {
+        await env.GREEN_STATE.put(`email_retry_queue:${Date.now()}`, JSON.stringify(params), { expirationTtl: 86400 });
+    }
     return result;
   } catch (err: any) {
     const errorStr = err.message || "EmailIt dispatch failed";
@@ -85,6 +89,9 @@ async function sendEmailItNotification(
        last_error: errorStr
     };
     await env.GREEN_STATE.put("emailit_telemetry", JSON.stringify(telemetry));
+    if (!params._retryId) {
+        await env.GREEN_STATE.put(`email_retry_queue:${Date.now()}`, JSON.stringify(params), { expirationTtl: 86400 });
+    }
     return { success: false, error: errorStr };
   }
 }
@@ -106,7 +113,7 @@ function assertKvBindings(env: Env): Response | null {
 export default {
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
-    if (event.cron === "30 4 * * *") {
+    if (event.cron === "30 10 * * *") {
         ctx.waitUntil((async () => {
           try {
             const cacheResult = await env.MARKET_CACHE.getWithMetadata('latest_prices');
@@ -121,6 +128,24 @@ export default {
             let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:')).length;
             let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
 
+            const deptSummaryList = await env.GREEN_STATE.list({ prefix: 'dept_summary:' });
+            let deptSummariesHtml = '<ul>';
+            for (const key of deptSummaryList.keys) {
+                const val = await env.GREEN_STATE.get(key.name);
+                if (val) {
+                    try {
+                        const p = JSON.parse(val);
+                        const d = p.departmentName || p.department || p.name || 'Unknown';
+                        const c = p.completedUpdates || p.completed || 'N/A';
+                        const a = p.activeWork || p.active || 'N/A';
+                        deptSummariesHtml += `<li>Ecosystem Department Progress: ${d} &mdash; ${c} &amp; ${a}</li>`;
+                    } catch(e) {
+                        deptSummariesHtml += `<li>Ecosystem Department Progress: ${val}</li>`;
+                    }
+                }
+            }
+            deptSummariesHtml += '</ul>';
+
             const btc = parsedData?.crypto?.BTC?.price || 'N/A';
             const eth = parsedData?.crypto?.ETH?.price || 'N/A';
             const sol = parsedData?.crypto?.SOL?.price || 'N/A';
@@ -131,22 +156,32 @@ export default {
                 <body>
                   <h2>Executive Daily Briefing</h2>
                   <h3>App Development Progress Summary</h3>
-                  <p>Sprint 1.3: Telemetry Integration & Polish is active.</p>
+                  <p>Sprint 1.8: Dual Executive Recipients, Pre-5am CST CRON, Departmental Aggregation & HITL Action Links is active.</p>
+                  <h3>Departmental Progress</h3>
+                  ${deptSummariesHtml}
                   <h3>System Work & Operations Summary</h3>
                   <ul>
                     <li>DLQ Buffered Count: ${bufferedCount}</li>
                     <li>Quarantined Count: ${quarantinedCount}</li>
                     <li>Market Cache - BTC: ${btc}, ETH: ${eth}, SOL: ${sol}</li>
                   </ul>
-                  <h3>Executive Inquiry Block</h3>
+
+                  <h3>Executive Inquiry & Action Block</h3>
                   <p>Please reply directly to this email to provide feedback or inquiries.</p>
+                  <p><b>Administrative Actions:</b></p>
+                  <ul>
+                    <li><a href="https://green-machine-edge-ledger.jules.workers.dev/api/webhooks/emailit-inbound?action=approve_payout&token=${env.AXIM_INTERNAL_KEY}">Approve Pending Payout Batch</a></li>
+                    <li><a href="https://green-machine-edge-ledger.jules.workers.dev/api/webhooks/emailit-inbound?action=acknowledge_plan&token=${env.AXIM_INTERNAL_KEY}">Acknowledge Strategic Plan</a></li>
+                  </ul>
+
                 </body>
               </html>
             `;
 
             const dispatchResult = await sendEmailItNotification({
                 to: "james.ellars@axim.us.com",
-                subject: "Daily Executive Briefing",
+                cc: ["jrellars@gmail.com"],
+                subject: "AXiM Executive Briefing & Departmental Summary — Green Machine v2",
                 html: html
             }, env);
 
@@ -172,7 +207,27 @@ export default {
         })());
     } else {
 
+
+        ctx.waitUntil((async () => {
+            const retryList = await env.GREEN_STATE.list({ prefix: 'email_retry_queue:' });
+            for (const key of retryList.keys) {
+                const val = await env.GREEN_STATE.get(key.name);
+                if (val) {
+                    try {
+                        const params = JSON.parse(val);
+                        params._retryId = key.name;
+                        const res = await sendEmailItNotification(params, env);
+                        if (res.success) {
+                            await env.GREEN_STATE.delete(key.name);
+                        }
+                    } catch (e) {
+                        console.error('Retry error', e);
+                    }
+                }
+            }
+        })());
         ctx.waitUntil(syncMarketCache(env));
+
     }
   },
 
@@ -248,7 +303,32 @@ export default {
       }
     }
 
-    if (request.method === 'POST' && url.pathname === '/api/webhooks/emailit-inbound') {
+    if ((request.method === 'POST' || request.method === 'GET') && url.pathname === '/api/webhooks/emailit-inbound') {
+      const action = url.searchParams.get('action');
+      const token = url.searchParams.get('token');
+
+      if (action) {
+          if (token !== env.AXIM_INTERNAL_KEY) {
+              return new Response('Unauthorized Action Token', { status: 401, headers: corsHeaders });
+          }
+          try {
+              const actionId = `admin_action:${action}:${Date.now()}`;
+              await env.GREEN_STATE.put(actionId, JSON.stringify({ action, timestamp: Date.now(), executed: true }), {
+                  expirationTtl: 604800
+              });
+
+              if (request.method === 'GET') {
+                  return new Response(
+                    `<html><body><h2>Action '${action}' successfully executed.</h2></body></html>`,
+                    { status: 200, headers: { 'Content-Type': 'text/html', ...corsHeaders } }
+                  );
+              }
+              return new Response(JSON.stringify({ success: true, action_executed: action }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+          } catch(e) {
+              return new Response(JSON.stringify({ error: 'Action execution failed' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+          }
+      }
+
       try {
         const payload = await request.json() as any;
         const from = payload.from || 'unknown';
@@ -308,6 +388,24 @@ export default {
         let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:')).length;
         let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
 
+        const deptSummaryList = await env.GREEN_STATE.list({ prefix: 'dept_summary:' });
+        let deptSummariesHtml = '<ul>';
+        for (const key of deptSummaryList.keys) {
+            const val = await env.GREEN_STATE.get(key.name);
+            if (val) {
+                try {
+                    const p = JSON.parse(val);
+                    const d = p.departmentName || p.department || p.name || 'Unknown';
+                    const c = p.completedUpdates || p.completed || 'N/A';
+                    const a = p.activeWork || p.active || 'N/A';
+                    deptSummariesHtml += `<li>Ecosystem Department Progress: ${d} &mdash; ${c} &amp; ${a}</li>`;
+                } catch(e) {
+                    deptSummariesHtml += `<li>Ecosystem Department Progress: ${val}</li>`;
+                }
+            }
+        }
+        deptSummariesHtml += '</ul>';
+
         const btc = parsedData?.crypto?.BTC?.price || 'N/A';
         const eth = parsedData?.crypto?.ETH?.price || 'N/A';
         const sol = parsedData?.crypto?.SOL?.price || 'N/A';
@@ -318,7 +416,9 @@ export default {
             <body>
               <h2>Executive Daily Briefing</h2>
               <h3>App Development Progress Summary</h3>
-              <p>Sprint 1.3: Telemetry Integration & Polish is active.</p>
+              <p>Sprint 1.8: Dual Executive Recipients, Pre-5am CST CRON, Departmental Aggregation & HITL Action Links is active.</p>
+                  <h3>Departmental Progress</h3>
+                  ${deptSummariesHtml}
               <h3>System Work & Operations Summary</h3>
               <ul>
                 <li>DLQ Buffered Count: ${bufferedCount}</li>
@@ -333,7 +433,8 @@ export default {
 
         const dispatchResult = await sendEmailItNotification({
             to: "james.ellars@axim.us.com",
-            subject: "Daily Executive Briefing",
+            cc: ["jrellars@gmail.com"],
+                subject: "AXiM Executive Briefing & Departmental Summary — Green Machine v2",
             html: html
         }, env);
 
