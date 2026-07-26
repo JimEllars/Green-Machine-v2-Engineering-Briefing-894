@@ -18,6 +18,27 @@ const corsHeaders = {
 };
 
 
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error: any) {
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      throw { code: 'ERR_OUTBOUND_TIMEOUT', message: 'Request timed out' };
+    }
+    throw error;
+  }
+}
+
 async function sendEmailItNotification(
   params: { to: string; subject: string; html: string; text?: string },
   env: Env
@@ -26,7 +47,7 @@ async function sendEmailItNotification(
     return { success: false, error: "EMAILIT_API_KEY not configured" };
   }
   try {
-    const response = await fetch("https://api.emailit.com/v1/emails", {
+    const response = await fetchWithTimeout("https://api.emailit.com/v1/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -91,6 +91,27 @@ export default {
   }
 };
 
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error: any) {
+    clearTimeout(id);
+    if (error.name === 'AbortError') {
+      throw { code: 'ERR_OUTBOUND_TIMEOUT', message: 'Request timed out' };
+    }
+    throw error;
+  }
+}
+
 async function fetchExternalOracles(apiKey: string) {
   const headers: Record<string, string> = {
     'Accept': 'application/json'
@@ -107,7 +128,7 @@ async function fetchExternalOracles(apiKey: string) {
     }
   }
 
-  const response = await fetch(`${baseUrl}/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true`, {
+  const response = await fetchWithTimeout(`${baseUrl}/simple/price?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true`, {
     headers
   });
 

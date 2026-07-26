@@ -255,30 +255,53 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
                   setBenchmarking(true);
                   const workerUrl = getWorkerUrl();
 
-                  const pings = await Promise.allSettled([
-                    (async () => {
-                      const edgeStart = performance.now();
+                  const edgePings = [];
+                  for (let i = 0; i < 3; i++) {
+                    const start = performance.now();
+                    try {
                       await fetch(`${workerUrl}/api/health`, { method: 'GET' });
-                      return Math.round(performance.now() - edgeStart);
-                    })(),
-                    (async () => {
-                      const dbStart = performance.now();
+                      edgePings.push(performance.now() - start);
+                    } catch (e) {
+                      console.error("Ping failed", e);
+                    }
+                  }
+
+                  if (edgePings.length > 0) {
+                      const meanRtt = edgePings.reduce((sum, rtt) => sum + rtt, 0) / edgePings.length;
+
+                      let jitterVariance = 0;
+                      if (edgePings.length > 1) {
+                          let sumDiff = 0;
+                          for (let i = 0; i < edgePings.length - 1; i++) {
+                              sumDiff += Math.abs(edgePings[i + 1] - edgePings[i]);
+                          }
+                          jitterVariance = sumDiff / (edgePings.length - 1);
+                      }
+
+                      setEdgeLatency(Math.round(meanRtt));
+                      setEdgeJitter(Math.round(jitterVariance));
+                      setBenchmarkResults({ edgePing: Math.round(meanRtt), dbPing: -1 }); // Keeping UI roughly same but using mean
+                  } else {
+                      setBenchmarkResults({ edgePing: -1, dbPing: -1 });
+                  }
+
+                  // Also ping DB once to keep UI happy, or as before
+                  const dbStart = performance.now();
+                  let dbPing = -1;
+                  try {
                       await supabase.from('blockchain_transactions').select('id').limit(1);
-                      return Math.round(performance.now() - dbStart);
-                    })()
-                  ]);
+                      dbPing = Math.round(performance.now() - dbStart);
+                  } catch (e) { console.error(e); }
 
-                  const edgePing = pings[0].status === 'fulfilled' ? pings[0].value : -1;
-                  const dbPing = pings[1].status === 'fulfilled' ? pings[1].value : -1;
+                  setBenchmarkResults(prev => ({ ...prev, dbPing }));
 
-                  setBenchmarkResults({ edgePing, dbPing });
                   setBenchmarking(false);
                 }}
                 disabled={benchmarking}
                 className="px-3 py-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-400 border border-indigo-500/50 rounded text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1"
              >
                 <SafeIcon name="Zap" className={`w-3 h-3 ${benchmarking ? 'animate-pulse' : ''}`} />
-                {benchmarking ? 'Running...' : 'Run Edge Benchmark'}
+                {benchmarking ? 'Running...' : 'Run Benchmark'}
              </button>
           </div>
           {benchmarkResults && (

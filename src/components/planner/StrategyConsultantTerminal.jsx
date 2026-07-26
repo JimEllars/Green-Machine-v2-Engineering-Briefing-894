@@ -18,6 +18,7 @@ export default function StrategyConsultantTerminal() {
   const [isJsonValid, setIsJsonValid] = useState(false);
   const [parsedStrategyData, setParsedStrategyData] = useState(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [exportFormat, setExportFormat] = useState(() => localStorage.getItem('terminal_export_format') || 'Markdown');
   const [promptInput, setPromptInput] = useState('');
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
@@ -191,6 +192,28 @@ export default function StrategyConsultantTerminal() {
 
   // Handles copying the recommendation strategy to the clipboard
   // Supports switching between Markdown and JSON formats with defensive fallbacks
+
+  const handleSpeak = () => {
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    if (!strategy) return;
+
+    // Attempt to use parsed strategy data analysis for speech, fallback to raw text if not JSON
+    const textToSpeak = parsedStrategyData?.analysis || strategy;
+
+    if (textToSpeak) {
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+      window.speechSynthesis.speak(utterance);
+      setIsSpeaking(true);
+    }
+  };
+
   const handleCopyPlan = async () => {
     if (!strategy) return;
     try {
@@ -275,6 +298,17 @@ export default function StrategyConsultantTerminal() {
             <SafeIcon name="RefreshCw" className="w-3 h-3" />
             New Session
           </button>
+
+          <button
+            className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${strategy ? (isSpeaking ? 'bg-indigo-900/50 text-indigo-400 border-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]' : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 cursor-pointer') : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
+            disabled={!strategy}
+            onClick={handleSpeak}
+            title={isSpeaking ? "Stop Synthesis" : "Listen to Strategy"}
+          >
+            <SafeIcon name={isSpeaking ? "VolumeX" : "Volume2"} className={`w-3 h-3 ${isSpeaking ? 'animate-pulse' : ''}`} />
+            {isSpeaking ? 'Speaking...' : 'Listen'}
+          </button>
+
           <button
             className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${strategy ? (isCopyUnavailable ? 'bg-amber-900/50 text-amber-400 border-amber-700' : 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer') : 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed'}`}
             disabled={!strategy || isCopyUnavailable}
