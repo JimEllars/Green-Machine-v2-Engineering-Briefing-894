@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
 import { getWorkerUrl } from '../../utils/workerUrl';
 
