@@ -336,7 +336,12 @@ export default {
            buffered_count: bufferedCount,
            quarantined_count: quarantinedCount,
            emailit_telemetry: emailitTelemetry,
-           emailit_configured: Boolean(env.EMAILIT_API_KEY)
+           emailit_configured: Boolean(env.EMAILIT_API_KEY),
+           anny_oracle: {
+             status: "active",
+             session_valid: Boolean(await env.GREEN_STATE.get('anny_session_token')),
+             mode: env.ANNY_AUTH_MODE || "session-token"
+           }
         }), {
           status: 200,
           headers: {
@@ -477,11 +482,37 @@ export default {
         const eth = parsedData?.crypto?.ETH?.price || 'N/A';
         const sol = parsedData?.crypto?.SOL?.price || 'N/A';
 
+        let portfolioSummaryHtml = '';
+        try {
+            const portfolioRes = await annyBackendPost('/backend/anny-line/portfolio', {}, env);
+            if (portfolioRes && portfolioRes.data) {
+                let accCount = 0;
+                let waitCount = 0;
+                let distCount = 0;
+
+                const assets = portfolioRes.data.assets || [];
+                for (const asset of assets) {
+                    const cfo = asset.cfo_state || asset.cfo || '';
+                    if (cfo.toLowerCase() === 'accumulate') accCount++;
+                    else if (cfo.toLowerCase() === 'distribute') distCount++;
+                    else waitCount++; // Default to wait/neutral
+                }
+
+                portfolioSummaryHtml = `<div style="border: 1px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #f0fdf4;">
+                    <h4 style="color: #047857; margin-top: 0;">Anny Portfolio Structure</h4>
+                    <p style="margin-bottom: 0;"><strong>${accCount}</strong> Accumulate | <strong>${waitCount}</strong> Neutral (Wait) | <strong>${distCount}</strong> Distribute</p>
+                </div>`;
+            }
+        } catch(e) {
+            console.error('Failed to fetch portfolio for briefing', e);
+        }
+
         const html = `
           <html>
             <head><style>body { font-family: sans-serif; }</style></head>
             <body>
               <h2>Executive Daily Briefing</h2>
+              ${portfolioSummaryHtml}
               <h3>App Development Progress Summary</h3>
               <p>Sprint 1.8: Dual Executive Recipients, Pre-5am CST CRON, Departmental Aggregation & HITL Action Links is active.</p>
                   <h3>Departmental Progress</h3>
@@ -742,6 +773,28 @@ export default {
           }
         }
 
+        try {
+          const riskController = new AbortController();
+          const riskTimeout = setTimeout(() => riskController.abort(), 3000);
+          const riskResponse = await fetch('https://api.anny.trade/v3/ai/assess_risk?coin=BTC&trade_market=USDT&trade_side=long', {
+            signal: riskController.signal,
+            headers: { 'Accept': 'application/json' }
+          });
+          clearTimeout(riskTimeout);
+
+          if (riskResponse.ok) {
+            const riskData = await riskResponse.json() as any;
+            const riskProfile = riskData?.riskProfile || 'N/A';
+            const adxStrength = riskData?.adx?.strength || 'N/A';
+            const rsiValue = riskData?.rsiCross?.value || 'N/A';
+            const macdValue = riskData?.macdCross?.value || 'N/A';
+
+            systemMessage += ` Anny Risk Assessment (BTC): Profile=${riskProfile}, ADX=${adxStrength}, RSI=${rsiValue}, MACD=${macdValue}. Incorporate these momentum signals into your strategy response.`;
+          }
+        } catch (e) {
+          console.warn("Anny risk assessment fallback triggered", e);
+        }
+
         const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
           messages: [
             { role: 'system', content: systemMessage },
@@ -774,7 +827,12 @@ export default {
         environment: "production",
         cloudflareEdge: true,
         oracle_provider: "anny_trade_rest",
-        auth_mode: env.ANNY_AUTH_MODE || "session-token"
+        auth_mode: env.ANNY_AUTH_MODE || "session-token",
+        anny_oracle: {
+          status: "active",
+          session_valid: Boolean(await env.GREEN_STATE.get('anny_session_token')),
+          mode: env.ANNY_AUTH_MODE || "session-token"
+        }
       }), {
         status: 200,
         headers: {
