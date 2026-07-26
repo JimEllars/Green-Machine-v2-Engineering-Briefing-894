@@ -125,12 +125,12 @@ export default {
             }
 
             const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
-            let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:')).length;
-            let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
+            let bufferedCount = dlqList.keys.filter((k: any) => !k.name.startsWith('quarantine:')).length;
+            let quarantinedCount = dlqList.keys.filter((k: any) => k.name.startsWith('quarantine:')).length;
 
             const deptSummaryList = await env.GREEN_STATE.list({ prefix: 'dept_summary:' });
             let deptSummariesHtml = '<ul>';
-            for (const key of deptSummaryList.keys) {
+            for (const key of (deptSummaryList as any).keys) {
                 const val = await env.GREEN_STATE.get(key.name);
                 if (val) {
                     try {
@@ -188,7 +188,7 @@ export default {
             const execFeedbacks = await env.GREEN_STATE.list({ prefix: 'exec_feedback:' });
             let prunedCount = 0;
             const now = Date.now();
-            for (const key of execFeedbacks.keys) {
+            for (const key of (execFeedbacks as any).keys) {
                 const parts = key.name.split(':');
                 const tsStr = parts[1];
                 if (tsStr) {
@@ -210,7 +210,7 @@ export default {
 
         ctx.waitUntil((async () => {
             const retryList = await env.GREEN_STATE.list({ prefix: 'email_retry_queue:' });
-            for (const key of retryList.keys) {
+            for (const key of (retryList as any).keys) {
                 const val = await env.GREEN_STATE.get(key.name);
                 if (val) {
                     try {
@@ -250,8 +250,8 @@ export default {
 
       try {
         const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
-        let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:') && k.name !== 'emailit_telemetry' && !k.name.startsWith('exec_feedback:')).length;
-        let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
+        let bufferedCount = dlqList.keys.filter((k: any) => !k.name.startsWith('quarantine:') && k.name !== 'emailit_telemetry' && !k.name.startsWith('exec_feedback:')).length;
+        let quarantinedCount = dlqList.keys.filter((k: any) => k.name.startsWith('quarantine:')).length;
 
         let emailitTelemetry = null;
         try {
@@ -385,12 +385,12 @@ export default {
         }
 
         const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
-        let bufferedCount = dlqList.keys.filter(k => !k.name.startsWith('quarantine:')).length;
-        let quarantinedCount = dlqList.keys.filter(k => k.name.startsWith('quarantine:')).length;
+        let bufferedCount = dlqList.keys.filter((k: any) => !k.name.startsWith('quarantine:')).length;
+        let quarantinedCount = dlqList.keys.filter((k: any) => k.name.startsWith('quarantine:')).length;
 
         const deptSummaryList = await env.GREEN_STATE.list({ prefix: 'dept_summary:' });
         let deptSummariesHtml = '<ul>';
-        for (const key of deptSummaryList.keys) {
+        for (const key of (deptSummaryList as any).keys) {
             const val = await env.GREEN_STATE.get(key.name);
             if (val) {
                 try {
@@ -464,7 +464,7 @@ export default {
         while (!listComplete && processedCount < MAX_PROCESS) {
           const dlqList: any = await env.GREEN_STATE.list({ cursor });
 
-          for (const key of dlqList.keys) {
+          for (const key of (dlqList as any).keys) {
             if (processedCount >= MAX_PROCESS) break;
             if (key.name.startsWith('quarantine:')) continue; // Skip quarantined items
 
