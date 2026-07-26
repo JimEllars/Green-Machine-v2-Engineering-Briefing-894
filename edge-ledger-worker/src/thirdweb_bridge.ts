@@ -1,6 +1,9 @@
 import { syncMarketCache } from './market_watcher';
 
 export interface Env {
+  GREEN_STATE: any;
+  MARKET_CACHE: any;
+
   ANNY_AUTH_MODE?: "session-token" | "bearer-pat";
   ANNY_AUTH_TOKEN?: string;
   ANNY_EMAIL?: string;
@@ -10,8 +13,8 @@ export interface Env {
   AXIM_INTERNAL_KEY: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
-  GREEN_STATE: KVNamespace; // DLQ Namespace
-  MARKET_CACHE: KVNamespace;
+  GREEN_STATE?: any; // DLQ Namespace
+  MARKET_CACHE?: any;
   AI: any;
 }
 
@@ -45,10 +48,34 @@ export async function getOrRefreshAnnySessionToken(env: Env): Promise<string> {
       const data = await res.json() as any;
       if (data?.payload?.token) {
         await env.GREEN_STATE.put("anny_session_token", data.payload.token, { expirationTtl: 518400 }); // 6-day TTL
+
+        const authTelemetry = {
+          last_renewed: Date.now(),
+          expires_at: Date.now() + 518400000, // 6 days
+          status: "VALID",
+          mode: env.ANNY_AUTH_MODE || "session-token"
+        };
+        await env.GREEN_STATE.put("anny_auth_telemetry", JSON.stringify(authTelemetry));
+
         return data.payload.token;
+      } else {
+        const authTelemetry = {
+          last_renewed: Date.now(),
+          expires_at: Date.now() + 518400000, // 6 days
+          status: "LOGIN_FAILED",
+          mode: env.ANNY_AUTH_MODE || "session-token"
+        };
+        await env.GREEN_STATE.put("anny_auth_telemetry", JSON.stringify(authTelemetry));
       }
     } catch (e) {
       console.error("Anny login auto-refresh failed", e);
+      const authTelemetry = {
+          last_renewed: Date.now(),
+          expires_at: Date.now() + 518400000,
+          status: "LOGIN_FAILED",
+          mode: env.ANNY_AUTH_MODE || "session-token"
+      };
+      await env.GREEN_STATE.put("anny_auth_telemetry", JSON.stringify(authTelemetry));
     }
   }
   return "";
@@ -78,7 +105,81 @@ export async function annyBackendPost(path: string, body: unknown, env: Env) {
   return data.payload;
 }
 
+
+
+export async function fetchAnnyCombinedPortfolio(env: Env) {
+  try {
+    const token = await getOrRefreshAnnySessionToken(env);
+    const auth: AnnyAuthConfig = { mode: env.ANNY_AUTH_MODE || "session-token", token: token };
+    const headers = { "Content-Type": "application/json" };
+    if (auth.token) {
+      Object.assign(headers, annyAuthHeaders(auth));
+    }
+
+    const positionsRes = await fetch("https://api.anny.trade/backend/activepositions", { headers });
+    let activePositions = [];
+    if (positionsRes.ok) {
+      const data = await positionsRes.json() as any;
+      activePositions = data?.payload || [];
+    }
+
+    let portfolioAssets = [];
+    try {
+      const portfolioData = await annyBackendPost('/backend/anny-line/portfolio', {}, env);
+      portfolioAssets = portfolioData?.assets || portfolioData?.data?.assets || [];
+    } catch (e) {
+      console.error("Failed to fetch portfolio assets for merge", e);
+    }
+
+    const merged: Record<string, any> = {};
+
+    for (const p of portfolioAssets) {
+      const symbol = p.coin || p.symbol;
+      if (!symbol) continue;
+      merged[symbol] = {
+        coin: symbol,
+        quantity: p.quantity || p.balance || 0,
+        currentPrice: p.currentPrice || p.price || 0,
+        pnl: p.pnl || 0,
+        cfo_state: p.cfo_state || p.cfo || 'wait'
+      };
+    }
+
+    for (const p of activePositions) {
+      const symbol = p.coin || p.symbol;
+      if (!symbol) continue;
+
+      if (!merged[symbol]) {
+        merged[symbol] = {
+          coin: symbol,
+          quantity: 0,
+          currentPrice: 0,
+          pnl: 0,
+          cfo_state: 'wait'
+        };
+      }
+
+      merged[symbol].quantity = (merged[symbol].quantity || 0) + (p.quantity || p.position_size || p.size || 0);
+      if (p.pnl || p.profit) {
+         merged[symbol].pnl = (merged[symbol].pnl || 0) + (p.pnl || p.profit || 0);
+      }
+      if (p.currentPrice || p.price) {
+          merged[symbol].currentPrice = p.currentPrice || p.price;
+      }
+    }
+
+    const mergedArray = Object.values(merged);
+    await env.GREEN_STATE.put('anny_portfolio_summary', JSON.stringify(mergedArray), { expirationTtl: 300 });
+    return mergedArray;
+
+  } catch (e) {
+    console.error("fetchAnnyCombinedPortfolio failed", e);
+  }
+  return null;
+}
+
 const corsHeaders = {
+
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, X-Axim-Signature',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -179,7 +280,7 @@ function assertKvBindings(env: Env): Response | null {
 
 export default {
 
-  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+  async scheduled(event: any, env: any, ctx: any): Promise<void> {
     if (event.cron === "30 10 * * *") {
         ctx.waitUntil((async () => {
           try {
@@ -298,7 +399,7 @@ export default {
     }
   },
 
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: any, env: any, ctx: any): Promise<Response> {
     const startTime = performance.now();
     const kvError = assertKvBindings(env);
     if (kvError) return kvError;
@@ -341,7 +442,8 @@ export default {
              status: "active",
              session_valid: Boolean(await env.GREEN_STATE.get('anny_session_token')),
              mode: env.ANNY_AUTH_MODE || "session-token"
-           }
+           },
+           anny_auth_telemetry: await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' })
         }), {
           status: 200,
           headers: {
@@ -484,27 +586,33 @@ export default {
 
         let portfolioSummaryHtml = '';
         try {
-            const portfolioRes = await annyBackendPost('/backend/anny-line/portfolio', {}, env);
-            if (portfolioRes && portfolioRes.data) {
+            const combinedPortfolio = await fetchAnnyCombinedPortfolio(env);
+
+            if (combinedPortfolio && combinedPortfolio.length > 0) {
                 let accCount = 0;
                 let waitCount = 0;
                 let distCount = 0;
+                let activePositionsHtml = '';
 
-                const assets = portfolioRes.data.assets || [];
-                for (const asset of assets) {
-                    const cfo = asset.cfo_state || asset.cfo || '';
+                for (const asset of combinedPortfolio) {
+                    const cfo = asset.cfo_state || '';
                     if (cfo.toLowerCase() === 'accumulate') accCount++;
                     else if (cfo.toLowerCase() === 'distribute') distCount++;
                     else waitCount++; // Default to wait/neutral
+
+                    if (asset.quantity > 0 || asset.pnl !== 0) {
+                        activePositionsHtml += `<li><strong>${asset.coin}</strong>: Qty ${asset.quantity} | PNL: $${asset.pnl} | State: ${cfo}</li>`;
+                    }
                 }
 
                 portfolioSummaryHtml = `<div style="border: 1px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #f0fdf4;">
-                    <h4 style="color: #047857; margin-top: 0;">Anny Portfolio Structure</h4>
-                    <p style="margin-bottom: 0;"><strong>${accCount}</strong> Accumulate | <strong>${waitCount}</strong> Neutral (Wait) | <strong>${distCount}</strong> Distribute</p>
+                    <h4 style="color: #047857; margin-top: 0;">Anny Combined Portfolio & Active Positions</h4>
+                    <p style="margin-bottom: 10px;"><strong>${accCount}</strong> Accumulate | <strong>${waitCount}</strong> Neutral (Wait) | <strong>${distCount}</strong> Distribute</p>
+                    ${activePositionsHtml ? `<ul>${activePositionsHtml}</ul>` : ''}
                 </div>`;
             }
         } catch(e) {
-            console.error('Failed to fetch portfolio for briefing', e);
+            console.error('Failed to fetch combined portfolio for briefing', e);
         }
 
         const html = `
@@ -832,7 +940,8 @@ export default {
           status: "active",
           session_valid: Boolean(await env.GREEN_STATE.get('anny_session_token')),
           mode: env.ANNY_AUTH_MODE || "session-token"
-        }
+        },
+        anny_auth_telemetry: await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' })
       }), {
         status: 200,
         headers: {

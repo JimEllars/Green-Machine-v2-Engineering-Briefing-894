@@ -11,19 +11,9 @@ declare namespace Cloudflare {
 	interface GlobalProps {
 		mainModule: typeof import("./thirdweb_bridge");
 	}
-	interface Env extends __BaseEnv_Env {
-    ANNY_AUTH_MODE?: "session-token" | "bearer-pat";
-    ANNY_AUTH_TOKEN?: string;
-    ANNY_EMAIL?: string;
-    ANNY_PASSWORD?: string;
+	interface Env extends __BaseEnv_Env {}
 }
-}
-interface Env extends __BaseEnv_Env {
-    ANNY_AUTH_MODE?: "session-token" | "bearer-pat";
-    ANNY_AUTH_TOKEN?: string;
-    ANNY_EMAIL?: string;
-    ANNY_PASSWORD?: string;
-}
+interface Env extends __BaseEnv_Env {}
 
 // Begin runtime types
 /*! *****************************************************************************

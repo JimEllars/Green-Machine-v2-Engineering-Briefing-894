@@ -372,10 +372,19 @@ const checkDlq = async () => {
 
             
             <div className="mt-6 bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 rounded-xl p-6 shadow-2xl">
-              <h3 className="text-white font-bold mb-4 flex items-center gap-2 text-sm">
-                <SafeIcon name="Tool" className="text-emerald-500 w-4 h-4" />
-                Quick Actions
-              </h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-white font-bold flex items-center gap-2 text-sm">
+                  <SafeIcon name="Tool" className="text-emerald-500 w-4 h-4" />
+                  Quick Actions
+                </h3>
+
+                <div className={`flex items-center gap-2 px-2 py-1 rounded border text-[10px] font-mono tracking-wide ${dlqStatus?.emailit_telemetry?.last_attempt ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${dlqStatus?.emailit_telemetry?.last_attempt ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'}`} />
+                  {dlqStatus?.emailit_telemetry?.last_attempt
+                    ? `Last Briefing: ${new Date(dlqStatus.emailit_telemetry.last_attempt).toLocaleString()}`
+                    : 'Last Briefing: Pending Schedule'}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={handleSyncKV}

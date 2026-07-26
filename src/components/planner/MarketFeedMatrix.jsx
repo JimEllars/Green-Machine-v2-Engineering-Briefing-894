@@ -113,7 +113,7 @@ export default function MarketFeedMatrix() {
 
       {/* CFO Trend Filter Toolbar */}
       <div className="flex gap-2 mb-6">
-        <span className="text-slate-400 text-sm font-medium self-center mr-2">CFO Trend:</span>
+        <span className="text-slate-400 text-sm font-medium self-center mr-2">Anny CFO Trend:</span>
         {['All', 'Accumulate', 'Wait', 'Distribute'].map(filter => (
           <button
             key={filter}
@@ -182,7 +182,7 @@ export default function MarketFeedMatrix() {
                   asset.cfo_state === 'distribute' ? 'bg-[#B767DE]/20 text-[#B767DE] border border-[#B767DE]/30 shadow-[0_0_8px_rgba(183,103,222,0.4)]' :
                   'bg-slate-700/50 text-slate-400'
                 }`}>
-                  CFO: {asset.cfo_state === 'accumulate' ? 'Accumulate' : asset.cfo_state === 'wait' ? 'Neutral' : asset.cfo_state === 'distribute' ? 'Distribute' : asset.cfo_state}
+                  {asset.cfo_state === 'accumulate' ? 'Anny CFO: Accumulate' : asset.cfo_state === 'wait' ? 'Anny CFO: Neutral' : asset.cfo_state === 'distribute' ? 'Anny CFO: Distribute' : `Anny CFO: ${asset.cfo_state}`}
                 </span>
               </div>
             )}
