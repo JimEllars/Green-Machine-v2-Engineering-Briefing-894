@@ -25,6 +25,48 @@ function App() {
   const [showBriefingPreview, setShowBriefingPreview] = useState(false);
   const [toastError, setToastError] = useState(null);
 
+  const [showDeptSummaryModal, setShowDeptSummaryModal] = useState(false);
+  const [deptSummaryForm, setDeptSummaryForm] = useState({ department: 'Financial Operations', updatesCompleted: '', activeWork: '', questions: '' });
+  const [isSubmittingDept, setIsSubmittingDept] = useState(false);
+  const [deptSuccessMsg, setDeptSuccessMsg] = useState('');
+
+  const submitDeptSummary = async () => {
+      setIsSubmittingDept(true);
+      setDeptSuccessMsg('');
+      try {
+          const workerUrl = getWorkerUrl();
+          const payload = {
+              department: deptSummaryForm.department,
+              updatesCompleted: deptSummaryForm.updatesCompleted.split('\n').filter(s => s.trim()),
+              activeWork: deptSummaryForm.activeWork.split('\n').filter(s => s.trim()),
+              questions: deptSummaryForm.questions.split('\n').filter(s => s.trim()),
+          };
+
+          const res = await fetch(`${workerUrl}/api/admin/dept-summary`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+              },
+              body: JSON.stringify(payload)
+          });
+
+          if (res.ok) {
+              setDeptSuccessMsg('Department Summary Logged for Morning Briefing!');
+              setTimeout(() => { setShowDeptSummaryModal(false); setDeptSuccessMsg(''); }, 2000);
+          } else {
+              setToastError('Failed to log department summary');
+              setTimeout(() => setToastError(null), 3000);
+          }
+      } catch (e) {
+          setToastError('Network error logging summary');
+          setTimeout(() => setToastError(null), 3000);
+      } finally {
+          setIsSubmittingDept(false);
+      }
+  };
+
+
   const [consecutiveFailures, setConsecutiveFailures] = useState(0);
 
   const [showCriticalAlert, setShowCriticalAlert] = useState(false);
@@ -83,7 +125,7 @@ function App() {
       });
       if (res.ok) {
          const data = await res.json();
-         setDlqStatus({ active: data.active || data.buffered_count > 0, count: data.count || data.buffered_count || 0, quarantine_count: data.quarantine_count || data.quarantined_count || 0, emailit_telemetry: data.emailit_telemetry, emailit_configured: data.emailit_configured });
+         setDlqStatus({ active: data.active || data.buffered_count > 0, count: data.count || data.buffered_count || 0, quarantine_count: data.quarantine_count || data.quarantined_count || 0, emailit_telemetry: data.emailit_telemetry, exec_governance: data.exec_governance, emailit_configured: data.emailit_configured });
       }
     } catch (e) {
       console.error("Failed to fetch DLQ status", e);
@@ -453,6 +495,13 @@ function App() {
                   {isSendingBriefing ? 'Dispatching...' : briefingSuccess ? 'Briefing Sent!' : 'Dispatch Exec Briefing'}
                 </button>
                 <button
+                  onClick={() => setShowDeptSummaryModal(true)}
+                  className="col-span-2 p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+                >
+                  <SafeIcon name="FileText" className="w-3 h-3" />
+                  Submit Dept Summary
+                </button>
+                <button
 
                   onClick={handleFlushDLQ}
                   className={`col-span-2 p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isFlushing ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/50 text-amber-500'}`}
@@ -466,6 +515,80 @@ function App() {
         </div>
       </main>
 
+
+      {showDeptSummaryModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-900/90 border border-slate-700/50 rounded-xl shadow-2xl max-w-lg w-full overflow-hidden">
+                <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/50">
+                    <h3 className="text-white font-bold flex items-center gap-2">
+                        <SafeIcon name="FileText" className="w-4 h-4 text-emerald-500" />
+                        Log Department Progress
+                    </h3>
+                    <button onClick={() => setShowDeptSummaryModal(false)} className="text-slate-400 hover:text-white">
+                        <SafeIcon name="X" className="w-4 h-4" />
+                    </button>
+                </div>
+                <div className="p-6 space-y-4">
+                    {deptSuccessMsg ? (
+                        <div className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-lg text-center font-bold">
+                            {deptSuccessMsg}
+                        </div>
+                    ) : (
+                        <>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Department</label>
+                                <select
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-sm focus:border-emerald-500 focus:outline-none"
+                                    value={deptSummaryForm.department}
+                                    onChange={e => setDeptSummaryForm({...deptSummaryForm, department: e.target.value})}
+                                >
+                                    <option value="Financial Operations">Financial Operations</option>
+                                    <option value="BizDev Intelligence">BizDev Intelligence</option>
+                                    <option value="Edge Infrastructure">Edge Infrastructure</option>
+                                    <option value="AI Co-Pilot">AI Co-Pilot</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Completed Updates (One per line)</label>
+                                <textarea
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-sm focus:border-emerald-500 focus:outline-none min-h-[80px]"
+                                    placeholder="• Synced edge ledger..."
+                                    value={deptSummaryForm.updatesCompleted}
+                                    onChange={e => setDeptSummaryForm({...deptSummaryForm, updatesCompleted: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Active Work / Blockers (One per line)</label>
+                                <textarea
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-sm focus:border-emerald-500 focus:outline-none min-h-[80px]"
+                                    placeholder="• Resolving DLQ backup..."
+                                    value={deptSummaryForm.activeWork}
+                                    onChange={e => setDeptSummaryForm({...deptSummaryForm, activeWork: e.target.value})}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">Questions for Executive Briefing</label>
+                                <textarea
+                                    className="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-white text-sm focus:border-emerald-500 focus:outline-none min-h-[60px]"
+                                    placeholder="Optional..."
+                                    value={deptSummaryForm.questions}
+                                    onChange={e => setDeptSummaryForm({...deptSummaryForm, questions: e.target.value})}
+                                />
+                            </div>
+                            <button
+                                onClick={submitDeptSummary}
+                                disabled={isSubmittingDept}
+                                className={`w-full py-3 rounded-lg font-bold transition-all text-sm flex items-center justify-center gap-2 ${isSubmittingDept ? 'bg-emerald-600/50 text-emerald-200 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_20px_rgba(16,185,129,0.5)]'}`}
+                            >
+                                {isSubmittingDept ? <SafeIcon name="Loader" className="w-4 h-4 animate-spin" /> : <SafeIcon name="Send" className="w-4 h-4" />}
+                                {isSubmittingDept ? 'Logging...' : 'Submit Dept Summary'}
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+          </div>
+      )}
       <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 border-t border-slate-800 mt-12 bg-slate-900/30">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-6">

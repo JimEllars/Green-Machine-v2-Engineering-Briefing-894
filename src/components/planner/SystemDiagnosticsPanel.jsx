@@ -205,10 +205,14 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${dbLatency < 150 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : dbLatency <= 400 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
               DB RTT: {dbLatency}ms
             </div>
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${dlqStatus?.emailit_telemetry?.status === 'OK' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-slate-500/10 border-slate-500/50 text-slate-400'}`}>
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${(!dlqStatus?.exec_governance?.pending_retries && dlqStatus?.exec_governance?.last_briefing_sent) ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : (dlqStatus?.exec_governance?.pending_retries > 0 || dlqStatus?.emailit_telemetry?.status === 'ERROR') ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-slate-500/10 border-slate-500/50 text-slate-400'}`}>
 
-              <div className={`w-1.5 h-1.5 rounded-full ${dlqStatus?.emailit_telemetry?.status === 'OK' ? 'bg-emerald-500 animate-pulse' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
-              {dlqStatus?.emailit_telemetry?.status === 'OK' ? 'Email Relay: Active' : dlqStatus?.emailit_telemetry?.status === 'ERROR' ? 'Email Relay: Degraded' : 'Email Relay: Unconfigured'}
+              <div className={`w-1.5 h-1.5 rounded-full ${(!dlqStatus?.exec_governance?.pending_retries && dlqStatus?.exec_governance?.last_briefing_sent) ? 'bg-emerald-500 animate-pulse' : (dlqStatus?.exec_governance?.pending_retries > 0 || dlqStatus?.emailit_telemetry?.status === 'ERROR') ? 'bg-amber-500 animate-pulse' : 'bg-slate-500'}`} />
+              {(!dlqStatus?.exec_governance?.pending_retries && dlqStatus?.exec_governance?.last_briefing_sent)
+                  ? `Exec Briefing: Dispatched ${new Date(dlqStatus.exec_governance.last_briefing_sent).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZoneName: 'short'})}`
+                  : (dlqStatus?.exec_governance?.pending_retries > 0 || dlqStatus?.emailit_telemetry?.status === 'ERROR')
+                  ? 'Exec Briefing: Queued/Retrying'
+                  : 'Exec Briefing: Unconfigured'}
             </div>
 <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${edgeCacheAvailable ? 'bg-amber-500/10 border-amber-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(225,29,72,0.3)]'}`}>
           <div className={`w-1.5 h-1.5 rounded-full ${edgeCacheAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />

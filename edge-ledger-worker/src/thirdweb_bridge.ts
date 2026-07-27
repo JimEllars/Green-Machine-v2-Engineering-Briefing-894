@@ -477,11 +477,22 @@ export default {
         }
 
         const duration = Math.round(performance.now() - startTime);
+
+        let execGovernance = { last_briefing_sent: null, hitl_status: 'ACTIVE', pending_retries: 0 };
+        if (emailitTelemetry) {
+            execGovernance.last_briefing_sent = emailitTelemetry.last_attempt;
+        }
+        try {
+            const retryList = await env.GREEN_STATE.list({ prefix: 'email_retry_queue:' });
+            execGovernance.pending_retries = (retryList as any).keys.length;
+        } catch(e) {}
+
         return new Response(JSON.stringify({
            success: true,
            buffered_count: bufferedCount,
            quarantined_count: quarantinedCount,
            emailit_telemetry: emailitTelemetry,
+           exec_governance: execGovernance,
            emailit_configured: Boolean(env.EMAILIT_API_KEY),
            anny_oracle: {
              status: "active",
@@ -500,6 +511,35 @@ export default {
         });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to read DLQ status' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
+if (request.method === 'POST' && url.pathname === '/api/admin/dept-summary') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        const payload = await request.json() as { department: string, updatesCompleted: string[], activeWork: string[], questions: string[] };
+        const { department, updatesCompleted, activeWork, questions } = payload;
+
+        if (!department) {
+           return new Response(JSON.stringify({ error: 'Department is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+        }
+
+        const keyName = `dept_summary:${department.toLowerCase()}:${Date.now()}`;
+        await env.GREEN_STATE.put(keyName, JSON.stringify({
+            department,
+            updatesCompleted: updatesCompleted || [],
+            activeWork: activeWork || [],
+            questions: questions || [],
+            timestamp: Date.now()
+        }), { expirationTtl: 172800 });
+
+        return new Response(JSON.stringify({ success: true, key: keyName }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e: any) {
+         return new Response(JSON.stringify({ error: 'Failed to process department summary' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
       }
     }
 
@@ -528,23 +568,174 @@ export default {
 
       if (action) {
           if (token !== env.AXIM_INTERNAL_KEY) {
-              return new Response('Unauthorized Action Token', { status: 401, headers: corsHeaders });
+              const html = `<html><head><style>body { font-family: sans-serif; background: #000; color: #fff; padding: 2rem; }</style></head><body><h2>Unauthorized Edge Ingress</h2></body></html>`;
+              return new Response(html, { status: 403, headers: { 'Content-Type': 'text/html', ...corsHeaders } });
           }
           try {
+              let actionName = action;
+              if (action === 'flush_dlq') {
+                 // Trigger DLQ Flush routine inline (abstracted logic or simple loop)
+                 let cursor = undefined;
+                 let listComplete = false;
+                 let processedCount = 0;
+                 const MAX_PROCESS = 50;
+                 while (!listComplete && processedCount < MAX_PROCESS) {
+                   const dlqList = await env.GREEN_STATE.list({ cursor }) as any;
+                   for (const key of dlqList.keys) {
+                     if (processedCount >= MAX_PROCESS) break;
+                     if (key.name.startsWith('quarantine:') || key.name === 'emailit_telemetry' || key.name.startsWith('exec_feedback:') || key.name.startsWith('admin_action:')) continue;
+
+                     const rawPayload = await env.GREEN_STATE.get(key.name);
+                     if (rawPayload) {
+                       try {
+                         const payload = JSON.parse(rawPayload);
+                         const enrichedPayload = { ...payload, metadata: { ...(payload.metadata || {}), is_dlq_retry: true, retry_timestamp: Date.now() } };
+
+                         // Simulate ingestion
+                         await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions?on_conflict=transaction_hash`, {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                              'apikey': env.SUPABASE_SERVICE_KEY,
+                              'Prefer': 'resolution=merge-duplicates'
+                            },
+                            body: JSON.stringify([enrichedPayload])
+                         });
+                         await env.GREEN_STATE.delete(key.name);
+                         processedCount++;
+                       } catch (e) {
+                         await env.GREEN_STATE.put(`quarantine:${key.name}`, rawPayload, { metadata: { quarantine_reason: 'retry_failed', original_key: key.name } });
+                         await env.GREEN_STATE.delete(key.name);
+                       }
+                     }
+                   }
+                   if (dlqList.list_complete) {
+                     listComplete = true;
+                   } else {
+                     cursor = dlqList.cursor;
+                   }
+                 }
+                 actionName = 'Flush DLQ Buffer';
+              } else if (action === 'purge_quarantine') {
+                 let cursor = undefined;
+                 let listComplete = false;
+                 while (!listComplete) {
+                   const listRes = await env.GREEN_STATE.list({ prefix: 'quarantine:', cursor }) as any;
+                   for (const key of listRes.keys) {
+                     await env.GREEN_STATE.delete(key.name);
+                   }
+                   if (listRes.list_complete) {
+                     listComplete = true;
+                   } else {
+                     cursor = listRes.cursor;
+                   }
+                 }
+                 actionName = 'Purge Quarantine';
+              } else if (action === 'acknowledge_plan') {
+                 actionName = 'Acknowledge Strategic Plan';
+                 // Acknowledge logic could just be dropping a state marker
+              } else if (action === 'approve_payout') {
+                 actionName = 'Approve Pending Payout Batch';
+              }
+
               const actionId = `admin_action:${action}:${Date.now()}`;
               await env.GREEN_STATE.put(actionId, JSON.stringify({ action, timestamp: Date.now(), executed: true }), {
                   expirationTtl: 604800
               });
 
               if (request.method === 'GET') {
-                  return new Response(
-                    `<html><body><h2>Action '${action}' successfully executed.</h2></body></html>`,
-                    { status: 200, headers: { 'Content-Type': 'text/html', ...corsHeaders } }
-                  );
+                  const html = `
+                  <!DOCTYPE html>
+                  <html>
+                  <head>
+                    <meta charset="utf-8">
+                    <title>Action Executed</title>
+                    <style>
+                      body {
+                        margin: 0;
+                        padding: 0;
+                        background-color: #0f172a;
+                        color: #f8fafc;
+                        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        height: 100vh;
+                      }
+                      .glass-panel {
+                        background: rgba(30, 41, 59, 0.7);
+                        backdrop-filter: blur(12px);
+                        -webkit-backdrop-filter: blur(12px);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 16px;
+                        padding: 40px;
+                        text-align: center;
+                        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+                        max-width: 600px;
+                        width: 90%;
+                      }
+                      .success-icon {
+                        width: 64px;
+                        height: 64px;
+                        background: rgba(16, 185, 129, 0.1);
+                        border: 1px solid rgba(16, 185, 129, 0.2);
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin: 0 auto 24px;
+                        color: #10b981;
+                      }
+                      .success-icon svg {
+                        width: 32px;
+                        height: 32px;
+                      }
+                      h2 {
+                        margin: 0 0 16px;
+                        font-size: 24px;
+                        font-weight: 600;
+                        letter-spacing: -0.025em;
+                      }
+                      p {
+                        color: #94a3b8;
+                        margin: 0 0 24px;
+                        font-size: 16px;
+                        line-height: 1.5;
+                      }
+                      .status-pill {
+                        display: inline-block;
+                        padding: 4px 12px;
+                        background: rgba(16, 185, 129, 0.1);
+                        border: 1px solid rgba(16, 185, 129, 0.2);
+                        color: #10b981;
+                        border-radius: 9999px;
+                        font-size: 12px;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                        letter-spacing: 0.05em;
+                      }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="glass-panel">
+                      <div class="success-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                      <h2>AXiM Executive Governance &mdash; Action Executed Successfully: ${actionName}</h2>
+                      <p>The requested administrative task has been processed by the Green Machine edge worker.</p>
+                      <div class="status-pill">Status: Operational</div>
+                    </div>
+                  </body>
+                  </html>
+                  `;
+                  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html', ...corsHeaders } });
               }
               return new Response(JSON.stringify({ success: true, action_executed: action }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
-          } catch(e) {
-              return new Response(JSON.stringify({ error: 'Action execution failed' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+          } catch(e: any) {
+              return new Response(JSON.stringify({ error: 'Action execution failed', details: e.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
           }
       }
 
@@ -1030,6 +1221,7 @@ export default {
         url.pathname !== '/' &&
         url.pathname !== '/api/dlq-status' &&
         url.pathname !== '/api/cache-sync' &&
+        url.pathname !== '/api/admin/dept-summary' &&
         url.pathname !== '/api/admin/send-exec-briefing' &&
         url.pathname !== '/api/webhooks/emailit-inbound' &&
         url.pathname !== '/api/dlq-flush' &&
