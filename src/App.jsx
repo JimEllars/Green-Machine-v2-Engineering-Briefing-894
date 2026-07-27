@@ -46,7 +46,34 @@ function App() {
     });
   };
 
-const checkDlq = async () => {
+
+  const [isRenewingSession, setIsRenewingSession] = useState(false);
+  const [renewSessionSuccess, setRenewSessionSuccess] = useState(false);
+
+  const handleRenewAnnySession = async () => {
+    setIsRenewingSession(true);
+    setRenewSessionSuccess(false);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/renew-anny-session`, {
+        method: 'POST',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        setRenewSessionSuccess(true);
+        setTimeout(() => setRenewSessionSuccess(false), 3000);
+        await checkDlq(); // Updates system diagnostics in background
+      }
+    } catch(e) {
+      console.error('Failed to renew session:', e);
+    } finally {
+      setIsRenewingSession(false);
+    }
+  };
+
+  const checkDlq = async () => {
     try {
       const workerUrl = getWorkerUrl();
       const res = await fetch(`${workerUrl}/api/dlq-status`, {
@@ -398,7 +425,14 @@ const checkDlq = async () => {
                 >
                   {isPurgingQuarantine ? 'Purging...' : purgeSuccess ? 'Purged!' : 'Purge Quarantined Pills'}
                 </button>
-                {['Mint Batch', 'Audit Logs'].map((action) => (
+
+                <button
+                  onClick={handleRenewAnnySession}
+                  className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider ${isRenewingSession ? 'bg-indigo-500/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)] text-indigo-400' : renewSessionSuccess ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-indigo-500/50 text-slate-300'}`}
+                >
+                  {isRenewingSession ? 'Renewing...' : renewSessionSuccess ? 'Session Renewed!' : 'Renew Anny Session'}
+                </button>
+{['Mint Batch', 'Audit Logs'].map((action) => (
                   <button key={action} className="p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider">
                     {action}
                   </button>

@@ -23,6 +23,7 @@ export default function StrategyConsultantTerminal() {
   const [promptInput, setPromptInput] = useState('');
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [isConsulting, setIsConsulting] = useState(false);
+  const [showFallbackBanner, setShowFallbackBanner] = useState(false);
   const [consultError, setConsultError] = useState(null);
 
 
@@ -144,6 +145,8 @@ export default function StrategyConsultantTerminal() {
     setIsConsulting(true);
     setDisplayText('');
     setIsTyping(true);
+    setShowFallbackBanner(false);
+    setConsultError(null);
 
     // Clear typing intervals when starting a new generation
     if (typingIntervalRef.current) {
@@ -184,6 +187,7 @@ export default function StrategyConsultantTerminal() {
     } catch (err) {
       setIsTyping(false);
       setConsultError(err.message || "Unknown error during AI consultation.");
+      setShowFallbackBanner(true);
     } finally {
       setIsConsulting(false);
     }
@@ -366,6 +370,17 @@ export default function StrategyConsultantTerminal() {
                  <span className="text-[10px] uppercase tracking-wider font-bold mb-1 opacity-80">Risk Level</span>
                  <span className="text-xl font-bold">{parsedStrategyData.riskLevel}</span>
               </div>
+           </div>
+        )}
+
+
+        {showFallbackBanner && (
+           <div className="mb-4 bg-amber-900/40 border border-amber-500/50 p-4 rounded-lg flex items-center gap-3 shadow-[0_0_15px_rgba(245,158,11,0.2)] backdrop-blur-md relative overflow-hidden">
+             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-amber-500/10 to-transparent animate-[shimmer_2s_infinite]"></div>
+             <SafeIcon name="AlertCircle" className="w-5 h-5 text-amber-400 z-10" />
+             <span className="text-amber-200 text-sm font-medium z-10">
+               Notice: Live risk evaluation operating in fallback mode. Standard strategy recommendations active.
+             </span>
            </div>
         )}
 

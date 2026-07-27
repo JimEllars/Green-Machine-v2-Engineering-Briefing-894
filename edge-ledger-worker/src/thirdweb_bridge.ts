@@ -32,7 +32,7 @@ export function annyAuthHeaders(auth: AnnyAuthConfig): Record<string, string> {
     : { "Authorization": `Bearer ${auth.token}` };
 }
 
-export async function getOrRefreshAnnySessionToken(env: Env): Promise<string> {
+export async function getOrRefreshAnnySessionToken(env: Env, ctx?: ExecutionContext): Promise<string> {
   if (env.ANNY_AUTH_TOKEN) return env.ANNY_AUTH_TOKEN;
 
   const cachedToken = await env.GREEN_STATE.get("anny_session_token");
@@ -81,8 +81,8 @@ export async function getOrRefreshAnnySessionToken(env: Env): Promise<string> {
   return "";
 }
 
-export async function annyBackendPost(path: string, body: unknown, env: Env) {
-  const token = await getOrRefreshAnnySessionToken(env);
+export async function annyBackendPost(path: string, body: unknown, env: Env, ctx?: ExecutionContext) {
+  const token = await getOrRefreshAnnySessionToken(env, ctx);
   const auth: AnnyAuthConfig = {
     mode: env.ANNY_AUTH_MODE || "session-token",
     token: token
@@ -92,24 +92,56 @@ export async function annyBackendPost(path: string, body: unknown, env: Env) {
     Object.assign(headers, annyAuthHeaders(auth));
   }
 
-  const res = await fetch(`https://api.anny.trade${path}`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body)
-  });
-  const data = await res.json() as any;
-  if (data?.result?.type === "UNAUTHORIZED") {
-    await env.GREEN_STATE.delete("anny_session_token");
-    throw new Error(`Anny auth rejected on ${path} — cleared stale session token`);
+
+  try {
+    const res = await fetch(`https://api.anny.trade${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+       throw { status: res.status, message: `API Error: ${res.statusText}` };
+    }
+
+    const data = await res.json() as any;
+    if (data?.result?.type === "UNAUTHORIZED") {
+      await env.GREEN_STATE.delete("anny_session_token");
+      throw new Error(`Anny auth rejected on ${path} — cleared stale session token`);
+    }
+    return data.payload;
+  } catch (error: any) {
+    if (ctx) {
+      ctx.waitUntil((async () => {
+        try {
+          await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+              'apikey': env.SUPABASE_SERVICE_KEY
+            },
+            body: JSON.stringify({
+              endpoint: path,
+              status_code: error.status || 500,
+              error_message: error.message || String(error),
+              count: 1
+            })
+          });
+        } catch (e) {
+          console.error('Failed to log to api_usage_aggregates:', e);
+        }
+      })());
+    }
+    throw error;
   }
-  return data.payload;
 }
 
 
 
-export async function fetchAnnyCombinedPortfolio(env: Env) {
+export async function fetchAnnyCombinedPortfolio(env: Env, ctx?: ExecutionContext) {
   try {
-    const token = await getOrRefreshAnnySessionToken(env);
+    const token = await getOrRefreshAnnySessionToken(env, ctx);
     const auth: AnnyAuthConfig = { mode: env.ANNY_AUTH_MODE || "session-token", token: token };
     const headers = { "Content-Type": "application/json" };
     if (auth.token) {
@@ -125,7 +157,7 @@ export async function fetchAnnyCombinedPortfolio(env: Env) {
 
     let portfolioAssets = [];
     try {
-      const portfolioData = await annyBackendPost('/backend/anny-line/portfolio', {}, env);
+      const portfolioData = await annyBackendPost('/backend/anny-line/portfolio', {}, env, ctx);
       portfolioAssets = portfolioData?.assets || portfolioData?.data?.assets || [];
     } catch (e) {
       console.error("Failed to fetch portfolio assets for merge", e);
@@ -169,7 +201,7 @@ export async function fetchAnnyCombinedPortfolio(env: Env) {
     }
 
     const mergedArray = Object.values(merged);
-    await env.GREEN_STATE.put('anny_portfolio_summary', JSON.stringify(mergedArray), { expirationTtl: 300 });
+    await env.GREEN_STATE.put('anny_portfolio_summary', JSON.stringify(mergedArray), { expirationTtl: 300, metadata: { updated_at: Date.now() } });
     return mergedArray;
 
   } catch (e) {
@@ -394,7 +426,20 @@ export default {
                 }
             }
         })());
+
+        ctx.waitUntil((async () => {
+            try {
+                const pSummary = await env.GREEN_STATE.getWithMetadata('anny_portfolio_summary');
+                const lastUpdated = pSummary.metadata?.updated_at;
+                if (!lastUpdated || (Date.now() - lastUpdated) > 240000) {
+                    await fetchAnnyCombinedPortfolio(env, ctx);
+                }
+            } catch(e) {
+                console.error('Failed to pre-warm anny_portfolio_summary', e);
+            }
+        })());
         ctx.waitUntil(syncMarketCache(env));
+
 
     }
   },
@@ -586,7 +631,15 @@ export default {
 
         let portfolioSummaryHtml = '';
         try {
-            const combinedPortfolio = await fetchAnnyCombinedPortfolio(env);
+
+            let combinedPortfolio = null;
+            const pSummaryRaw = await env.GREEN_STATE.get('anny_portfolio_summary', { type: 'json' });
+            if (pSummaryRaw) {
+                combinedPortfolio = pSummaryRaw;
+            } else {
+                combinedPortfolio = await fetchAnnyCombinedPortfolio(env, ctx);
+            }
+
 
             if (combinedPortfolio && combinedPortfolio.length > 0) {
                 let accCount = 0;
@@ -848,6 +901,27 @@ export default {
     }
 
 
+
+    if (request.method === 'POST' && url.pathname === '/api/admin/renew-anny-session') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        await env.GREEN_STATE.delete('anny_session_token');
+        const newToken = await getOrRefreshAnnySessionToken(env, ctx);
+        const authTelemetryRaw = await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' });
+        return new Response(JSON.stringify({ success: true, new_token_issued: Boolean(newToken), telemetry: authTelemetryRaw }), {
+            status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (err: any) {
+        return new Response(JSON.stringify({ error: 'Failed to renew session', details: err.message }), {
+            status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/strategy-consult') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
@@ -962,7 +1036,8 @@ export default {
         url.pathname !== '/api/market-cache' &&
         url.pathname !== '/api/strategy-consult' &&
         url.pathname !== '/api/quarantine-purge' &&
-        url.pathname !== '/api/health'
+        url.pathname !== '/api/health' &&
+        url.pathname !== '/api/admin/renew-anny-session'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }
