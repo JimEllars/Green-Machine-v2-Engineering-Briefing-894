@@ -22,3 +22,6 @@
     @apply bg-slate-600;
   }
 }
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: rgba(30,41,59,0.5); }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(51,65,85,0.8); border-radius: 4px; }
