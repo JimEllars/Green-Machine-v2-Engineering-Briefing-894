@@ -32,6 +32,34 @@ function App() {
   const [activeSummaries, setActiveSummaries] = useState([]);
   const [isLoadingSummaries, setIsLoadingSummaries] = useState(false);
 
+  const [isPurgingDept, setIsPurgingDept] = useState(null);
+
+  const handleClearDept = async (department) => {
+    setIsPurgingDept(department);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/dept-summary?department=${encodeURIComponent(department)}`, {
+        method: "DELETE",
+        headers: {
+          "X-Axim-Signature": import.meta.env.VITE_AXIM_INTERNAL_KEY || ""
+        }
+      });
+      if (res.ok) {
+        setActiveSummaries(prev => prev.filter(s => s.department !== department));
+      } else {
+        const err = await res.json();
+        setToastError(err.error || "Failed to purge department");
+        setTimeout(() => setToastError(null), 5000);
+      }
+    } catch (e) {
+      console.error("Purge error", e);
+      setToastError("Network error while purging department");
+      setTimeout(() => setToastError(null), 5000);
+    } finally {
+      setIsPurgingDept(null);
+    }
+  };
+
   const submitDeptSummary = async () => {
       setIsSubmittingDept(true);
       setDeptSuccessMsg('');
@@ -621,6 +649,14 @@ function App() {
                                                 <div className="text-slate-300">
                                                     Logged for Morning Briefing: <span className="font-bold text-white">{summary.department}</span> &mdash; {summary.updatesCompleted ? summary.updatesCompleted.length : 0} Completed Updates
                                                 </div>
+                                                <button
+                                                  onClick={() => handleClearDept(summary.department)}
+                                                  disabled={isPurgingDept === summary.department}
+                                                  className={`ml-2 px-2 py-1 rounded border text-[10px] font-bold uppercase transition-colors flex items-center gap-1 ${isPurgingDept === summary.department ? 'bg-amber-500/20 text-amber-400 border-amber-500/50' : 'bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20 hover:border-rose-500/50'}`}
+                                                >
+                                                  {isPurgingDept === summary.department ? <SafeIcon name="Loader" className="w-3 h-3 animate-spin" /> : <SafeIcon name="Trash2" className="w-3 h-3" />}
+                                                  {isPurgingDept === summary.department ? 'Clearing...' : 'Clear Dept'}
+                                                </button>
                                             </div>
                                         ))}
                                     </div>

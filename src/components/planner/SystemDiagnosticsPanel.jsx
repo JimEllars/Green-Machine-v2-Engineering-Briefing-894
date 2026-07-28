@@ -19,6 +19,15 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   const prevDbLatencyRef = useRef(0);
   const [tickerStream, setTickerStream] = useState([]);
   const [healthTickerLogs, setHealthTickerLogs] = useState([]);
+  const [activeAiModel, setActiveAiModel] = useState(window.localStorage.getItem("ai_model"));
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setActiveAiModel(window.localStorage.getItem("ai_model"));
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   const handleExportAudit = () => {
     const timestamp = new Date().toISOString();
@@ -188,6 +197,15 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
             <SafeIcon name="Activity" className="text-emerald-500 w-4 h-4" />
             System Diagnostics
           </h3>
+          {activeAiModel && (
+            <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider ${
+              activeAiModel === "llama-3.1"
+                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
+                : "bg-amber-500/20 text-amber-400 border border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.3)]"
+            }`}>
+              {activeAiModel === "llama-3.1" ? "AI Engine: Llama 3.1 Primary" : "AI Engine: Mistral 7B Failover"}
+            </div>
+          )}
           <button
             onClick={handleExportAudit}
             title="Export Audit Snapshot"

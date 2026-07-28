@@ -313,6 +313,46 @@ function assertKvBindings(env: Env): Response | null {
 export default {
 
   async scheduled(event: any, env: any, ctx: any): Promise<void> {
+    if (event.cron === "* * * * *") {
+        ctx.waitUntil((async () => {
+          try {
+            let cursor = undefined;
+            let listComplete = false;
+            while (!listComplete) {
+              const retryList = await env.GREEN_STATE.list({ prefix: "audit_retry_queue:", cursor }) as any;
+              for (const key of retryList.keys) {
+                const rawPayload = await env.GREEN_STATE.get(key.name);
+                if (rawPayload) {
+                  try {
+                    const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                        "apikey": env.SUPABASE_SERVICE_KEY
+                      },
+                      body: rawPayload
+                    });
+                    if (dbRes.ok) {
+                      await env.GREEN_STATE.delete(key.name);
+                    }
+                  } catch (e) {
+                    console.error("Failed to retry audit log post", e);
+                  }
+                }
+              }
+              if (retryList.list_complete) {
+                listComplete = true;
+              } else {
+                cursor = retryList.cursor;
+              }
+            }
+          } catch (e) {
+            console.error("Audit log retry cron failed", e);
+          }
+        })());
+    }
+
     if (event.cron === "30 10 * * *") {
         ctx.waitUntil((async () => {
           try {
@@ -367,8 +407,19 @@ export default {
 
             const html = `
               <html>
-                <head><style>body { font-family: sans-serif; }</style></head>
+                <head>
+                  <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; color: #e2e8f0; max-width: 600px; margin: 0 auto; padding: 20px; }
+                    table { width: 100%; border-collapse: collapse; }
+                    th, td { padding: 12px; border: 1px solid #334155; text-align: left; }
+                    a { color: #34d399; text-decoration: none; }
+                    a:hover { text-decoration: underline; }
+                  </style>
+                </head>
                 <body>
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                    <tr>
+                      <td style="padding: 20px;">
                   <h2>Executive Daily Briefing</h2>
                   <h3>App Development Progress Summary</h3>
                   <p>Sprint 1.8: Dual Executive Recipients, Pre-5am CST CRON, Departmental Aggregation & HITL Action Links is active.</p>
@@ -389,6 +440,9 @@ export default {
                     <li><a href="https://green-machine-edge-ledger.jules.workers.dev/api/webhooks/emailit-inbound?action=acknowledge_plan&token=${env.AXIM_INTERNAL_KEY}">Acknowledge Strategic Plan</a></li>
                   </ul>
 
+                      </td>
+                    </tr>
+                  </table>
                 </body>
               </html>
             `;
@@ -560,6 +614,38 @@ export default {
       }
     }
 
+    if (request.method === 'DELETE' && url.pathname === '/api/admin/dept-summary') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      const department = url.searchParams.get('department');
+      if (!department) {
+        return new Response(JSON.stringify({ error: 'Department parameter is required' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+
+      try {
+        const deptPrefix = `dept_summary:${department.toLowerCase()}:`;
+        let cursor = undefined;
+        let listComplete = false;
+        while (!listComplete) {
+          const listRes = await env.GREEN_STATE.list({ prefix: deptPrefix, cursor }) as any;
+          for (const key of listRes.keys) {
+            await env.GREEN_STATE.delete(key.name);
+          }
+          if (listRes.list_complete) {
+            listComplete = true;
+          } else {
+            cursor = listRes.cursor;
+          }
+        }
+        return new Response(JSON.stringify({ success: true, purged: department }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: 'Failed to purge department summary', details: e.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/admin/dept-summary') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
@@ -692,27 +778,30 @@ export default {
 
               // Log Executive HITL Action Executions to Supabase Audit Table
               ctx.waitUntil((async () => {
+                const auditPayload = {
+                  endpoint: "hitl_action_executed",
+                  request_count: 1,
+                  error_count: 0,
+                  metadata: {
+                    action: actionName,
+                    executed_at: new Date().toISOString(),
+                    executor: "james.ellars@axim.us.com"
+                  }
+                };
                 try {
-                  await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                  const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
                     method: 'POST',
                     headers: {
                       'Content-Type': 'application/json',
                       'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
                       'apikey': env.SUPABASE_SERVICE_KEY
                     },
-                    body: JSON.stringify({
-                      endpoint: "hitl_action_executed",
-                      request_count: 1,
-                      error_count: 0,
-                      metadata: {
-                        action: actionName,
-                        executed_at: new Date().toISOString(),
-                        executor: "james.ellars@axim.us.com"
-                      }
-                    })
+                    body: JSON.stringify(auditPayload)
                   });
+                  if (!dbRes.ok) throw new Error("DB Error");
                 } catch (e) {
                   console.error('Failed to log HITL action execution:', e);
+                  await env.GREEN_STATE.put(`audit_retry_queue:${Date.now()}`, JSON.stringify(auditPayload), { expirationTtl: 86400 });
                 }
               })());
 
@@ -830,11 +919,23 @@ export default {
                     subject: "Directive Received & Ingested — AXiM Green Machine AI",
                     html: `
                         <html>
-                          <head><style>body { font-family: sans-serif; }</style></head>
+                          <head>
+                            <style>
+                              body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; color: #e2e8f0; max-width: 600px; margin: 0 auto; padding: 20px; }
+                              table { width: 100%; border-collapse: collapse; }
+                              th, td { padding: 12px; border: 1px solid #334155; text-align: left; }
+                            </style>
+                          </head>
                           <body>
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                              <tr>
+                                <td style="padding: 20px;">
                             <h2>Executive Directive Acknowledged</h2>
                             <p>Thank you, Mr. Ellars.</p>
                             <p>Your guidance has been successfully ingested and will be injected into active AI strategy prompts.</p>
+                                </td>
+                              </tr>
+                            </table>
                           </body>
                         </html>
                     `
@@ -948,8 +1049,19 @@ export default {
 
         const html = `
           <html>
-            <head><style>body { font-family: sans-serif; }</style></head>
+            <head>
+              <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; color: #e2e8f0; max-width: 600px; margin: 0 auto; padding: 20px; }
+                table { width: 100%; border-collapse: collapse; }
+                th, td { padding: 12px; border: 1px solid #334155; text-align: left; }
+                a { color: #34d399; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+              </style>
+            </head>
             <body>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                <tr>
+                  <td style="padding: 20px;">
               <h2>Executive Daily Briefing</h2>
               ${portfolioSummaryHtml}
               <h3>App Development Progress Summary</h3>
@@ -964,6 +1076,9 @@ export default {
               </ul>
               <h3>Executive Inquiry Block</h3>
               <p>Please reply directly to this email to provide feedback or inquiries.</p>
+                  </td>
+                </tr>
+              </table>
             </body>
           </html>
         `;
@@ -1283,9 +1398,10 @@ export default {
 
         let parsed = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
         const duration = Math.round(performance.now() - startTime);
-        const serverTiming = isFallback ? `workers-ai-fallback;dur=${duration}` : `worker;dur=${duration};desc="Cloudflare Edge Execution"`;
+        const aiModel = isFallback ? 'mistral-7b' : 'llama-3.1';
+        const serverTiming = isFallback ? `workers-ai-fallback;dur=${duration};ai_model=${aiModel}` : `worker;dur=${duration};desc="Cloudflare Edge Execution";ai_model=${aiModel}`;
 
-        return new Response(JSON.stringify({ success: true, data: parsed }), { status: 200, headers: { 'Content-Type': 'application/json', 'Server-Timing': serverTiming, ...corsHeaders } });
+        return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel }), { status: 200, headers: { 'Content-Type': 'application/json', 'Server-Timing': serverTiming, ...corsHeaders } });
       } catch (err) {
         return new Response(JSON.stringify({ error: 'AI Evaluation Failed' }), { status: 500, headers: corsHeaders });
       }
