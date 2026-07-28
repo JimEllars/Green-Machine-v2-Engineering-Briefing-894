@@ -8,6 +8,7 @@ export default function MarketFeedMatrix() {
   const [isStale, setIsStale] = useState(false);
   const [isDegraded, setIsDegraded] = useState(false);
   const [isRateLimited, setIsRateLimited] = useState(false);
+  const [isCircuitBreaker, setIsCircuitBreaker] = useState(false);
   const [cfoFilter, setCfoFilter] = useState('All');
 
 
@@ -32,6 +33,11 @@ export default function MarketFeedMatrix() {
           setIsRateLimited(true);
         } else {
           setIsRateLimited(false);
+        }
+        if (data.metadata?.circuit_breaker) {
+          setIsCircuitBreaker(true);
+        } else {
+          setIsCircuitBreaker(false);
         }
         // Check telemetry timestamp
         if (data && data._telemetry_timestamp) {
@@ -138,8 +144,17 @@ export default function MarketFeedMatrix() {
           <motion.div
             key={asset.symbol}
             layout
-            className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-slate-600 transition-colors"
+            className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-slate-600 transition-colors relative"
           >
+
+            {/* Circuit Breaker Status Indicator */}
+            {(isCircuitBreaker || isRateLimited) && (
+              <div className="absolute top-0 right-0 -mt-3 -mr-3 z-10 px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded-md text-[10px] font-bold tracking-wider uppercase shadow-[0_0_10px_rgba(245,158,11,0.2)] backdrop-blur-sm flex items-center gap-1">
+                <SafeIcon name="AlertTriangle" className="w-3 h-3" />
+                Circuit Open (Cached)
+              </div>
+            )}
+
             <div className="flex justify-between items-start mb-2">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-slate-800 rounded-md">

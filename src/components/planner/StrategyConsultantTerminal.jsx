@@ -226,6 +226,26 @@ export default function StrategyConsultantTerminal() {
     }
   };
 
+    const [isMarkdownCopied, setIsMarkdownCopied] = useState(false);
+  const handleCopyMarkdown = async () => {
+    if (!parsedStrategyData) return;
+    try {
+      const markdown = `### AXiM Green Machine Strategy Recommendation
+**Risk Level:** ${parsedStrategyData.riskLevel || 'N/A'}
+
+#### Analysis
+${parsedStrategyData.analysis || 'N/A'}
+
+#### Action Items
+${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
+      await navigator.clipboard.writeText(markdown);
+      setIsMarkdownCopied(true);
+      setTimeout(() => setIsMarkdownCopied(false), 2000);
+    } catch (err) {
+      console.warn('Failed to copy markdown', err);
+    }
+  };
+
   const handleCopyPlan = async () => {
     if (!strategy) return;
     try {
@@ -319,6 +339,15 @@ export default function StrategyConsultantTerminal() {
           >
             <SafeIcon name={isSpeaking ? "VolumeX" : "Volume2"} className={`w-3 h-3 ${isSpeaking ? 'animate-pulse' : ''}`} />
             {isSpeaking ? 'Speaking...' : 'Listen'}
+          </button>
+
+                    <button
+            className={`flex items-center gap-1.5 text-xs font-medium px-2 py-1 rounded border ${!parsedStrategyData ? 'bg-slate-900 text-slate-600 border-slate-800 cursor-not-allowed' : 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700 cursor-pointer'}`}
+            disabled={!parsedStrategyData}
+            onClick={handleCopyMarkdown}
+          >
+            <SafeIcon name={isMarkdownCopied ? "CheckCircle" : "Copy"} className="w-3 h-3" />
+            {isMarkdownCopied ? "Copied!" : "Copy Markdown"}
           </button>
 
           <button

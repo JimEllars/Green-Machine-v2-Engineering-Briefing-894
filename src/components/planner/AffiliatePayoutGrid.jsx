@@ -149,6 +149,17 @@ export default function AffiliatePayoutGrid() {
           <p className="text-slate-400 text-sm mt-1">Real-time smart contract settlements</p>
         </div>
         <div className="flex items-center gap-4">
+                    {(selectedTokenFilter !== 'All Tokens' || searchQuery.trim() !== '') && (
+            <button
+              onClick={() => {
+                setSelectedTokenFilter('All Tokens');
+                setSearchQuery('');
+              }}
+              className="text-[10px] uppercase font-bold tracking-wider px-2 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded hover:bg-amber-500/20 transition-colors"
+            >
+              Clear Filters
+            </button>
+          )}
           <input
             type="text"
             placeholder="Search Tx Hash or Recipient..."
