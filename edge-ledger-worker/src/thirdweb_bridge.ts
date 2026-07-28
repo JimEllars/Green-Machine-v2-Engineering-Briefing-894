@@ -330,7 +330,22 @@ export default {
 
             const deptSummaryList = await env.GREEN_STATE.list({ prefix: 'dept_summary:' });
             let deptSummariesHtml = '<ul>';
-            for (const key of (deptSummaryList as any).keys) {
+
+            // Filter 24h window
+            const nowTime = Date.now();
+            const filteredKeys = (deptSummaryList as any).keys.filter((key: any) => {
+                const parts = key.name.split(':');
+                const tsStr = parts[2];
+                if (tsStr) {
+                    const ts = parseInt(tsStr, 10);
+                    if (!isNaN(ts) && nowTime - ts <= 86400000) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+
+            for (const key of filteredKeys) {
                 const val = await env.GREEN_STATE.get(key.name);
                 if (val) {
                     try {
@@ -514,7 +529,38 @@ export default {
       }
     }
 
-if (request.method === 'POST' && url.pathname === '/api/admin/dept-summary') {
+    if (request.method === 'GET' && url.pathname === '/api/admin/dept-summary') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+      try {
+        const deptSummaryList = await env.GREEN_STATE.list({ prefix: 'dept_summary:' });
+        const summaries = [];
+        const nowTime = Date.now();
+
+        for (const key of (deptSummaryList as any).keys) {
+            const parts = key.name.split(':');
+            const tsStr = parts[2];
+            if (tsStr) {
+                const ts = parseInt(tsStr, 10);
+                if (!isNaN(ts) && nowTime - ts <= 86400000) {
+                    const val = await env.GREEN_STATE.get(key.name);
+                    if (val) {
+                        try {
+                            summaries.push(JSON.parse(val));
+                        } catch(e) {}
+                    }
+                }
+            }
+        }
+        return new Response(JSON.stringify({ success: true, summaries }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: 'Failed to retrieve department summaries' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/admin/dept-summary') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
         return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
@@ -643,6 +689,32 @@ if (request.method === 'POST' && url.pathname === '/api/admin/dept-summary') {
               await env.GREEN_STATE.put(actionId, JSON.stringify({ action, timestamp: Date.now(), executed: true }), {
                   expirationTtl: 604800
               });
+
+              // Log Executive HITL Action Executions to Supabase Audit Table
+              ctx.waitUntil((async () => {
+                try {
+                  await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                      'apikey': env.SUPABASE_SERVICE_KEY
+                    },
+                    body: JSON.stringify({
+                      endpoint: "hitl_action_executed",
+                      request_count: 1,
+                      error_count: 0,
+                      metadata: {
+                        action: actionName,
+                        executed_at: new Date().toISOString(),
+                        executor: "james.ellars@axim.us.com"
+                      }
+                    })
+                  });
+                } catch (e) {
+                  console.error('Failed to log HITL action execution:', e);
+                }
+              })());
 
               if (request.method === 'GET') {
                   const html = `
@@ -800,7 +872,22 @@ if (request.method === 'POST' && url.pathname === '/api/admin/dept-summary') {
 
         const deptSummaryList = await env.GREEN_STATE.list({ prefix: 'dept_summary:' });
         let deptSummariesHtml = '<ul>';
-        for (const key of (deptSummaryList as any).keys) {
+
+        // Filter 24h window
+        const nowTime = Date.now();
+        const filteredKeys = (deptSummaryList as any).keys.filter((key: any) => {
+            const parts = key.name.split(':');
+            const tsStr = parts[2];
+            if (tsStr) {
+                const ts = parseInt(tsStr, 10);
+                if (!isNaN(ts) && nowTime - ts <= 86400000) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        for (const key of filteredKeys) {
             const val = await env.GREEN_STATE.get(key.name);
             if (val) {
                 try {
@@ -1168,21 +1255,37 @@ if (request.method === 'POST' && url.pathname === '/api/admin/dept-summary') {
           console.warn("Anny risk assessment fallback triggered", e);
         }
 
-        const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
-          messages: [
-            { role: 'system', content: systemMessage },
-            { role: 'user', content: prompt }
-          ],
-          response_format: { type: 'json_object' }
-        }, {
-          extraHeaders: {
-            "x-session-affinity": `ses_${session_id || 'default'}`
-          }
-        });
+        let response;
+        let isFallback = false;
+        try {
+          response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+            messages: [
+              { role: 'system', content: systemMessage },
+              { role: 'user', content: prompt }
+            ],
+            response_format: { type: 'json_object' }
+          }, {
+            extraHeaders: {
+              "x-session-affinity": `ses_${session_id || 'default'}`
+            }
+          });
+        } catch (primaryErr) {
+          console.warn('[AI_FALLBACK] Primary model failed, failing over to Mistral 7B:', primaryErr);
+          isFallback = true;
+          response = await env.AI.run('@cf/mistral/mistral-7b-instruct-v0.2', {
+            messages: [
+              { role: 'system', content: systemMessage },
+              { role: 'user', content: prompt }
+            ],
+            response_format: { type: 'json_object' }
+          });
+        }
 
         let parsed = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
         const duration = Math.round(performance.now() - startTime);
-        return new Response(JSON.stringify({ success: true, data: parsed }), { status: 200, headers: { 'Content-Type': 'application/json', 'Server-Timing': `worker;dur=${duration};desc="Cloudflare Edge Execution"`, ...corsHeaders } });
+        const serverTiming = isFallback ? `workers-ai-fallback;dur=${duration}` : `worker;dur=${duration};desc="Cloudflare Edge Execution"`;
+
+        return new Response(JSON.stringify({ success: true, data: parsed }), { status: 200, headers: { 'Content-Type': 'application/json', 'Server-Timing': serverTiming, ...corsHeaders } });
       } catch (err) {
         return new Response(JSON.stringify({ error: 'AI Evaluation Failed' }), { status: 500, headers: corsHeaders });
       }
