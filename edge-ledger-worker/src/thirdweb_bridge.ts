@@ -1485,6 +1485,38 @@ export default {
       });
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/admin/quarantine-retry-purge') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        let listResult = await env.GREEN_STATE.list({ prefix: 'quarantine_retry:' });
+        let purgedCount = 0;
+
+        while (true) {
+          if (listResult.keys.length > 0) {
+            const deletePromises = listResult.keys.map((key: any) => env.GREEN_STATE.delete(key.name));
+            await Promise.all(deletePromises);
+            purgedCount += listResult.keys.length;
+          }
+          if (listResult.list_complete) break;
+          listResult = await env.GREEN_STATE.list({ prefix: 'quarantine_retry:', cursor: listResult.cursor });
+        }
+
+        return new Response(JSON.stringify({ success: true, purged_count: purgedCount }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to purge quarantined retries' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
     // Explicit Fallback Route Evaluation
     if (
         url.pathname !== '/' &&
@@ -1498,7 +1530,7 @@ export default {
         url.pathname !== '/api/strategy-consult' &&
         url.pathname !== '/api/quarantine-purge' &&
         url.pathname !== '/api/health' &&
-        url.pathname !== '/api/admin/renew-anny-session'
+        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/quarantine-retry-purge'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }

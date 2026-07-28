@@ -271,6 +271,39 @@ function App() {
     }
   };
 
+  const [isPurgingRetries, setIsPurgingRetries] = useState(false);
+  const [purgeRetriesSuccess, setPurgeRetriesSuccess] = useState(false);
+  const [purgeRetriesCount, setPurgeRetriesCount] = useState(0);
+
+  const handlePurgeRetries = async () => {
+    setIsPurgingRetries(true);
+    setPurgeRetriesSuccess(false);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/quarantine-retry-purge`, {
+        method: 'POST',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPurgeRetriesCount(data.purged_count);
+        setPurgeRetriesSuccess(true);
+        setTimeout(() => setPurgeRetriesSuccess(false), 2000);
+      } else {
+        setToastError('Failed to purge retries');
+        setTimeout(() => setToastError(null), 3000);
+      }
+    } catch(e) {
+      console.error('Failed to purge retries:', e);
+      setToastError('Network error purging retries');
+      setTimeout(() => setToastError(null), 3000);
+    } finally {
+      setIsPurgingRetries(false);
+    }
+  };
+
   const handleSendExecBriefing = async () => {
     setIsSendingBriefing(true);
     setBriefingSuccess(false);
@@ -524,6 +557,14 @@ function App() {
                   className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider ${isPurgingQuarantine ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : purgeSuccess ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-amber-500/50 text-slate-300'}`}
                 >
                   {isPurgingQuarantine ? 'Purging...' : purgeSuccess ? 'Purged!' : 'Purge Quarantined Pills'}
+                </button>
+
+
+                <button
+                  onClick={handlePurgeRetries}
+                  className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider ${isPurgingRetries ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : purgeRetriesSuccess ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-amber-500/50 text-slate-300'}`}
+                >
+                  {isPurgingRetries ? 'Purging...' : purgeRetriesSuccess ? `${purgeRetriesCount} Quarantined Retries Purged` : 'Purge Quarantined Retries'}
                 </button>
 
                 <button
