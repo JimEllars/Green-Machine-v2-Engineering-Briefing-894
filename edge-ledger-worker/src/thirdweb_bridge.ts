@@ -1,9 +1,7 @@
+import type { ExecutionContext } from '@cloudflare/workers-types';
 import { syncMarketCache } from './market_watcher';
 
 export interface Env {
-  GREEN_STATE: any;
-  MARKET_CACHE: any;
-
   ANNY_AUTH_MODE?: "session-token" | "bearer-pat";
   ANNY_AUTH_TOKEN?: string;
   ANNY_EMAIL?: string;
@@ -13,8 +11,8 @@ export interface Env {
   AXIM_INTERNAL_KEY: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
-  GREEN_STATE?: any; // DLQ Namespace
-  MARKET_CACHE?: any;
+  GREEN_STATE: any; // DLQ Namespace
+  MARKET_CACHE: any;
   AI: any;
 }
 
@@ -552,9 +550,20 @@ export default {
             execGovernance.last_briefing_sent = emailitTelemetry.last_attempt;
         }
         try {
-            const retryList = await env.GREEN_STATE.list({ prefix: 'email_retry_queue:' });
-            execGovernance.pending_retries = (retryList as any).keys.length;
+            const emailRetryList = await env.GREEN_STATE.list({ prefix: 'email_retry_queue:' });
+            const auditRetryList = await env.GREEN_STATE.list({ prefix: 'audit_retry_queue:' });
+            execGovernance.pending_retries = (emailRetryList as any).keys.length + (auditRetryList as any).keys.length;
         } catch(e) {}
+
+        const nowD = new Date();
+        const nextBriefing = new Date(Date.UTC(nowD.getUTCFullYear(), nowD.getUTCMonth(), nowD.getUTCDate(), 10, 30, 0));
+        if (nowD.getTime() > nextBriefing.getTime()) {
+            nextBriefing.setUTCDate(nextBriefing.getUTCDate() + 1);
+        }
+        const diffMs = nextBriefing.getTime() - nowD.getTime();
+        const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+        (execGovernance as any).next_briefing_countdown = `Next Briefing in ${diffHrs}h ${diffMins}m`;
 
         return new Response(JSON.stringify({
            success: true,
@@ -562,6 +571,7 @@ export default {
            quarantined_count: quarantinedCount,
            emailit_telemetry: emailitTelemetry,
            exec_governance: execGovernance,
+           pending_queue_count: execGovernance.pending_retries,
            emailit_configured: Boolean(env.EMAILIT_API_KEY),
            anny_oracle: {
              status: "active",
