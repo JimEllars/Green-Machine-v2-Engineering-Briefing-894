@@ -12,6 +12,7 @@ export default function AffiliatePayoutGrid() {
   const [recentTxIds, setRecentTxIds] = useState(new Set());
   const reconnectCountRef = React.useRef(0);
   const [manualReconnectTrigger, setManualReconnectTrigger] = useState(0);
+  const [selectedTokenFilter, setSelectedTokenFilter] = useState('All Tokens');
 
   useEffect(() => {
     let channel;
@@ -144,9 +145,22 @@ export default function AffiliatePayoutGrid() {
           </h2>
           <p className="text-slate-400 text-sm mt-1">Real-time smart contract settlements</p>
         </div>
-        <button className="text-sm px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg border border-slate-700 transition-colors flex items-center gap-2">
-          <SafeIcon name="Download" /> Export CSV
-        </button>
+        <div className="flex items-center gap-4">
+          <select
+            value={selectedTokenFilter}
+            onChange={(e) => setSelectedTokenFilter(e.target.value)}
+            className="text-sm px-3 py-2 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500 transition-colors"
+          >
+            <option value="All Tokens">All Tokens</option>
+            <option value="ETH">ETH</option>
+            <option value="USDC">USDC</option>
+            <option value="SOL">SOL</option>
+            <option value="MATIC">MATIC</option>
+          </select>
+          <button className="text-sm px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg border border-slate-700 transition-colors flex items-center gap-2">
+            <SafeIcon name="Download" /> Export CSV
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto flex-1">
@@ -162,7 +176,7 @@ export default function AffiliatePayoutGrid() {
           </thead>
           <tbody className="divide-y divide-slate-800/50">
             <AnimatePresence>
-              {transactions.map((tx) => {
+              {transactions.filter(tx => selectedTokenFilter === 'All Tokens' || tx.currency === selectedTokenFilter).map((tx) => {
                 const config = getStatusConfig(tx.status);
                 return (
                   <motion.tr 

@@ -1,3 +1,4 @@
+import type { KVNamespace, ExecutionContext, ScheduledEvent } from '@cloudflare/workers-types';
 /**
  * Target: Cloudflare Worker Runtime
  * Role: market_watcher.ts
@@ -6,6 +7,7 @@
 
 export interface Env {
   MARKET_CACHE: KVNamespace;
+  GREEN_STATE: KVNamespace;
   ORACLE_API_KEY: string;
 }
 
@@ -15,6 +17,32 @@ export interface Env {
  * the metadata to reflect the rate-limited status.
  */
 export async function syncMarketCache(env: Env): Promise<void> {
+  let circuitBreakerStr = await env.GREEN_STATE.get('oracle_circuit_breaker');
+  let circuitBreaker = circuitBreakerStr ? JSON.parse(circuitBreakerStr) : { state: 'CLOSED', failure_count: 0, last_failure: 0 };
+
+  if (circuitBreaker.state === 'OPEN') {
+    const now = Date.now();
+    if (now - circuitBreaker.last_failure < 300000) {
+      // Still in cooldown period, fallback to cache
+      console.warn('[CIRCUIT_BREAKER] Oracle fetch skipped due to OPEN circuit breaker.');
+      try {
+        const oldCache = await env.MARKET_CACHE.get('latest_prices');
+        if (oldCache) {
+          await env.MARKET_CACHE.put('latest_prices', oldCache, {
+            expirationTtl: 60,
+            metadata: { updated_at: Date.now(), rate_limited: true, circuit_breaker: true, provider: "anny_trade_rest" }
+          });
+        }
+      } catch (fallbackError) {
+        console.error('[MARKET_WATCHER] Fallback also failed:', fallbackError);
+      }
+      return;
+    } else {
+      circuitBreaker.state = 'HALF_OPEN';
+      await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(circuitBreaker));
+    }
+  }
+
   try {
     // 1. Fetch from Upstream Oracles (Simulated aggregation)
     // In production, this hits CoinGecko, Alpaca, etc.
@@ -69,12 +97,24 @@ export async function syncMarketCache(env: Env): Promise<void> {
     });
 
     console.log(`[MARKET_WATCHER] Market cache updated at ${new Date().toISOString()}`);
+    if (circuitBreaker.state !== 'CLOSED' || circuitBreaker.failure_count > 0) {
+      circuitBreaker.state = 'CLOSED';
+      circuitBreaker.failure_count = 0;
+      await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(circuitBreaker));
+    }
   } catch (error: any) {
     if (error.status === 429) {
       console.warn(`[ORACLE_RATE_LIMIT] 429 received from oracle. Preserving cached prices. Retry-After: ${error.retryAfter || 'unknown'}`);
     } else {
       console.error(`[MARKET_WATCHER] Oracle fetch failed:`, error);
     }
+
+    circuitBreaker.failure_count += 1;
+    circuitBreaker.last_failure = Date.now();
+    if (circuitBreaker.failure_count >= 3) {
+      circuitBreaker.state = 'OPEN';
+    }
+    await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(circuitBreaker));
 
     // Fallback gracefully to historical keys without overwriting valid data blocks
     // By re-putting the old cache, we prevent KV from expiring it.
@@ -83,7 +123,7 @@ export async function syncMarketCache(env: Env): Promise<void> {
       if (oldCache) {
         await env.MARKET_CACHE.put('latest_prices', oldCache, {
           expirationTtl: 60,
-          metadata: { updated_at: Date.now(), rate_limited: true, provider: "anny_trade_rest" }
+          metadata: { updated_at: Date.now(), rate_limited: true, provider: "anny_trade_rest", circuit_breaker: circuitBreaker.state === 'OPEN' }
         });
         console.log(`[MARKET_WATCHER] Fallback to historical cache successful`);
       }
