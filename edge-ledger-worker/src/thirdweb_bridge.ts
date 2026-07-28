@@ -268,11 +268,21 @@ async function sendEmailItNotification(
       result = { success: true };
     }
 
-    const telemetry = {
+    const prevTelemetryRaw = await env.GREEN_STATE.get("emailit_telemetry");
+    let prevTelemetry = {};
+    if (prevTelemetryRaw) {
+        try { prevTelemetry = JSON.parse(prevTelemetryRaw); } catch(e) {}
+    }
+    const telemetry: any = {
+       ...prevTelemetry,
        last_attempt: Date.now(),
        status: result.success ? "OK" : "ERROR",
        last_error: result.error || null
     };
+    if (result.success) {
+        telemetry.last_successful_dispatch = Date.now();
+        telemetry.recipients = typeof params.to === 'string' ? params.to : (Array.isArray(params.to) ? (params.to as any[]).map((r: any) => r.email || r).join(', ') : '');
+    }
     await env.GREEN_STATE.put("emailit_telemetry", JSON.stringify(telemetry));
 
     if (!result.success && !params._retryId) {
@@ -281,7 +291,13 @@ async function sendEmailItNotification(
     return result;
   } catch (err: any) {
     const errorStr = err.message || "EmailIt dispatch failed";
+    const prevTelemetryRaw = await env.GREEN_STATE.get("emailit_telemetry");
+    let prevTelemetry = {};
+    if (prevTelemetryRaw) {
+        try { prevTelemetry = JSON.parse(prevTelemetryRaw); } catch(e) {}
+    }
     const telemetry = {
+       ...prevTelemetry,
        last_attempt: Date.now(),
        status: "ERROR",
        last_error: errorStr
@@ -602,7 +618,7 @@ export default {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
-            'Cache-Control': 'no-store',
+            'Cache-Control': 'no-store, private',
             'Server-Timing': `worker;dur=${duration};desc="Cloudflare Edge Execution"`,
             ...corsHeaders
           }
@@ -1224,7 +1240,7 @@ export default {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
-            'Cache-Control': 'no-store',
+            'Cache-Control': 'no-store, private',
             ...corsHeaders
           }
         });
@@ -1274,7 +1290,7 @@ export default {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=15, s-maxage=30',
+          'Cache-Control': 'public, max-age=15, stale-while-revalidate=45',
           'Server-Timing': `worker;dur=${duration};desc="Cloudflare Edge Execution"`,
           ...corsHeaders
         }
@@ -1313,7 +1329,7 @@ export default {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
-            'Cache-Control': 'no-store',
+            'Cache-Control': 'no-store, private',
             ...corsHeaders
           }
         });
@@ -1430,7 +1446,7 @@ export default {
         const aiModel = isFallback ? 'mistral-7b' : 'llama-3.1';
         const serverTiming = isFallback ? `workers-ai-fallback;dur=${duration};ai_model=${aiModel}` : `worker;dur=${duration};desc="Cloudflare Edge Execution";ai_model=${aiModel}`;
 
-        return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel }), { status: 200, headers: { 'Content-Type': 'application/json', 'Server-Timing': serverTiming, ...corsHeaders } });
+        return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', 'Server-Timing': serverTiming, ...corsHeaders } });
       } catch (err) {
         return new Response(JSON.stringify({ error: 'AI Evaluation Failed' }), { status: 500, headers: corsHeaders });
       }
@@ -1447,7 +1463,7 @@ export default {
         await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(resetState));
         return new Response(JSON.stringify({ success: true, message: 'Oracle Circuit Reset to CLOSED' }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
         });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to reset oracle circuit' }), {
@@ -1480,6 +1496,7 @@ export default {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=15, stale-while-revalidate=45',
           ...corsHeaders
         }
       });
@@ -1507,7 +1524,7 @@ export default {
 
         return new Response(JSON.stringify({ success: true, purged_count: purgedCount }), {
           status: 200,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
         });
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to purge quarantined retries' }), {
