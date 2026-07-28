@@ -19,6 +19,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   const prevDbLatencyRef = useRef(0);
   const [tickerStream, setTickerStream] = useState([]);
   const [healthTickerLogs, setHealthTickerLogs] = useState([]);
+  const [latencyHistory, setLatencyHistory] = useState([]);
   const [activeAiModel, setActiveAiModel] = useState(window.localStorage.getItem("ai_model"));
 
   useEffect(() => {
@@ -77,6 +78,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
       setEdgeJitter(Math.abs(currentLatency - prevLatencyRef.current));
       prevLatencyRef.current = currentLatency;
       setEdgeLatency(currentLatency);
+      setLatencyHistory(prev => [...prev, currentLatency].slice(-10));
       setEdgeCacheAvailable(res.ok);
       edgeOk = res.ok;
       if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: res.ok });

@@ -322,6 +322,16 @@ export default {
                 const rawPayload = await env.GREEN_STATE.get(key.name);
                 if (rawPayload) {
                   try {
+                    let parsedPayload = JSON.parse(rawPayload);
+                    let retryCount = parsedPayload.retry_count || 0;
+                    if (retryCount >= 5) {
+                        await env.GREEN_STATE.put(`quarantine_retry:${Date.now()}_${Math.random().toString(36).substring(7)}`, rawPayload, { expirationTtl: 604800 });
+                        await env.GREEN_STATE.delete(key.name);
+                        continue;
+                    }
+                    parsedPayload.retry_count = retryCount + 1;
+                    await env.GREEN_STATE.put(key.name, JSON.stringify(parsedPayload), { expirationTtl: 86400 });
+
                     const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
                       method: "POST",
                       headers: {
@@ -481,7 +491,16 @@ export default {
                 const val = await env.GREEN_STATE.get(key.name);
                 if (val) {
                     try {
-                        const params = JSON.parse(val);
+                        let params = JSON.parse(val);
+                        let retryCount = params.retry_count || 0;
+                        if (retryCount >= 5) {
+                            await env.GREEN_STATE.put(`quarantine_retry:${Date.now()}_${Math.random().toString(36).substring(7)}`, val, { expirationTtl: 604800 });
+                            await env.GREEN_STATE.delete(key.name);
+                            continue;
+                        }
+                        params.retry_count = retryCount + 1;
+                        await env.GREEN_STATE.put(key.name, JSON.stringify(params), { expirationTtl: 86400 });
+
                         params._retryId = key.name;
                         const res = await sendEmailItNotification(params, env);
                         if (res.success) {
@@ -1414,6 +1433,27 @@ export default {
         return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel }), { status: 200, headers: { 'Content-Type': 'application/json', 'Server-Timing': serverTiming, ...corsHeaders } });
       } catch (err) {
         return new Response(JSON.stringify({ error: 'AI Evaluation Failed' }), { status: 500, headers: corsHeaders });
+      }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/admin/circuit-breaker-reset') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        const resetState = { state: 'CLOSED', failure_count: 0, last_failure: 0 };
+        await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(resetState));
+        return new Response(JSON.stringify({ success: true, message: 'Oracle Circuit Reset to CLOSED' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to reset oracle circuit' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
       }
     }
 
