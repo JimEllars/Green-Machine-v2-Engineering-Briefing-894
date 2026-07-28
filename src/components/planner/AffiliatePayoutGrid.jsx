@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
 import { supabase } from '../../supabaseClient';
 import { formatDistanceToNow } from 'date-fns';
+import ReactDOM from 'react-dom';
 
 
 
@@ -14,6 +15,21 @@ export default function AffiliatePayoutGrid() {
   const [manualReconnectTrigger, setManualReconnectTrigger] = useState(0);
   const [selectedTokenFilter, setSelectedTokenFilter] = useState('All Tokens');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTx, setSelectedTx] = useState(null);
+
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('realtime-status-update', { detail: connectionStatus }));
+  }, [connectionStatus]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setSelectedTx(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     let channel;
@@ -217,7 +233,8 @@ export default function AffiliatePayoutGrid() {
                       backgroundColor: tx.status === 'minted' ? ['rgba(16, 185, 129, 0.4)', 'rgba(30, 41, 59, 0)'] : 'rgba(30, 41, 59, 0)'
                     }}
                     transition={{ duration: 0.5 }}
-                    className={`hover:bg-slate-800/30 transition-colors ${recentTxIds.has(tx.id) ? 'bg-emerald-500/10 border border-emerald-500/30 animate-pulse' : ''}`}
+                    className={`hover:bg-slate-800/30 transition-colors cursor-pointer ${recentTxIds.has(tx.id) ? 'bg-emerald-500/10 border border-emerald-500/30 animate-pulse' : ''}`}
+                    onClick={() => setSelectedTx(tx)}
                   >
                     <td className="px-6 py-4 font-mono text-emerald-400">{tx.partner}</td>
                     <td className="px-6 py-4 font-mono text-slate-300">{tx.wallet}</td>

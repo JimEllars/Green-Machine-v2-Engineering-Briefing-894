@@ -21,6 +21,13 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   const [healthTickerLogs, setHealthTickerLogs] = useState([]);
   const [latencyHistory, setLatencyHistory] = useState([]);
   const [activeAiModel, setActiveAiModel] = useState(window.localStorage.getItem("ai_model"));
+  const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
+
+  useEffect(() => {
+    const handleRealtimeStatus = (e) => setRealtimeStatus(e.detail);
+    window.addEventListener('realtime-status-update', handleRealtimeStatus);
+    return () => window.removeEventListener('realtime-status-update', handleRealtimeStatus);
+  }, []);
 
   useEffect(() => {
     const handleStorageChange = () => {
@@ -248,8 +255,38 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
           <div className={`w-1.5 h-1.5 rounded-full ${dlqStatus?.anny_oracle?.session_valid ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
           {dlqStatus?.anny_oracle?.session_valid ? 'Anny Oracle: Active (KV Session Valid)' : 'Anny Oracle: Public Guest Mode'}
         </div>
+
+        {/* Realtime Status Badge */}
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+          realtimeStatus === 'SUBSCRIBED' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
+          (realtimeStatus === 'CONNECTING' || realtimeStatus === 'TIMED_OUT') ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' :
+          'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(243,24,73,0.3)]'
+        }`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${
+            realtimeStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' :
+            (realtimeStatus === 'CONNECTING' || realtimeStatus === 'TIMED_OUT') ? 'bg-amber-500 animate-pulse' :
+            'bg-rose-500'
+          }`} />
+          {realtimeStatus === 'SUBSCRIBED' ? 'Realtime: Subscribed' :
+           (realtimeStatus === 'CONNECTING' || realtimeStatus === 'TIMED_OUT') ? 'Realtime: Fallback Polling (30s)' :
+           'Realtime: Offline'}
+        </div>
+
         </div>
       </div>
+
+      {/* Executive Briefing Log */}
+      {dlqStatus?.emailit_telemetry?.last_successful_dispatch && (
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 mt-4 mb-4">
+          <div className="text-sm font-bold text-slate-300 mb-1 flex items-center gap-2">
+            <SafeIcon name="Mail" className="w-4 h-4 text-emerald-500" /> Executive Dispatch Confirmation
+          </div>
+          <div className="text-xs text-slate-400 font-mono">
+            Last Briefing: Dispatched at {new Date(dlqStatus.emailit_telemetry.last_successful_dispatch).toLocaleString()} to {dlqStatus.emailit_telemetry.recipients || 'james.ellars@axim.us.com (CC: jrellars@gmail.com)'}
+          </div>
+        </div>
+      )}
+
 
       <div className="grid grid-cols-1 gap-4 flex-grow">
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
