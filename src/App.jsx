@@ -121,6 +121,8 @@ function App() {
 
   const [isRenewingSession, setIsRenewingSession] = useState(false);
   const [renewSessionSuccess, setRenewSessionSuccess] = useState(false);
+  const [isResettingCircuit, setIsResettingCircuit] = useState(false);
+  const [resetCircuitSuccess, setResetCircuitSuccess] = useState(false);
 
   const handleRenewAnnySession = async () => {
     setIsRenewingSession(true);
@@ -144,6 +146,32 @@ function App() {
       setIsRenewingSession(false);
     }
   };
+
+  const handleResetCircuit = async () => {
+    setIsResettingCircuit(true);
+    setResetCircuitSuccess(false);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/circuit-breaker-reset`, {
+        method: 'POST',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        setResetCircuitSuccess(true);
+        setTimeout(() => setResetCircuitSuccess(false), 3000);
+      } else {
+        throw new Error('Failed to reset circuit');
+      }
+    } catch (e) {
+      setToastError('Oracle Circuit Reset Failed');
+      setTimeout(() => setToastError(''), 5000);
+    } finally {
+      setIsResettingCircuit(false);
+    }
+  };
+
 
   const checkDlq = async () => {
     try {
@@ -504,7 +532,15 @@ function App() {
                 >
                   {isRenewingSession ? 'Renewing...' : renewSessionSuccess ? 'Session Renewed!' : 'Renew Anny Session'}
                 </button>
-{['Mint Batch', 'Audit Logs'].map((action) => (
+
+                <button
+                  onClick={handleResetCircuit}
+                  className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider ${isResettingCircuit ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : resetCircuitSuccess ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-rose-500/50 text-slate-300'}`}
+                >
+                  {isResettingCircuit ? 'Resetting...' : resetCircuitSuccess ? 'Reset to CLOSED!' : 'Reset Oracle Circuit'}
+                </button>
+
+                {['Mint Batch', 'Audit Logs'].map((action) => (
                   <button key={action} className="p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider">
                     {action}
                   </button>

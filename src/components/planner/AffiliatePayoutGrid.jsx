@@ -13,6 +13,7 @@ export default function AffiliatePayoutGrid() {
   const reconnectCountRef = React.useRef(0);
   const [manualReconnectTrigger, setManualReconnectTrigger] = useState(0);
   const [selectedTokenFilter, setSelectedTokenFilter] = useState('All Tokens');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     let channel;
@@ -99,6 +100,8 @@ export default function AffiliatePayoutGrid() {
     id: dbTx.id,
     partner: dbTx.partner_id ? `AXM-${dbTx.partner_id.substring(0,3)}` : 'Unknown', // mocking partner ID format
     wallet: `${dbTx.wallet_address.substring(0, 5)}...${dbTx.wallet_address.substring(dbTx.wallet_address.length - 3)}`,
+    fullWallet: dbTx.wallet_address,
+    txHash: dbTx.transaction_hash || '',
     amount: Number(dbTx.amount),
     currency: dbTx.currency,
     status: dbTx.status,
@@ -146,6 +149,13 @@ export default function AffiliatePayoutGrid() {
           <p className="text-slate-400 text-sm mt-1">Real-time smart contract settlements</p>
         </div>
         <div className="flex items-center gap-4">
+          <input
+            type="text"
+            placeholder="Search Tx Hash or Recipient..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="text-sm px-3 py-2 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500 transition-colors placeholder-slate-500 w-64"
+          />
           <select
             value={selectedTokenFilter}
             onChange={(e) => setSelectedTokenFilter(e.target.value)}
@@ -176,7 +186,14 @@ export default function AffiliatePayoutGrid() {
           </thead>
           <tbody className="divide-y divide-slate-800/50">
             <AnimatePresence>
-              {transactions.filter(tx => selectedTokenFilter === 'All Tokens' || tx.currency === selectedTokenFilter).map((tx) => {
+              {transactions.filter(tx => {
+                const matchesToken = selectedTokenFilter === 'All Tokens' || tx.currency === selectedTokenFilter;
+                if (!searchQuery) return matchesToken;
+                const query = searchQuery.toLowerCase();
+                const matchesSearch = (tx.txHash && tx.txHash.toLowerCase().includes(query)) ||
+                                      (tx.fullWallet && tx.fullWallet.toLowerCase().includes(query));
+                return matchesToken && matchesSearch;
+              }).map((tx) => {
                 const config = getStatusConfig(tx.status);
                 return (
                   <motion.tr 
