@@ -179,7 +179,15 @@ export default function StrategyConsultantTerminal() {
         const payload = JSON.stringify(data.data, null, 2);
         setStrategy(payload);
         setStrategyHistory(prev => [...prev, payload].slice(-3));
-        setProvider('EDGE-LLAMA-3.1-8B');
+
+        if (data.ai_model) {
+           window.localStorage.setItem("ai_model", data.ai_model);
+           setProvider(data.ai_model === "llama-3.1" ? "EDGE-LLAMA-3.1-8B" : "EDGE-MISTRAL-7B");
+           // Trigger a storage event manually if we want the diagnostics panel to update without a refresh (or we can just let it be on re-render)
+           window.dispatchEvent(new Event("storage"));
+        } else {
+           setProvider('EDGE-LLAMA-3.1-8B');
+        }
         setPromptInput('');
       } else {
         throw new Error(data.error || "Unknown error during AI consultation.");
