@@ -458,6 +458,66 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
            </div>
         )}
 
+        {/* Investing Brain Decision Card */}
+        {!isTyping && parsedStrategyData && (parsedStrategyData.riskViolation !== undefined || parsedStrategyData.actionItems) && (
+           <div className="mb-6 mt-4 p-4 rounded-lg bg-slate-900/60 border border-slate-700/50 shadow-lg backdrop-blur-md relative overflow-hidden flex flex-col gap-3">
+             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
+
+             <div className="flex items-center justify-between z-10 border-b border-slate-700/50 pb-2 mb-1">
+                <h3 className="text-sm font-bold text-slate-200 tracking-wide flex items-center gap-2">
+                  <SafeIcon name="Brain" className="w-4 h-4 text-emerald-400" />
+                  Green Machine Risk Evaluation
+                </h3>
+                {parsedStrategyData.riskViolation ? (
+                  <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded flex items-center gap-1.5 shadow-[0_0_10px_rgba(225,29,72,0.3)]">
+                    <SafeIcon name="AlertTriangle" className="w-3 h-3" />
+                    Risk Gate: WARNING
+                  </span>
+                ) : (
+                  <span className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded flex items-center gap-1.5 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                    <SafeIcon name="CheckCircle" className="w-3 h-3" />
+                    Risk Gate: PASSED
+                  </span>
+                )}
+             </div>
+
+             {parsedStrategyData.riskWarning && (
+                <div className="z-10 bg-rose-500/10 border-l-2 border-rose-500 p-2 text-xs text-rose-300">
+                  {parsedStrategyData.riskWarning}
+                </div>
+             )}
+
+             <div className="z-10 flex flex-col gap-2">
+                {parsedStrategyData.riskLevel && (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-slate-400 uppercase tracking-wide font-medium">Assessed Risk:</span>
+                    <span className={`px-2 py-0.5 rounded font-bold ${
+                        parsedStrategyData.riskLevel === 'Low' ? 'bg-emerald-500/20 text-emerald-300' :
+                        parsedStrategyData.riskLevel === 'Medium' ? 'bg-amber-500/20 text-amber-300' :
+                        'bg-rose-500/20 text-rose-300'
+                    }`}>
+                      {parsedStrategyData.riskLevel}
+                    </span>
+                  </div>
+                )}
+
+                {parsedStrategyData.actionItems && Array.isArray(parsedStrategyData.actionItems) && (
+                  <div className="mt-2 text-sm">
+                    <span className="text-slate-400 uppercase text-[10px] tracking-wide font-medium block mb-1">Strategic Directives</span>
+                    <ul className="list-none space-y-1">
+                      {parsedStrategyData.actionItems.map((item, idx) => (
+                        <li key={idx} className="flex items-start gap-2 text-slate-300">
+                          <span className="text-emerald-500/70 mt-0.5">▹</span>
+                          <span>{item}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+             </div>
+           </div>
+        )}
+
         <div className="text-slate-300 whitespace-pre-wrap relative">
           {consultError && (
             <div className="mb-4 bg-rose-500/10 border border-rose-500/50 p-4 rounded-lg flex flex-col items-start gap-3 shadow-[0_0_15px_rgba(225,29,72,0.2)]">
