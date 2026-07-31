@@ -22,6 +22,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   const [latencyHistory, setLatencyHistory] = useState([]);
   const [activeAiModel, setActiveAiModel] = useState(window.localStorage.getItem("ai_model"));
   const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
+  const [healthData, setHealthData] = useState(null);
 
   useEffect(() => {
     const handleRealtimeStatus = (e) => setRealtimeStatus(e.detail);
@@ -71,6 +72,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         }
       });
+      if (res.ok) { setHealthData(await res.clone().json()); }
       const end = performance.now();
       let currentLatency = Math.round(end - start);
 

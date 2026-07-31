@@ -205,6 +205,36 @@ export default function StrategyConsultantTerminal() {
   // Handles copying the recommendation strategy to the clipboard
   // Supports switching between Markdown and JSON formats with defensive fallbacks
 
+  const handleDownloadTranscript = () => {
+    let transcriptText = "";
+    if (parsedStrategyData) {
+        const riskLevel = parsedStrategyData?.riskLevel || 'UNKNOWN';
+        const analysis = parsedStrategyData?.analysis || 'No analysis available.';
+        const actionItems = parsedStrategyData?.actionItems || [];
+
+        transcriptText = `====================================================\n`;
+        transcriptText += `AXiM Green Machine Strategy Evaluation Transcript\n`;
+        transcriptText += `Date: ${new Date().toLocaleString()}\n`;
+        transcriptText += `Risk Level: ${riskLevel}\n`;
+        transcriptText += `====================================================\n\n`;
+        transcriptText += `ANALYSIS:\n${analysis}\n\n`;
+        transcriptText += `ACTION ITEMS:\n`;
+        actionItems.forEach(item => transcriptText += `- ${item}\n`);
+    } else {
+        transcriptText = "No active strategy generated.";
+    }
+
+    const blob = new Blob([transcriptText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `strategy-consult-transcript-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleSpeak = () => {
     if (isSpeaking) {
       window.speechSynthesis.cancel();
@@ -377,6 +407,13 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
             <SafeIcon name="Shield" className="w-3 h-3" />
             {provider !== '{provider}' ? provider : 'DeepSeek-V3'}
           </span>
+          <button
+            onClick={handleDownloadTranscript}
+            title="Download Transcript (.txt)"
+            className="p-1.5 rounded bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors flex items-center border border-slate-700 ml-2"
+          >
+            <SafeIcon name="Download" className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
