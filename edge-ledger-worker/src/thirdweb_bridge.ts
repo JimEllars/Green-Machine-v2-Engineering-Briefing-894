@@ -823,27 +823,41 @@ export default {
       }
 
       try {
-        const payload = await request.json() as any;
-        const { symbol, action, price, bot_id, signal_id, timestamp } = payload;
+        // Clone request so we can read text if JSON fails
+        const reqClone = request.clone();
+        try {
+          const payload = await request.json() as any;
+          const { symbol, action, price, bot_id, signal_id, timestamp } = payload;
 
-        const keyName = `anny_signal_log:${Date.now()}`;
-        const logData = {
-          symbol: symbol || 'UNKNOWN',
-          action: action || 'UNKNOWN',
-          price: price || 0,
-          bot_id: bot_id || 'N/A',
-          signal_id: signal_id || 'N/A',
-          timestamp: timestamp || Date.now(),
-          received_at: Date.now()
-        };
+          const keyName = `anny_signal_log:${Date.now()}`;
+          const logData = {
+            symbol: symbol || 'UNKNOWN',
+            action: action || 'UNKNOWN',
+            price: price || 0,
+            bot_id: bot_id || 'N/A',
+            signal_id: signal_id || 'N/A',
+            timestamp: timestamp || Date.now(),
+            received_at: Date.now()
+          };
 
-        await env.GREEN_STATE.put(keyName, JSON.stringify(logData), { expirationTtl: 604800 });
+          await env.GREEN_STATE.put(keyName, JSON.stringify(logData), { expirationTtl: 604800 });
 
-        return new Response(JSON.stringify({ success: true, status: 'signal_logged', log_id: keyName }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders }
-        });
-      } catch (e) {
+          return new Response(JSON.stringify({ success: true, status: 'signal_logged', log_id: keyName }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        } catch (e: any) {
+          const rawText = await reqClone.text();
+          const keyName = `dlq_signal_${Date.now()}`;
+          await env.GREEN_STATE.put(keyName, rawText, {
+            metadata: { error: e.message, status: 'malformed_signal_buffered' }
+          });
+          return new Response(JSON.stringify({ success: false, status: 'buffered_to_dlq', dlq_id: keyName }), {
+            status: 202,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+      } catch (e: any) {
         return new Response(JSON.stringify({ error: 'Failed to ingest inbound webhook' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
@@ -1550,6 +1564,31 @@ export default {
 
 
 
+    if (request.method === 'POST' && url.pathname === '/api/admin/validate-signal') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        const payload = await request.json() as any;
+        const { symbol, action, amount_usdt } = payload;
+
+        // Mocking the validation against cached USDT balance and CFO state as requested.
+        return new Response(JSON.stringify({
+          approved: true,
+          symbol: symbol || 'UNKNOWN',
+          cfo_state: 'accumulate',
+          reason: 'Signal aligned with structural strength and within drawdown limits'
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e: any) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/admin/renew-anny-session') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
@@ -1593,7 +1632,7 @@ export default {
           marketContextString = `Live Telemetry: BTC: $${btc}, ETH: $${eth}, SOL: $${sol}`;
         }
 
-        let systemMessage = `You are the AXiM Green Machine Strategy Consultant. Current Market Context: [${marketContextString}]. Respond in strict JSON with fields: "analysis" (string), "riskLevel" (string: 'Low'|'Medium'|'High'|'Critical'), and "actionItems" (array of strings).`;
+        let systemMessage = `You are the AXiM Green Machine Strategy Consultant. Current Market Context: [${marketContextString}]. Ecosystem Risk Rules: Max Drawdown Limit = 15%, Max Single Asset Exposure = 35%. Validate user strategy prompts against these rules. If exceeded, set 'riskViolation': true and include 'riskWarning' in your JSON response. Respond in strict JSON with fields: "analysis" (string), "riskLevel" (string: 'Low'|'Medium'|'High'|'Critical'), "actionItems" (array of strings), "riskViolation" (boolean, optional), and "riskWarning" (string, optional).`;
 
 
         const signalList = await env.GREEN_STATE.list({ prefix: 'anny_signal_log:', limit: 5 });
@@ -1776,7 +1815,7 @@ export default {
         url.pathname !== '/api/strategy-consult' &&
         url.pathname !== '/api/quarantine-purge' &&
         url.pathname !== '/api/health' &&
-        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/quarantine-retry-purge'
+        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }
