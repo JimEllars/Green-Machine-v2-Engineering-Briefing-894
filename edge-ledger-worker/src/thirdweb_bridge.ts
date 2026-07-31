@@ -425,6 +425,46 @@ export default {
             }
             deptSummariesHtml += '</ul>';
 
+            const signalListExec = await env.GREEN_STATE.list({ prefix: 'anny_signal_log:', limit: 1000 });
+            let totalSignals = 0;
+            let buyCount = 0;
+            let tpCount = 0;
+            let slCount = 0;
+            let dcaCount = 0;
+
+            const nowTimeSignal = Date.now();
+            for (const key of (signalListExec as any).keys) {
+                const parts = key.name.split(':');
+                const tsStr = parts[1];
+                if (tsStr) {
+                    const ts = parseInt(tsStr, 10);
+                    if (!isNaN(ts) && nowTimeSignal - ts <= 86400000) {
+                        const signalRaw = await env.GREEN_STATE.get(key.name);
+                        if (signalRaw) {
+                            try {
+                                const s = JSON.parse(signalRaw);
+                                totalSignals++;
+                                const act = (s.action || '').toLowerCase();
+                                if (act === 'buy' || act === 'long') buyCount++;
+                                else if (act === 'tp' || act === 'take_profit' || act === 'take-profit') tpCount++;
+                                else if (act === 'sl' || act === 'stop_loss' || act === 'stop-loss') slCount++;
+                                else if (act === 'dca') dcaCount++;
+                            } catch(e) {}
+                        }
+                    }
+                }
+            }
+
+            const signalSummaryHtml = totalSignals > 0
+              ? `<div style="border: 1px solid #6366f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #eef2ff;">
+                    <h4 style="color: #4338ca; margin-top: 0;">Anny 24h Signal Executions</h4>
+                    <p style="margin-bottom: 0; font-weight: bold;">${totalSignals} total triggers (${buyCount} buys, ${tpCount} take-profits, ${slCount} stop-losses, ${dcaCount} DCAs)</p>
+                 </div>`
+              : `<div style="border: 1px solid #6366f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #eef2ff;">
+                    <h4 style="color: #4338ca; margin-top: 0;">Anny 24h Signal Executions</h4>
+                    <p style="margin-bottom: 0;">0 total triggers</p>
+                 </div>`;
+
             const btc = parsedData?.crypto?.BTC?.price || 'N/A';
             const eth = parsedData?.crypto?.ETH?.price || 'N/A';
             const sol = parsedData?.crypto?.SOL?.price || 'N/A';
@@ -447,6 +487,7 @@ export default {
                   <h2>Executive Daily Briefing</h2>
                   <h3>App Development Progress Summary</h3>
                   <p>Sprint 1.8: Dual Executive Recipients, Pre-5am CST CRON, Departmental Aggregation & HITL Action Links is active.</p>
+                  ${signalSummaryHtml}
                   <h3>Departmental Progress</h3>
                   ${deptSummariesHtml}
                   <h3>System Work & Operations Summary</h3>
@@ -736,6 +777,74 @@ export default {
               status: 500,
               headers: { 'Content-Type': 'application/json', ...corsHeaders }
           });
+      }
+    }
+
+
+
+    if (request.method === 'GET' && url.pathname === '/api/anny-signals') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        const signalList = await env.GREEN_STATE.list({ prefix: 'anny_signal_log:', limit: 10 });
+        let signals = [];
+
+        for (const key of signalList.keys) {
+            const signalRaw = await env.GREEN_STATE.get(key.name);
+            if (signalRaw) {
+                try {
+                    signals.push(JSON.parse(signalRaw));
+                } catch(e) {}
+            }
+        }
+
+        signals.sort((a, b) => b.timestamp - a.timestamp);
+
+        return new Response(JSON.stringify({ success: true, data: signals.slice(0, 10) }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to fetch anny signals' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/webhooks/anny-signal') {
+      const signature = request.headers.get('X-Axim-Signature');
+      const token = url.searchParams.get('token');
+
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        if (!token || (token !== env.AXIM_INTERNAL_KEY && token !== (env as any).ANNY_AUTH_TOKEN)) {
+           return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+        }
+      }
+
+      try {
+        const payload = await request.json() as any;
+        const { symbol, action, price, bot_id, signal_id, timestamp } = payload;
+
+        const keyName = `anny_signal_log:${Date.now()}`;
+        const logData = {
+          symbol: symbol || 'UNKNOWN',
+          action: action || 'UNKNOWN',
+          price: price || 0,
+          bot_id: bot_id || 'N/A',
+          signal_id: signal_id || 'N/A',
+          timestamp: timestamp || Date.now(),
+          received_at: Date.now()
+        };
+
+        await env.GREEN_STATE.put(keyName, JSON.stringify(logData), { expirationTtl: 604800 });
+
+        return new Response(JSON.stringify({ success: true, status: 'signal_logged', log_id: keyName }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to ingest inbound webhook' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
 
@@ -1049,6 +1158,46 @@ export default {
         }
         deptSummariesHtml += '</ul>';
 
+            const signalListExec = await env.GREEN_STATE.list({ prefix: 'anny_signal_log:', limit: 1000 });
+            let totalSignals = 0;
+            let buyCount = 0;
+            let tpCount = 0;
+            let slCount = 0;
+            let dcaCount = 0;
+
+            const nowTimeSignal = Date.now();
+            for (const key of (signalListExec as any).keys) {
+                const parts = key.name.split(':');
+                const tsStr = parts[1];
+                if (tsStr) {
+                    const ts = parseInt(tsStr, 10);
+                    if (!isNaN(ts) && nowTimeSignal - ts <= 86400000) {
+                        const signalRaw = await env.GREEN_STATE.get(key.name);
+                        if (signalRaw) {
+                            try {
+                                const s = JSON.parse(signalRaw);
+                                totalSignals++;
+                                const act = (s.action || '').toLowerCase();
+                                if (act === 'buy' || act === 'long') buyCount++;
+                                else if (act === 'tp' || act === 'take_profit' || act === 'take-profit') tpCount++;
+                                else if (act === 'sl' || act === 'stop_loss' || act === 'stop-loss') slCount++;
+                                else if (act === 'dca') dcaCount++;
+                            } catch(e) {}
+                        }
+                    }
+                }
+            }
+
+            const signalSummaryHtml = totalSignals > 0
+              ? `<div style="border: 1px solid #6366f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #eef2ff;">
+                    <h4 style="color: #4338ca; margin-top: 0;">Anny 24h Signal Executions</h4>
+                    <p style="margin-bottom: 0; font-weight: bold;">${totalSignals} total triggers (${buyCount} buys, ${tpCount} take-profits, ${slCount} stop-losses, ${dcaCount} DCAs)</p>
+                 </div>`
+              : `<div style="border: 1px solid #6366f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #eef2ff;">
+                    <h4 style="color: #4338ca; margin-top: 0;">Anny 24h Signal Executions</h4>
+                    <p style="margin-bottom: 0;">0 total triggers</p>
+                 </div>`;
+
         const btc = parsedData?.crypto?.BTC?.price || 'N/A';
         const eth = parsedData?.crypto?.ETH?.price || 'N/A';
         const sol = parsedData?.crypto?.SOL?.price || 'N/A';
@@ -1111,6 +1260,7 @@ export default {
               ${portfolioSummaryHtml}
               <h3>App Development Progress Summary</h3>
               <p>Sprint 1.8: Dual Executive Recipients, Pre-5am CST CRON, Departmental Aggregation & HITL Action Links is active.</p>
+                  ${signalSummaryHtml}
                   <h3>Departmental Progress</h3>
                   ${deptSummariesHtml}
               <h3>System Work & Operations Summary</h3>
@@ -1445,6 +1595,24 @@ export default {
 
         let systemMessage = `You are the AXiM Green Machine Strategy Consultant. Current Market Context: [${marketContextString}]. Respond in strict JSON with fields: "analysis" (string), "riskLevel" (string: 'Low'|'Medium'|'High'|'Critical'), and "actionItems" (array of strings).`;
 
+
+        const signalList = await env.GREEN_STATE.list({ prefix: 'anny_signal_log:', limit: 5 });
+        if (signalList.keys && signalList.keys.length > 0) {
+            let signals = [];
+            for (const key of signalList.keys) {
+                const signalRaw = await env.GREEN_STATE.get(key.name);
+                if (signalRaw) {
+                    try {
+                        const s = JSON.parse(signalRaw);
+                        signals.push(`${s.symbol} ${s.action} @ $${s.price} (Bot #${s.bot_id})`);
+                    } catch(e) {}
+                }
+            }
+            if (signals.length > 0) {
+                systemMessage += ` Recent Anny Signals: [${signals.join(', ')}].`;
+            }
+        }
+
         const feedbackList = await env.GREEN_STATE.list({ prefix: 'exec_feedback:', limit: 1 });
         if (feedbackList.keys && feedbackList.keys.length > 0) {
           const feedbackContent = await env.GREEN_STATE.get(feedbackList.keys[0].name);
@@ -1602,7 +1770,7 @@ export default {
         url.pathname !== '/api/cache-sync' &&
         url.pathname !== '/api/admin/dept-summary' &&
         url.pathname !== '/api/admin/send-exec-briefing' &&
-        url.pathname !== '/api/webhooks/emailit-inbound' &&
+        url.pathname !== '/api/webhooks/emailit-inbound' && url.pathname !== '/api/webhooks/anny-signal' && url.pathname !== '/api/anny-signals' &&
         url.pathname !== '/api/dlq-flush' &&
         url.pathname !== '/api/market-cache' &&
         url.pathname !== '/api/strategy-consult' &&
