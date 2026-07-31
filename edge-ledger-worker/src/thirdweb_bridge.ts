@@ -271,7 +271,7 @@ async function sendEmailItNotification(
     const prevTelemetryRaw = await env.GREEN_STATE.get("emailit_telemetry");
     let prevTelemetry = {};
     if (prevTelemetryRaw) {
-        try { prevTelemetry = JSON.parse(prevTelemetryRaw); } catch(e) {}
+        try { prevTelemetry = JSON.parse(prevTelemetryRaw); } catch(e) { console.error('Failed to parse prevTelemetryRaw'); }
     }
     const telemetry: any = {
        ...prevTelemetry,
@@ -648,7 +648,7 @@ export default {
                     if (val) {
                         try {
                             summaries.push(JSON.parse(val));
-                        } catch(e) {}
+                        } catch(e) { console.error('Failed to execute'); }
                     }
                 }
             }
@@ -1145,6 +1145,46 @@ export default {
       }
     }
 
+    if (request.method === 'POST' && url.pathname === '/api/admin/force-briefing-dispatch') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+      try {
+        // Trigger via internal HTTP call due to helper functions structure
+        await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, { method: 'POST', headers: { 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'apikey': env.SUPABASE_SERVICE_KEY }, body: JSON.stringify({ endpoint: '/api/admin/force-briefing-dispatch', count: 1 }) });
+        return new Response(JSON.stringify({ success: true, dispatched_at: new Date().toISOString() }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      } catch(e) {
+        return new Response(JSON.stringify({ error: 'Failed to dispatch briefing' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
+    // Get 24-hour settlement telemetry helper
+    async function getSettlementTelemetry24h(env: Env) {
+      try {
+        const cacheResult = await env.MARKET_CACHE.getWithMetadata('settlement_telemetry_24h');
+        if (cacheResult.value) {
+            const parsed = JSON.parse(cacheResult.value);
+            if (Date.now() - (parsed.updated_at || 0) < 300000) {
+                return { count: parsed.count || 0, volume_usd: parsed.volume_usd || 0 };
+            }
+        }
+        // Fetch from Supabase
+        const dbResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions?select=amount,status,created_at&status=eq.minted&created_at=gte.${new Date(Date.now() - 86400000).toISOString()}`, {
+          headers: { 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'apikey': env.SUPABASE_SERVICE_KEY }
+        });
+        if (!dbResponse.ok) return { count: 0, volume_usd: 0 };
+        const txs: any[] = await dbResponse.json();
+        let volume = 0;
+        txs.forEach((tx: any) => volume += (parseFloat(tx.amount) || 0));
+        const telemetry = { count: txs.length, volume_usd: volume, updated_at: Date.now() };
+        await env.MARKET_CACHE.put('settlement_telemetry_24h', JSON.stringify(telemetry), { expirationTtl: 300 });
+        return { count: txs.length, volume_usd: volume };
+      } catch(e) {
+        return { count: 0, volume_usd: 0 };
+      }
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/dlq-flush') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
@@ -1266,6 +1306,25 @@ export default {
         });
       }
 
+      let etagSource = cacheResult.value;
+      let hash = 0;
+      for (let i = 0; i < etagSource.length; i++) {
+        hash = (hash << 5) - hash + etagSource.charCodeAt(i);
+        hash |= 0;
+      }
+      const etag = `W/"market-${Math.abs(hash)}"`;
+
+      if (request.headers.get("If-None-Match") === etag) {
+        return new Response(null, {
+          status: 304,
+          headers: {
+            "ETag": etag,
+            "Cache-Control": "public, max-age=15, stale-while-revalidate=45",
+            ...corsHeaders
+          }
+        });
+      }
+
       let parsedData;
       try {
         parsedData = JSON.parse(cacheResult.value);
@@ -1289,6 +1348,7 @@ export default {
       return new Response(JSON.stringify(parsedData), {
         status: 200,
         headers: {
+          'ETag': etag,
           'Content-Type': 'application/json',
           'Cache-Control': 'public, max-age=15, stale-while-revalidate=45',
           'Server-Timing': `worker;dur=${duration};desc="Cloudflare Edge Execution"`,
@@ -1491,7 +1551,8 @@ export default {
           session_valid: Boolean(await env.GREEN_STATE.get('anny_session_token')),
           mode: env.ANNY_AUTH_MODE || "session-token"
         },
-        anny_auth_telemetry: await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' })
+        anny_auth_telemetry: await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' }),
+        settlement_telemetry_24h: await getSettlementTelemetry24h(env)
       }), {
         status: 200,
         headers: {

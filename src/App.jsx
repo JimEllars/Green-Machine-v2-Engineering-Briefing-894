@@ -119,6 +119,21 @@ function App() {
   };
 
 
+  const [isForceDispatching, setIsForceDispatching] = useState(false);
+  const handleForceDispatch = async () => {
+    setIsForceDispatching(true);
+    try {
+      const workerUrl = getWorkerUrl();
+      await fetch(`${workerUrl}/api/admin/force-briefing-dispatch`, {
+        method: 'POST',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+    } catch(e) { console.error("Force dispatch failed:", e); }
+    setIsForceDispatching(false);
+  };
+
   const [isRenewingSession, setIsRenewingSession] = useState(false);
   const [renewSessionSuccess, setRenewSessionSuccess] = useState(false);
   const [isResettingCircuit, setIsResettingCircuit] = useState(false);
