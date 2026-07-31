@@ -12,6 +12,34 @@ export default function MarketFeedMatrix() {
   const [cfoFilter, setCfoFilter] = useState('All');
 
 
+
+  const [annySignals, setAnnySignals] = useState([]);
+  const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
+
+  useEffect(() => {
+    const fetchSignals = async () => {
+      try {
+        const workerUrl = getWorkerUrl();
+        const response = await fetch(`${workerUrl}/api/anny-signals`, {
+          headers: {
+            'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.success && data.data) {
+             setAnnySignals(data.data);
+          }
+        }
+      } catch (error) {
+         console.error("Failed to fetch anny signals", error);
+      }
+    };
+    fetchSignals();
+    const interval = setInterval(fetchSignals, 15000); // 15s refresh for signals
+    return () => clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     const fetchMarketData = async () => {
       try {
@@ -203,7 +231,62 @@ export default function MarketFeedMatrix() {
             )}
           </motion.div>
         ))}
+
+      {/* Anny Signal & Bot Activity Panel */}
+      <div className="mt-8 border border-zinc-800/50 rounded-xl bg-black/40 backdrop-blur-md overflow-hidden shadow-xl">
+        <div
+          className="p-4 bg-zinc-900/60 flex items-center justify-between cursor-pointer hover:bg-zinc-800/60 transition-colors border-b border-zinc-800/50"
+          onClick={() => setIsSignalsExpanded(!isSignalsExpanded)}
+        >
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-indigo-500/20 rounded-lg border border-indigo-500/30">
+               <SafeIcon name="Activity" className="w-5 h-5 text-indigo-400" />
+             </div>
+             <div>
+               <h3 className="text-white font-semibold flex items-center gap-2">Live Anny Signal Activity</h3>
+               <p className="text-xs text-slate-400">Recent webhooks & bot trade events</p>
+             </div>
+          </div>
+          <SafeIcon name={isSignalsExpanded ? "ChevronUp" : "ChevronDown"} className="w-5 h-5 text-slate-400" />
+        </div>
+
+        {isSignalsExpanded && (
+          <div className="p-4 space-y-3">
+            {annySignals.length === 0 ? (
+               <div className="text-center py-6 text-slate-500 text-sm">No recent signals logged in KV.</div>
+            ) : (
+               annySignals.map((signal, idx) => {
+                 const isPositive = ['buy', 'long', 'take_profit', 'tp', 'take-profit'].includes((signal.action || '').toLowerCase());
+                 const isNegative = ['sell', 'short', 'stop_loss', 'sl', 'stop-loss'].includes((signal.action || '').toLowerCase());
+                 const badgeColor = isPositive ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
+                                   isNegative ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' :
+                                   'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
+
+                 return (
+                   <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 hover:border-zinc-600/50 transition-colors">
+                     <div className="flex items-center gap-4 mb-2 sm:mb-0">
+                       <span className={`text-xs font-bold px-2.5 py-1 rounded-md border ${badgeColor}`}>
+                         {(signal.action || 'UNKNOWN').toUpperCase()}
+                       </span>
+                       <span className="text-white font-semibold">{signal.symbol || 'N/A'}</span>
+                       <span className="text-slate-400 font-mono text-sm">@ ${(signal.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+                     </div>
+                     <div className="flex items-center gap-4 text-xs text-slate-500">
+                        <span>Bot #{signal.bot_id || 'N/A'}</span>
+                        <span className="flex items-center gap-1">
+                          <SafeIcon name="Clock" className="w-3 h-3" />
+                          {new Date(signal.timestamp || Date.now()).toLocaleTimeString()}
+                        </span>
+                     </div>
+                   </div>
+                 );
+               })
+            )}
+          </div>
+        )}
       </div>
+
+</div>
     </div>
   );
 }
