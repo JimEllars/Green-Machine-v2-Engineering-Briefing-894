@@ -686,6 +686,33 @@ export default {
       }
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/admin/verify-deployment') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized', { status: 401, headers: corsHeaders });
+      }
+      try {
+        const kv_green_state = !!env.GREEN_STATE;
+        const kv_market_cache = !!env.MARKET_CACHE;
+        const workers_ai = !!env.AI;
+        const supabase_ledger = !!env.SUPABASE_URL && !!env.SUPABASE_SERVICE_KEY;
+        const isOperational = kv_green_state && kv_market_cache && workers_ai && supabase_ledger;
+        return new Response(JSON.stringify({
+          success: true,
+          deployment_status: isOperational ? 'OPERATIONAL' : 'DEGRADED',
+          bindings: {
+            kv_green_state,
+            kv_market_cache,
+            workers_ai,
+            supabase_ledger
+          },
+          timestamp: Date.now()
+        }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to verify deployment status' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
     if (request.method === 'GET' && url.pathname === '/api/admin/dept-summary') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
