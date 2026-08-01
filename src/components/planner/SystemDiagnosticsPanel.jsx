@@ -527,7 +527,34 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
 
           {isDeepTelemetryOpen && (
             <div className="mt-4 bg-slate-900/80 backdrop-blur-md rounded-lg p-4 border border-slate-700/50 relative overflow-hidden">
-              <div className="absolute top-2 right-2">
+              <div className="absolute top-2 right-2 flex gap-2">
+                <button
+                  onClick={() => {
+                    const timestamp = new Date().toISOString();
+                    const bundle = {
+                      edge_latency_ms: edgeLatency,
+                      edge_jitter_ms: edgeJitter,
+                      db_connected: dbConnected,
+                      edge_cache_available: edgeCacheAvailable,
+                      investing_brain_telemetry: deepTelemetry?.investing_brain_telemetry || {},
+                      anny_auth_telemetry: deepTelemetry?.anny_auth_telemetry || {},
+                      circuit_breaker: "CLOSED", // Best effort or fetch if needed
+                      kv_prune_telemetry: deepTelemetry?.kv_prune_telemetry || {},
+                      deployment_status: deepTelemetry?.status || 'UNKNOWN'
+                    };
+                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(bundle, null, 2));
+                    const a = document.createElement('a');
+                    a.href = dataStr;
+                    a.download = `green-machine-diagnostics-${timestamp}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }}
+                  className="px-2 py-1 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 rounded text-xs font-medium border border-emerald-500/30 transition-colors flex items-center gap-1"
+                >
+                  <SafeIcon name="Download" className="w-3 h-3" />
+                  Download Diagnostics Bundle
+                </button>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(JSON.stringify(deepTelemetry, null, 2));

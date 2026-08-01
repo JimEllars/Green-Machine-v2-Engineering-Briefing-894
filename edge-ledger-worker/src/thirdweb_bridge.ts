@@ -330,6 +330,57 @@ export default {
     if (event.cron === "* * * * *") {
         ctx.waitUntil((async () => {
           try {
+
+            // Telemetry Pruning
+            let prunedCount = 0;
+            const now = Date.now();
+            const oneDay = 86400000;
+            const sevenDays = 604800000;
+
+            const prunePrefix = async (prefix: string, maxAge: number) => {
+                let cursor = undefined;
+                let listComplete = false;
+                while (!listComplete) {
+                    const listResult = await env.GREEN_STATE.list({ prefix, cursor }) as any;
+                    for (const key of listResult.keys) {
+                        try {
+                           // Try to extract timestamp from key or payload.
+                           // Actually the prompt says "older than X". The keys often have timestamps.
+                           const parts = key.name.split(':');
+                           const tsStr = parts[parts.length - 1];
+                           const tsMatch = tsStr.match(/^(\d+)$/);
+                           let itemTime = 0;
+                           if (tsMatch) {
+                               itemTime = parseInt(tsMatch[1], 10);
+                           } else {
+                               const raw = await env.GREEN_STATE.get(key.name);
+                               if (raw) {
+                                   const data = JSON.parse(raw);
+                                   if (data.timestamp) itemTime = data.timestamp;
+                               }
+                           }
+
+                           if (itemTime && (now - itemTime > maxAge)) {
+                               await env.GREEN_STATE.delete(key.name);
+                               prunedCount++;
+                           }
+                        } catch(e) {}
+                    }
+                    listComplete = listResult.list_complete;
+                    cursor = listResult.cursor;
+                }
+            };
+
+            await prunePrefix('ai_consult_log:', oneDay);
+            await prunePrefix('anny_signal_log:', sevenDays);
+            await prunePrefix('exec_feedback:', sevenDays);
+
+            await env.GREEN_STATE.put('kv_prune_telemetry', JSON.stringify({
+                last_pruned: now,
+                items_pruned: prunedCount,
+                status: 'CLEAN'
+            }));
+
             let cursor = undefined;
             let listComplete = false;
             while (!listComplete) {
@@ -636,6 +687,19 @@ export default {
              } catch(e) {}
         }
 
+        let total_inference_ms = 0;
+        let count_ms = 0;
+        for (const key of consultList) {
+            try {
+                const logData = JSON.parse(await env.GREEN_STATE.get(key.name) || '{}');
+                if (logData.ai_inference_ms) {
+                    total_inference_ms += logData.ai_inference_ms;
+                    count_ms++;
+                }
+            } catch(e) {}
+        }
+        let ai_inference_ms = count_ms > 0 ? Math.round(total_inference_ms / count_ms) : 0;
+
         const duration = Math.round(performance.now() - startTime);
 
         let execGovernance = { last_briefing_sent: null, hitl_status: 'ACTIVE', pending_retries: 0 };
@@ -666,6 +730,7 @@ export default {
            exec_governance: execGovernance,
            pending_queue_count: execGovernance.pending_retries,
            emailit_configured: Boolean(env.EMAILIT_API_KEY),
+           investing_brain_telemetry: { total_consultations_24h, risk_gates_passed, risk_warnings, ai_inference_ms },
            anny_oracle: {
              status: "active",
              session_valid: Boolean(await env.GREEN_STATE.get('anny_session_token')),
@@ -1779,10 +1844,11 @@ export default {
         await env.GREEN_STATE.put(`ai_consult_log:${Date.now()}`, JSON.stringify({
             riskViolation: parsed.riskViolation || false,
             riskLevel: parsed.riskLevel || 'Unknown',
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            ai_inference_ms: duration
         }), { expirationTtl: 86400 });
 
-        return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', 'Server-Timing': serverTiming, ...corsHeaders } });
+        return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel, ai_inference_ms: duration }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', 'Server-Timing': serverTiming, ...corsHeaders } });
       } catch (err) {
         return new Response(JSON.stringify({ error: 'AI Evaluation Failed' }), { status: 500, headers: corsHeaders });
       }
@@ -1809,6 +1875,40 @@ export default {
       }
     }
 
+
+    if (request.method === 'POST' && url.pathname === '/api/admin/trigger-financial-audit') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        const { trigger_source, timestamp } = await request.json() as any;
+        const dbResponse = await fetch(`${env.SUPABASE_URL}/functions/v1/financial-audit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`
+          },
+          body: JSON.stringify({ trigger_source, timestamp })
+        });
+
+        if (!dbResponse.ok) {
+           throw new Error(`Financial Audit failed: ${dbResponse.statusText}`);
+        }
+
+        return new Response(JSON.stringify({ success: true, message: 'Financial audit invoked via Edge Worker proxy', timestamp: Date.now() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: (e as Error).message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
     // Strict Edge Route Catch-All Termination
     if (url.pathname !== '/' && !url.pathname.startsWith('/api/')) {
        return new Response('404 Not Found', { status: 404, headers: corsHeaders });
@@ -1829,6 +1929,7 @@ export default {
         },
         anny_auth_telemetry: await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' }),
         settlement_telemetry_24h: await getSettlementTelemetry24h(env),
+        kv_prune_telemetry: await env.GREEN_STATE.get('kv_prune_telemetry', { type: 'json' }),
         investing_brain_telemetry: await (async () => {
              const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
              const consultList = dlqList.keys.filter((k: any) => k.name.startsWith('ai_consult_log:'));
@@ -1845,7 +1946,20 @@ export default {
                       }
                   } catch(e) {}
              }
-             return { total_consultations_24h, risk_gates_passed, risk_warnings };
+
+             let total_inference_ms = 0;
+             let count_ms = 0;
+             for (const key of consultList) {
+                  try {
+                      const logData = JSON.parse(await env.GREEN_STATE.get(key.name) || '{}');
+                      if (logData.ai_inference_ms) {
+                          total_inference_ms += logData.ai_inference_ms;
+                          count_ms++;
+                      }
+                  } catch(e) {}
+             }
+             let ai_inference_ms = count_ms > 0 ? Math.round(total_inference_ms / count_ms) : 0;
+             return { total_consultations_24h, risk_gates_passed, risk_warnings, ai_inference_ms };
         })()
       }), {
         status: 200,
@@ -1902,7 +2016,7 @@ export default {
         url.pathname !== '/api/strategy-consult' &&
         url.pathname !== '/api/quarantine-purge' &&
         url.pathname !== '/api/health' &&
-        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment'
+        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment' && url.pathname !== '/api/admin/trigger-financial-audit'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }

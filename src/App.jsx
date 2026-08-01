@@ -424,15 +424,12 @@ function App() {
     try {
       // In a real environment, you'd use a service role key for this sensitive operation if the Edge Function requires it,
       // but for this prototype, we'll use the anon key if that's what's available, or a specific env var.
-      const authHeader = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
-        ? `Bearer ${import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY}`
-        : `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`;
-
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1/financial-audit`, {
+      const workerUrl = getWorkerUrl();
+      const response = await fetch(`${workerUrl}/api/admin/trigger-financial-audit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': authHeader
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         },
         body: JSON.stringify({
           trigger_source: 'manual_sweep_dashboard',
