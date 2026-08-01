@@ -61,7 +61,7 @@ export async function syncMarketCache(env: Env): Promise<void> {
       if (!res.ok) {
          throw new Error(`Failed to fetch ${asset} from anny.trade: ${res.status}`);
       }
-      const data = await res.json();
+      const data = await res.json() as any;
 
       const chartData = data?.payload?.data;
       if (chartData && chartData.length > 0) {

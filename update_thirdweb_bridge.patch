@@ -1,0 +1,90 @@
+--- edge-ledger-worker/src/thirdweb_bridge.ts
++++ edge-ledger-worker/src/thirdweb_bridge.ts
+@@ -1571,13 +1571,32 @@
+       try {
+         const payload = await request.json() as any;
+         const { symbol, action, amount_usdt } = payload;
+
+-        // Mocking the validation against cached USDT balance and CFO state as requested.
++        const annyPortfolioRaw = await env.GREEN_STATE.get('anny_portfolio_summary', { type: 'json' }) as any;
++        const available_usdt = annyPortfolioRaw?.liquid_usdt || 0;
++
++        const marketCacheRaw = await env.MARKET_CACHE.get('latest_prices', { type: 'json' }) as any;
++        const cfo_state = marketCacheRaw?.cfo_trend_state?.[symbol] || 'wait';
++
++        let approved = false;
++        let reason = "";
++
++        if (amount_usdt > available_usdt) {
++            reason = "Trade rejected: Insufficient liquid USDT balance";
++        } else if (cfo_state === 'distribute') {
++            reason = "Trade rejected: Asset showing structural weakness (Distribute state)";
++        } else if (cfo_state === 'accumulate' || cfo_state === 'wait') {
++            approved = true;
++            reason = "Signal aligned with structural strength and within drawdown limits";
++        } else {
++            reason = "Trade rejected: Unknown CFO state";
++        }
++
+         return new Response(JSON.stringify({
+-          approved: true,
++          approved: approved,
+           symbol: symbol || 'UNKNOWN',
+-          cfo_state: 'accumulate',
+-          reason: 'Signal aligned with structural strength and within drawdown limits'
++          cfo_state: cfo_state,
++          reason: reason,
++          available_usdt: available_usdt
+         }), {
+           status: 200,
+           headers: { 'Content-Type': 'application/json', ...corsHeaders }
+@@ -1691,6 +1710,13 @@
+         let parsed = typeof response.response === 'string' ? JSON.parse(response.response) : response.response;
+         const duration = Math.round(performance.now() - startTime);
+         const aiModel = isFallback ? 'mistral-7b' : 'llama-3.1';
+         const serverTiming = isFallback ? `workers-ai-fallback;dur=${duration};ai_model=${aiModel}` : `worker;dur=${duration};desc="Cloudflare Edge Execution";ai_model=${aiModel}`;
++
++        await env.GREEN_STATE.put(`ai_consult_log:${Date.now()}`, JSON.stringify({
++            riskViolation: parsed.riskViolation || false,
++            riskLevel: parsed.riskLevel || 'Unknown',
++            timestamp: Date.now()
++        }), { expirationTtl: 86400 });
+
+         return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', 'Server-Timing': serverTiming, ...corsHeaders } });
+       } catch (err) {
+@@ -608,6 +634,22 @@
+         } catch (e) {
+             console.error('Failed to parse emailit telemetry', e);
+         }
++
++        let total_consultations_24h = 0;
++        let risk_gates_passed = 0;
++        let risk_warnings = 0;
++
++        const consultList = dlqList.keys.filter((k: any) => k.name.startsWith('ai_consult_log:'));
++        total_consultations_24h = consultList.length;
++        for (const key of consultList) {
++             try {
++                 const logData = JSON.parse(await env.GREEN_STATE.get(key.name) || '{}');
++                 if (logData.riskViolation) {
++                     risk_warnings++;
++                 } else {
++                     risk_gates_passed++;
++                 }
++             } catch(e) {}
++        }
+
+         const duration = Math.round(performance.now() - startTime);
+
+@@ -627,7 +669,12 @@
+            emailit_telemetry: emailitTelemetry,
+            exec_governance: execGovernance,
+            pending_queue_count: execGovernance.pending_retries,
++           investing_brain_telemetry: {
++             total_consultations_24h,
++             risk_gates_passed,
++             risk_warnings
++           }
+          }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders } });
+
+       } catch (error) {

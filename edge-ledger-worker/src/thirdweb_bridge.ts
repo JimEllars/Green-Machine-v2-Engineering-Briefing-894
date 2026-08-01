@@ -619,6 +619,23 @@ export default {
             console.error('Failed to parse emailit telemetry', e);
         }
 
+        let total_consultations_24h = 0;
+        let risk_gates_passed = 0;
+        let risk_warnings = 0;
+
+        const consultList = dlqList.keys.filter((k: any) => k.name.startsWith('ai_consult_log:'));
+        total_consultations_24h = consultList.length;
+        for (const key of consultList) {
+             try {
+                 const logData = JSON.parse(await env.GREEN_STATE.get(key.name) || '{}');
+                 if (logData.riskViolation) {
+                     risk_warnings++;
+                 } else {
+                     risk_gates_passed++;
+                 }
+             } catch(e) {}
+        }
+
         const duration = Math.round(performance.now() - startTime);
 
         let execGovernance = { last_briefing_sent: null, hitl_status: 'ACTIVE', pending_retries: 0 };
@@ -1574,12 +1591,31 @@ export default {
         const payload = await request.json() as any;
         const { symbol, action, amount_usdt } = payload;
 
-        // Mocking the validation against cached USDT balance and CFO state as requested.
+        const annyPortfolioRaw = (await env.GREEN_STATE.get('anny_portfolio_summary', { type: 'json' })) as any;
+        const available_usdt = annyPortfolioRaw?.liquid_usdt || 0;
+
+        const marketCacheRaw = (await env.MARKET_CACHE.get('latest_prices', { type: 'json' })) as any;
+        const cfo_state = marketCacheRaw?.cfo_trend_state?.[symbol] || 'wait';
+
+        let approved = false;
+        let reason = "Signal aligned with structural strength and within drawdown limits";
+
+        if (amount_usdt > available_usdt) {
+            reason = "Trade rejected: Insufficient liquid USDT balance";
+        } else if (cfo_state === 'distribute') {
+            reason = "Trade rejected: Asset showing structural weakness (Distribute state)";
+        } else if (cfo_state === 'accumulate' || cfo_state === 'wait') {
+            approved = true;
+        } else {
+            reason = "Trade rejected: Unknown CFO state";
+        }
+
         return new Response(JSON.stringify({
-          approved: true,
+          approved: approved,
           symbol: symbol || 'UNKNOWN',
-          cfo_state: 'accumulate',
-          reason: 'Signal aligned with structural strength and within drawdown limits'
+          cfo_state: cfo_state,
+          reason: reason,
+          available_usdt: available_usdt
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -1713,6 +1749,12 @@ export default {
         const aiModel = isFallback ? 'mistral-7b' : 'llama-3.1';
         const serverTiming = isFallback ? `workers-ai-fallback;dur=${duration};ai_model=${aiModel}` : `worker;dur=${duration};desc="Cloudflare Edge Execution";ai_model=${aiModel}`;
 
+        await env.GREEN_STATE.put(`ai_consult_log:${Date.now()}`, JSON.stringify({
+            riskViolation: parsed.riskViolation || false,
+            riskLevel: parsed.riskLevel || 'Unknown',
+            timestamp: Date.now()
+        }), { expirationTtl: 86400 });
+
         return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', 'Server-Timing': serverTiming, ...corsHeaders } });
       } catch (err) {
         return new Response(JSON.stringify({ error: 'AI Evaluation Failed' }), { status: 500, headers: corsHeaders });
@@ -1759,7 +1801,25 @@ export default {
           mode: env.ANNY_AUTH_MODE || "session-token"
         },
         anny_auth_telemetry: await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' }),
-        settlement_telemetry_24h: await getSettlementTelemetry24h(env)
+        settlement_telemetry_24h: await getSettlementTelemetry24h(env),
+        investing_brain_telemetry: await (async () => {
+             const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
+             const consultList = dlqList.keys.filter((k: any) => k.name.startsWith('ai_consult_log:'));
+             let total_consultations_24h = consultList.length;
+             let risk_gates_passed = 0;
+             let risk_warnings = 0;
+             for (const key of consultList) {
+                  try {
+                      const logData = JSON.parse(await env.GREEN_STATE.get(key.name) || '{}');
+                      if (logData.riskViolation) {
+                          risk_warnings++;
+                      } else {
+                          risk_gates_passed++;
+                      }
+                  } catch(e) {}
+             }
+             return { total_consultations_24h, risk_gates_passed, risk_warnings };
+        })()
       }), {
         status: 200,
         headers: {

@@ -289,6 +289,19 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
         </div>
       )}
 
+      {/* Investing Brain Telemetry */}
+      {dlqStatus?.investing_brain_telemetry && (
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 mt-4 mb-4">
+          <div className="text-sm font-bold text-slate-300 mb-1 flex items-center gap-2">
+            <SafeIcon name="Brain" className="w-4 h-4 text-emerald-500" /> Investing Brain Diagnostics
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse ml-2" />
+          </div>
+          <div className="text-xs text-slate-400 font-mono font-bold tracking-wide">
+            Investing Brain: {dlqStatus.investing_brain_telemetry.total_consultations_24h} Consultations ({dlqStatus.investing_brain_telemetry.risk_gates_passed} Passed / {dlqStatus.investing_brain_telemetry.risk_warnings} Warnings)
+          </div>
+        </div>
+      )}
+
 
       <div className="grid grid-cols-1 gap-4 flex-grow">
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import StrategyConsultantTerminal from './components/planner/StrategyConsultantTerminal';
+import StrategyConsultantTerminal from './components/planner/StrategyConsultantTerminal.jsx';
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
 
@@ -26,6 +26,8 @@ function App() {
   const [toastError, setToastError] = useState(null);
 
   const [showDeptSummaryModal, setShowDeptSummaryModal] = useState(false);
+  const [isTestingSignal, setIsTestingSignal] = useState(false);
+  const [signalTestResult, setSignalTestResult] = useState(null);
   const [deptSummaryForm, setDeptSummaryForm] = useState({ department: 'Financial Operations', updatesCompleted: '', activeWork: '', questions: '' });
   const [isSubmittingDept, setIsSubmittingDept] = useState(false);
   const [deptSuccessMsg, setDeptSuccessMsg] = useState('');
@@ -211,6 +213,36 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
+
+  const handleTestSignal = async () => {
+    setIsTestingSignal(true);
+    setSignalTestResult(null);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/validate-signal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        },
+        body: JSON.stringify({ symbol: 'BTC', action: 'buy', amount_usdt: 500 })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSignalTestResult(data.approved ? `Signal Test: APPROVED (CFO: ${data.cfo_state})` : `Signal Test: REJECTED (${data.reason})`);
+        setTimeout(() => setSignalTestResult(null), 5000);
+      } else {
+        setToastError('Failed to test signal');
+        setTimeout(() => setToastError(null), 3000);
+      }
+    } catch(e) {
+      console.error('Failed to test signal:', e);
+      setToastError('Network error testing signal');
+      setTimeout(() => setToastError(null), 3000);
+    } finally {
+      setIsTestingSignal(false);
+    }
+  };
   const handleFlushDLQ = async () => {
     setIsFlushing(true);
     try {
@@ -596,7 +628,13 @@ function App() {
                   {isResettingCircuit ? 'Resetting...' : resetCircuitSuccess ? 'Reset to CLOSED!' : 'Reset Oracle Circuit'}
                 </button>
 
-                {['Mint Batch', 'Audit Logs'].map((action) => (
+                <button
+                  onClick={handleTestSignal}
+                  className={`p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider ${isTestingSignal ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isTestingSignal ? 'Testing...' : 'Test Pre-Flight Signal'}
+                </button>
+                {['Audit Logs'].map((action) => (
                   <button key={action} className="p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider">
                     {action}
                   </button>
@@ -785,6 +823,12 @@ function App() {
         <div className="fixed bottom-4 right-4 z-50 bg-slate-900 border border-red-500/80 shadow-[0_4px_20px_rgba(225,29,72,0.4)] text-rose-100 px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-300">
           <SafeIcon name="AlertCircle" className="w-5 h-5 text-red-500" />
           <p className="text-sm font-bold tracking-wide">{toastError}</p>
+        </div>
+      )}
+      {signalTestResult && (
+        <div className="fixed bottom-20 right-4 z-50 bg-slate-900 border border-emerald-500/80 shadow-[0_4px_20px_rgba(16,185,129,0.4)] text-emerald-100 px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-300">
+          <SafeIcon name="CheckCircle" className="w-5 h-5 text-emerald-500" />
+          <p className="text-sm font-bold tracking-wide">{signalTestResult}</p>
         </div>
       )}
     </div>
