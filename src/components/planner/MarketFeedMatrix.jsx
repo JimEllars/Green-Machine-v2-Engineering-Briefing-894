@@ -10,6 +10,7 @@ export default function MarketFeedMatrix() {
   const [isRateLimited, setIsRateLimited] = useState(false);
   const [isCircuitBreaker, setIsCircuitBreaker] = useState(false);
   const [cfoFilter, setCfoFilter] = useState('All');
+  const [refreshIntervalMs, setRefreshIntervalMs] = useState(30000);
 
 
 
@@ -103,10 +104,11 @@ export default function MarketFeedMatrix() {
     };
 
     fetchMarketData(); // initial fetch
-    const interval = setInterval(fetchMarketData, 30000); // 30s interval for TTL
-
-    return () => clearInterval(interval);
-  }, []);
+    if (refreshIntervalMs !== null) {
+      const interval = setInterval(fetchMarketData, refreshIntervalMs);
+      return () => clearInterval(interval);
+    }
+  }, [refreshIntervalMs]);
 
 
   return (
@@ -146,21 +148,44 @@ export default function MarketFeedMatrix() {
       </div>
 
       {/* CFO Trend Filter Toolbar */}
-      <div className="flex gap-2 mb-6">
-        <span className="text-slate-400 text-sm font-medium self-center mr-2">Anny CFO Trend:</span>
-        {['All', 'Accumulate', 'Wait', 'Distribute'].map(filter => (
-          <button
-            key={filter}
-            onClick={() => setCfoFilter(filter)}
-            className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-              cfoFilter === filter
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
-                : 'bg-zinc-800/50 text-slate-400 border-zinc-700 hover:border-slate-500'
-            }`}
-          >
-            {filter}
-          </button>
-        ))}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 mb-6">
+        <div className="flex gap-2">
+          <span className="text-slate-400 text-sm font-medium self-center mr-2">Anny CFO Trend:</span>
+          {['All', 'Accumulate', 'Wait', 'Distribute'].map(filter => (
+            <button
+              key={filter}
+              onClick={() => setCfoFilter(filter)}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                cfoFilter === filter
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                  : 'bg-zinc-800/50 text-slate-400 border-zinc-700 hover:border-slate-500'
+              }`}
+            >
+              {filter}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex space-x-2 items-center bg-zinc-900/50 rounded-lg p-1 border border-zinc-800/50">
+          <span className="text-xs text-slate-500 mr-2 ml-2">Market Polling:</span>
+          {['15s', '30s', '60s', 'Paused'].map(intervalLabel => {
+            const msMap = { '15s': 15000, '30s': 30000, '60s': 60000, 'Paused': null };
+            const isActive = refreshIntervalMs === msMap[intervalLabel];
+            return (
+              <button
+                key={intervalLabel}
+                onClick={() => setRefreshIntervalMs(msMap[intervalLabel])}
+                className={`px-3 py-1 rounded text-xs font-semibold tracking-wider transition-colors border ${
+                  isActive
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                    : 'bg-transparent text-slate-400 border-transparent hover:text-slate-300 hover:bg-zinc-800/50'
+                }`}
+              >
+                {intervalLabel}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isStale ? 'opacity-80 blur-[1px]' : ''}`}>

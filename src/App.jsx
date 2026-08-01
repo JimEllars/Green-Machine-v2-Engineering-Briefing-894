@@ -24,6 +24,8 @@ function App() {
   const [briefingSuccess, setBriefingSuccess] = useState(false);
   const [showBriefingPreview, setShowBriefingPreview] = useState(false);
   const [toastError, setToastError] = useState(null);
+  const [readinessStatus, setReadinessStatus] = useState(null);
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const [showDeptSummaryModal, setShowDeptSummaryModal] = useState(false);
   const [isTestingSignal, setIsTestingSignal] = useState(false);
@@ -35,6 +37,39 @@ function App() {
   const [isLoadingSummaries, setIsLoadingSummaries] = useState(false);
 
   const [isPurgingDept, setIsPurgingDept] = useState(null);
+
+
+  const handleVerifyReadiness = async () => {
+    setIsVerifying(true);
+    setReadinessStatus(null);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/verify-deployment`, {
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ""
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setReadinessStatus({
+          isOperational: data.deployment_status === 'OPERATIONAL'
+        });
+
+        // Hide toast after 5s
+        setTimeout(() => setReadinessStatus(null), 5000);
+      } else {
+        setReadinessStatus({ isOperational: false });
+        setTimeout(() => setReadinessStatus(null), 5000);
+      }
+    } catch (e) {
+      console.error('Verify deployment error', e);
+      setReadinessStatus({ isOperational: false });
+      setTimeout(() => setReadinessStatus(null), 5000);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
 
   const handleClearDept = async (department) => {
     setIsPurgingDept(department);
@@ -543,6 +578,15 @@ function App() {
             <p className="text-slate-400 text-sm">Autonomous Ecosystem Asset Planner & Ledger Gateway</p>
           </div>
           <div className="flex gap-2">
+
+            <button
+              onClick={handleVerifyReadiness}
+              disabled={isVerifying}
+              className={`px-4 py-2 ${isVerifying ? 'bg-indigo-600' : 'bg-slate-700 hover:bg-slate-600'} text-white rounded-lg text-sm font-bold transition-all border border-slate-600 flex items-center gap-2`}
+            >
+              {isVerifying ? <SafeIcon name="Loader" className="w-4 h-4 animate-spin" /> : <SafeIcon name="CheckCircle" className="w-4 h-4" />}
+              Verify Readiness
+            </button>
             <button 
               onClick={handleManualSweep}
               disabled={isSweeping}
@@ -819,6 +863,19 @@ function App() {
           </p>
         </div>
       </footer>
+
+      {/* Verify Readiness Toast */}
+      {readinessStatus && (
+        <div className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-2xl border flex items-center gap-3 backdrop-blur-md transition-all duration-500 animate-in slide-in-from-bottom-5 ${readinessStatus.isOperational ? 'bg-emerald-900/90 border-emerald-500/50 text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'bg-amber-900/90 border-amber-500/50 text-amber-100 shadow-[0_0_20px_rgba(245,158,11,0.3)]'}`}>
+          <div className={`w-2 h-2 rounded-full animate-pulse ${readinessStatus.isOperational ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+          <div className="flex flex-col">
+            <span className="text-sm font-bold tracking-wide">
+              System Deployment: {readinessStatus.isOperational ? 'OPERATIONAL' : 'DEGRADED'}
+            </span>
+          </div>
+        </div>
+      )}
+
       {toastError && (
         <div className="fixed bottom-4 right-4 z-50 bg-slate-900 border border-red-500/80 shadow-[0_4px_20px_rgba(225,29,72,0.4)] text-rose-100 px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-300">
           <SafeIcon name="AlertCircle" className="w-5 h-5 text-red-500" />
