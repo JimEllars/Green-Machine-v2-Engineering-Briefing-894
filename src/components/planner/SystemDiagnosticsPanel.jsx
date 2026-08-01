@@ -321,6 +321,14 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
         </div>
 
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+          <span className="text-sm text-slate-300">Cloudflare Pages Target</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono">Vite Web (Node 20)</span>
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          </div>
+        </div>
+
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
           <span className="text-sm text-slate-300">Edge Fetch Latency</span>
           <div className="flex items-center gap-3">
              <span className="text-xs font-mono text-emerald-500/80 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20" title="Edge Jitter">±{edgeJitter}ms</span>
