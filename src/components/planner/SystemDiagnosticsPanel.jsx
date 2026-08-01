@@ -41,24 +41,33 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
   }, []);
 
 
+
   const fetchDeepTelemetry = async () => {
     try {
       const workerUrl = getWorkerUrl();
-      const response = await fetch(`${workerUrl}/api/market-cache`, {
-        headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY }
+      const response = await fetch(`${workerUrl}/api/health`, {
+        headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
       });
       if (response.ok) {
         const data = await response.json();
+
+        // Let's also fetch circuit breaker state from KV directly or a known endpoint?
+        // Actually /api/health doesn't return circuit breaker state. Let's just use what we have or /api/market-cache if it has it.
+        // Wait, market-cache returns is_circuit_breaker. Let's fetch both or just use health endpoint for what's requested.
+        const marketResponse = await fetch(`${workerUrl}/api/market-cache`, {
+            headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
+        });
+        let cbStatus = "CLOSED";
+        if (marketResponse.ok) {
+            const marketData = await marketResponse.json();
+            cbStatus = marketData?.is_circuit_breaker ? "OPEN" : "CLOSED";
+        }
+
         setDeepTelemetry({
-          investing_brain_telemetry: {
-            consultations: data?.data?.length || 0,
-            pass_rates: "92%" // Mocked pass rate logic
-          },
-          anny_auth_telemetry: {
-            last_renewal: new Date().toISOString()
-          },
+          investing_brain_telemetry: data.investing_brain_telemetry || {},
+          anny_auth_telemetry: data.anny_auth_telemetry || {},
           circuit_breaker: {
-            status: data?.is_circuit_breaker ? "OPEN" : "CLOSED"
+            status: cbStatus
           }
         });
       }
