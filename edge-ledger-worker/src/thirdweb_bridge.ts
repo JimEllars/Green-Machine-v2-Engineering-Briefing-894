@@ -1902,7 +1902,7 @@ export default {
         url.pathname !== '/api/strategy-consult' &&
         url.pathname !== '/api/quarantine-purge' &&
         url.pathname !== '/api/health' &&
-        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge'
+        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }
