@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build:web": "vite build",
-    "build": "npm run lint && vite build",
-    "lint": "eslint .",
-    "lint:error": "eslint . --quiet",
+    "build": "eslint src/ && vite build",
+    "lint": "eslint src/",
+    "lint:error": "eslint src/ --quiet",
     "preview": "vite preview",
     "cf:whoami": "wrangler whoami",
     "cf:worker:dev": "wrangler dev --config edge-ledger-worker/wrangler.jsonc --port 8787",

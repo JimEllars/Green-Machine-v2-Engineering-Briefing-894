@@ -84,6 +84,12 @@ npx wrangler pages project create green-machine-v2
 npm run cf:pages:deploy -- --project-name green-machine-v2 --branch main
 ```
 
+**Cloudflare Pages Build Settings:**
+- **Framework Preset:** Vite
+- **Build Command:** `npm run build:web` (or `vite build`)
+- **Build Output Directory:** `dist`
+- **Environment Variable:** `NODE_VERSION` = `20.18.0`
+
 ## Runtime notes
 
 1. Worker cron is configured in `edge-ledger-worker/wrangler.jsonc` (`*/1 * * * *`) and calls market cache sync.
