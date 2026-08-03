@@ -302,6 +302,13 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate }) => {
           {dlqStatus?.anny_oracle?.session_valid ? 'Anny Oracle: Active (KV Session Valid)' : 'Anny Oracle: Public Guest Mode'}
         </div>
 
+        {dlqStatus?.webhook_ingress_telemetry && (
+          <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${dlqStatus.webhook_ingress_telemetry.status === 'OPERATIONAL' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]'}`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${dlqStatus.webhook_ingress_telemetry.status === 'OPERATIONAL' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+            Anny Webhook Ingress: {dlqStatus.webhook_ingress_telemetry.status === 'OPERATIONAL' ? 'Operational' : dlqStatus.webhook_ingress_telemetry.status} ({dlqStatus.webhook_ingress_telemetry.total_webhooks_24h} 24h)
+          </div>
+        )}
+
         {/* Realtime Status Badge */}
         <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
           realtimeStatus === 'SUBSCRIBED' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :

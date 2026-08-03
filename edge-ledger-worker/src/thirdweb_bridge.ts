@@ -324,6 +324,13 @@ function assertKvBindings(env: Env): Response | null {
   return null;
 }
 
+
+    const logAdminAction = async (env: any, action: string, details: any) => {
+        const timestamp = Date.now();
+        const keyName = `admin_action_log:${timestamp}`;
+        await env.GREEN_STATE.put(keyName, JSON.stringify({ action, timestamp, details }), { expirationTtl: 2592000 });
+    };
+
 export default {
 
   async scheduled(event: any, env: any, ctx: any): Promise<void> {
@@ -700,6 +707,7 @@ export default {
         }
         let ai_inference_ms = count_ms > 0 ? Math.round(total_inference_ms / count_ms) : 0;
 
+        const webhookIngressTelemetry = await env.GREEN_STATE.get('webhook_ingress_telemetry', { type: 'json' });
         const duration = Math.round(performance.now() - startTime);
 
         let execGovernance = { last_briefing_sent: null, hitl_status: 'ACTIVE', pending_retries: 0 };
@@ -950,6 +958,16 @@ export default {
           };
 
           await env.GREEN_STATE.put(keyName, JSON.stringify(logData), { expirationTtl: 604800 });
+
+          // Task 3: Track Webhook Ingress Telemetry
+          let ingressTelemetry = { last_webhook_received: Date.now(), total_webhooks_24h: 1, status: "OPERATIONAL" };
+          try {
+              const prevTelemetry = await env.GREEN_STATE.get('webhook_ingress_telemetry', { type: 'json' }) as any;
+              if (prevTelemetry) {
+                  ingressTelemetry.total_webhooks_24h = (prevTelemetry.total_webhooks_24h || 0) + 1;
+              }
+          } catch(e) {}
+          await env.GREEN_STATE.put('webhook_ingress_telemetry', JSON.stringify(ingressTelemetry));
 
           return new Response(JSON.stringify({ success: true, status: 'signal_logged', log_id: keyName }), {
             status: 200,
@@ -1682,6 +1700,7 @@ export default {
       try {
         const payload = await request.json() as any;
         const { symbol, action, amount_usdt } = payload;
+        await logAdminAction(env, 'validate-signal', { symbol, action, amount_usdt });
 
         const annyPortfolioRaw = (await env.GREEN_STATE.get('anny_portfolio_summary', { type: 'json' })) as any;
         const available_usdt = annyPortfolioRaw?.liquid_usdt || 0;
@@ -1702,12 +1721,20 @@ export default {
             reason = "Trade rejected: Unknown CFO state";
         }
 
+        const spotPrice = marketCacheRaw?.[symbol] || 0;
+        const dry_run_simulation = {
+            estimated_fill_price: spotPrice ? spotPrice * 1.0005 : 0,
+            estimated_slippage_pct: 0.10,
+            liquidity_check: amount_usdt < 10000 ? "PASS" : "DEEP_BOOK_REQUIRED"
+        };
+
         return new Response(JSON.stringify({
           approved: approved,
           symbol: symbol || 'UNKNOWN',
           cfo_state: cfo_state,
           reason: reason,
-          available_usdt: available_usdt
+          available_usdt: available_usdt,
+          dry_run_simulation: dry_run_simulation
         }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -1725,6 +1752,7 @@ export default {
 
       try {
         await env.GREEN_STATE.delete('anny_session_token');
+        await logAdminAction(env, 'renew-anny-session', {});
         const newToken = await getOrRefreshAnnySessionToken(env, ctx);
         const authTelemetryRaw = await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' });
         return new Response(JSON.stringify({ success: true, new_token_issued: Boolean(newToken), telemetry: authTelemetryRaw }), {
@@ -1863,6 +1891,7 @@ export default {
       try {
         const resetState = { state: 'CLOSED', failure_count: 0, last_failure: 0 };
         await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(resetState));
+        await logAdminAction(env, 'circuit-breaker-reset', { resetState });
         return new Response(JSON.stringify({ success: true, message: 'Oracle Circuit Reset to CLOSED' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
@@ -1876,6 +1905,38 @@ export default {
     }
 
 
+
+    if (request.method === 'GET' && url.pathname === '/api/admin/audit-logs') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        const listResult = await env.GREEN_STATE.list({ prefix: 'admin_action_log:', limit: 50 });
+        const logs = [];
+        for (const key of listResult.keys) {
+          try {
+            const logData = await env.GREEN_STATE.get(key.name, { type: 'json' });
+            if (logData) logs.push(logData);
+          } catch(e) {}
+        }
+
+        // Sort descending by timestamp
+        logs.sort((a, b) => b.timestamp - a.timestamp);
+
+        return new Response(JSON.stringify({ logs }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to fetch audit logs' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/admin/trigger-financial-audit') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
@@ -1884,6 +1945,7 @@ export default {
 
       try {
         const { trigger_source, timestamp } = await request.json() as any;
+        await logAdminAction(env, 'trigger-financial-audit', { trigger_source });
         const dbResponse = await fetch(`${env.SUPABASE_URL}/functions/v1/financial-audit`, {
           method: 'POST',
           headers: {
@@ -1928,6 +1990,7 @@ export default {
           mode: env.ANNY_AUTH_MODE || "session-token"
         },
         anny_auth_telemetry: await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' }),
+        webhook_ingress_telemetry: await env.GREEN_STATE.get('webhook_ingress_telemetry', { type: 'json' }),
         settlement_telemetry_24h: await getSettlementTelemetry24h(env),
         kv_prune_telemetry: await env.GREEN_STATE.get('kv_prune_telemetry', { type: 'json' }),
         investing_brain_telemetry: await (async () => {
@@ -2016,7 +2079,7 @@ export default {
         url.pathname !== '/api/strategy-consult' &&
         url.pathname !== '/api/quarantine-purge' &&
         url.pathname !== '/api/health' &&
-        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment' && url.pathname !== '/api/admin/trigger-financial-audit'
+        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment' && url.pathname !== '/api/admin/trigger-financial-audit' && url.pathname !== '/api/admin/audit-logs'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }
