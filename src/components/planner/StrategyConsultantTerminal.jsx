@@ -403,6 +403,11 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
               JSON
             </button>
           </div>
+          {parsedStrategyData && parsedStrategyData.ai_inference_ms && (
+            <span className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 bg-slate-800 text-slate-300 rounded border border-slate-700 font-mono">
+              {parsedStrategyData.ai_inference_ms}ms • {parsedStrategyData.ai_model || 'Llama 3.1'}
+            </span>
+          )}
           <span className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded border border-blue-500/20">
             <SafeIcon name="Shield" className="w-3 h-3" />
             {provider !== '{provider}' ? provider : 'DeepSeek-V3'}
@@ -489,15 +494,24 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
 
              <div className="z-10 flex flex-col gap-2">
                 {parsedStrategyData.riskLevel && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-slate-400 uppercase tracking-wide font-medium">Assessed Risk:</span>
-                    <span className={`px-2 py-0.5 rounded font-bold ${
-                        parsedStrategyData.riskLevel === 'Low' ? 'bg-emerald-500/20 text-emerald-300' :
-                        parsedStrategyData.riskLevel === 'Medium' ? 'bg-amber-500/20 text-amber-300' :
-                        'bg-rose-500/20 text-rose-300'
-                    }`}>
-                      {parsedStrategyData.riskLevel}
-                    </span>
+                  <div className="flex flex-col gap-1.5 w-full">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-400 uppercase tracking-wide font-medium">Assessed Risk:</span>
+                      <span className={`px-2 py-0.5 rounded font-bold ${
+                          parsedStrategyData.riskLevel === 'Low' ? 'bg-emerald-500/20 text-emerald-300' :
+                          parsedStrategyData.riskLevel === 'Medium' ? 'bg-amber-500/20 text-amber-300' :
+                          'bg-rose-500/20 text-rose-300'
+                      }`}>
+                        {parsedStrategyData.riskLevel}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden border border-slate-700/50 mt-1">
+                      <div className={`h-full rounded-full transition-all duration-1000 ${
+                          parsedStrategyData.riskLevel === 'Low' ? 'w-1/4 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' :
+                          parsedStrategyData.riskLevel === 'Medium' ? 'w-2/4 bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]' :
+                          'w-full bg-rose-500 shadow-[0_0_10px_rgba(225,29,72,0.8)]'
+                      }`}></div>
+                    </div>
                   </div>
                 )}
 

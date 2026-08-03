@@ -38,6 +38,35 @@ function App() {
 
   const [isPurgingDept, setIsPurgingDept] = useState(null);
 
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
+
+  const fetchAuditLogs = async () => {
+    setIsLoadingAuditLogs(true);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/audit-logs`, {
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAuditLogs(data.logs || []);
+      } else {
+        setToastError('Failed to fetch audit logs');
+        setTimeout(() => setToastError(null), 3000);
+      }
+    } catch(e) {
+      console.error('Failed to fetch audit logs:', e);
+      setToastError('Network error fetching audit logs');
+      setTimeout(() => setToastError(null), 3000);
+    } finally {
+      setIsLoadingAuditLogs(false);
+    }
+  };
+
 
   const handleVerifyReadiness = async () => {
     setIsVerifying(true);
@@ -676,7 +705,7 @@ function App() {
                   {isTestingSignal ? 'Testing...' : 'Test Pre-Flight Signal'}
                 </button>
                 {['Audit Logs'].map((action) => (
-                  <button key={action} className="p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider">
+                  <button key={action} onClick={() => { setIsAuditModalOpen(true); fetchAuditLogs(); }} className="p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider">
                     {action}
                   </button>
                 ))}
@@ -839,6 +868,61 @@ function App() {
                             </div>
                         </>
                     )}
+                </div>
+            </div>
+          </div>
+      )}
+
+      {isAuditModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-900/90 border border-slate-700/50 rounded-xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[80vh]">
+                <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/50 shrink-0">
+                    <h3 className="text-white font-bold flex items-center gap-2">
+                        <SafeIcon name="List" className="w-4 h-4 text-emerald-500" />
+                        Audit Trail Log Viewer
+                    </h3>
+                    <button onClick={() => setIsAuditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+                        <SafeIcon name="X" className="w-4 h-4" />
+                    </button>
+                </div>
+                <div className="p-4 flex-grow overflow-y-auto custom-scrollbar">
+                    {isLoadingAuditLogs ? (
+                        <div className="flex items-center justify-center p-8">
+                            <SafeIcon name="Loader" className="w-6 h-6 text-emerald-500 animate-spin" />
+                        </div>
+                    ) : auditLogs.length > 0 ? (
+                        <div className="space-y-3">
+                            {auditLogs.map((log, idx) => (
+                                <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-emerald-400 font-mono text-[10px] font-bold uppercase tracking-wider">
+                                            {log.action}
+                                        </span>
+                                        <span className="text-slate-500 text-[10px] font-mono">
+                                            {new Date(log.timestamp).toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <pre className="text-slate-300 text-xs font-mono whitespace-pre-wrap break-all bg-slate-900/50 p-2 rounded border border-slate-800">
+                                        {JSON.stringify(log.details, null, 2)}
+                                    </pre>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-slate-500 text-sm text-center italic p-8 bg-slate-800/30 rounded-lg border border-slate-800">
+                            No audit logs found.
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 border-t border-slate-700/50 bg-slate-800/50 flex justify-end shrink-0">
+                    <button
+                        onClick={() => fetchAuditLogs()}
+                        disabled={isLoadingAuditLogs}
+                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-2"
+                    >
+                        <SafeIcon name="RefreshCw" className={`w-3 h-3 ${isLoadingAuditLogs ? 'animate-spin' : ''}`} />
+                        Refresh Logs
+                    </button>
                 </div>
             </div>
           </div>
