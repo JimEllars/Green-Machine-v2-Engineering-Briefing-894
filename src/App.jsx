@@ -41,12 +41,14 @@ function App() {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
+  const [actionTypeFilter, setActionTypeFilter] = useState('All Actions');
 
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = async (filter = 'All Actions') => {
     setIsLoadingAuditLogs(true);
     try {
       const workerUrl = getWorkerUrl();
-      const res = await fetch(`${workerUrl}/api/admin/audit-logs`, {
+      const query = filter !== 'All Actions' ? `?action_type=${encodeURIComponent(filter)}` : '';
+      const res = await fetch(`${workerUrl}/api/admin/audit-logs${query}`, {
         headers: {
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         }
@@ -66,6 +68,12 @@ function App() {
       setIsLoadingAuditLogs(false);
     }
   };
+
+  useEffect(() => {
+    if (isAuditModalOpen) {
+      fetchAuditLogs(actionTypeFilter);
+    }
+  }, [actionTypeFilter, isAuditModalOpen]);
 
 
   const handleVerifyReadiness = async () => {
@@ -278,9 +286,12 @@ function App() {
   }, []);
 
 
+  const [fullSignalResult, setFullSignalResult] = useState(null);
+
   const handleTestSignal = async () => {
     setIsTestingSignal(true);
     setSignalTestResult(null);
+    setFullSignalResult(null);
     try {
       const workerUrl = getWorkerUrl();
       const res = await fetch(`${workerUrl}/api/admin/validate-signal`, {
@@ -293,6 +304,7 @@ function App() {
       });
       const data = await res.json();
       if (res.ok) {
+        setFullSignalResult(data);
         setSignalTestResult(data.approved ? `Signal Test: APPROVED (CFO: ${data.cfo_state})` : `Signal Test: REJECTED (${data.reason})`);
         setTimeout(() => setSignalTestResult(null), 5000);
       } else {
@@ -704,6 +716,42 @@ function App() {
                 >
                   {isTestingSignal ? 'Testing...' : 'Test Pre-Flight Signal'}
                 </button>
+              </div>
+
+              {fullSignalResult && fullSignalResult.dry_run_simulation && (
+                  <div className="mt-4 p-4 bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-xl shadow-2xl relative overflow-hidden">
+                    <div className="flex items-center gap-2 mb-3">
+                        <SafeIcon name="Activity" className="w-4 h-4 text-emerald-400" />
+                        <h4 className="text-sm font-bold text-slate-100">Pre-Flight Dry-Run Simulation</h4>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                            <span className="text-[10px] font-mono text-slate-400 uppercase">CFO Trend State</span>
+                            <div className="text-sm font-bold text-slate-200 mt-1">{fullSignalResult.cfo_state || 'Wait'}</div>
+                        </div>
+                        <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                            <span className="text-[10px] font-mono text-slate-400 uppercase">Estimated Fill Price</span>
+                            <div className="text-sm font-bold text-emerald-400 mt-1">${fullSignalResult.dry_run_simulation.estimated_fill_price || 'N/A'}</div>
+                        </div>
+                        <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                            <span className="text-[10px] font-mono text-slate-400 uppercase">Estimated Slippage</span>
+                            <div className="text-sm font-bold text-slate-200 mt-1">{fullSignalResult.dry_run_simulation.estimated_slippage_pct ? `${fullSignalResult.dry_run_simulation.estimated_slippage_pct}%` : '0.10%'}</div>
+                        </div>
+                        <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
+                            <span className="text-[10px] font-mono text-slate-400 uppercase">Liquidity Check</span>
+                            <div className={`text-sm font-bold mt-1 ${fullSignalResult.dry_run_simulation.liquidity_check === 'PASS' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                {fullSignalResult.dry_run_simulation.liquidity_check || 'PASS'}
+                            </div>
+                        </div>
+                        <div className="bg-slate-800/50 p-3 rounded-lg border border-slate-700/50 col-span-2">
+                            <span className="text-[10px] font-mono text-slate-400 uppercase">Available USDT</span>
+                            <div className="text-sm font-bold text-slate-200 mt-1">${fullSignalResult.available_usdt || '0.00'}</div>
+                        </div>
+                    </div>
+                  </div>
+              )}
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-4">
                 {['Audit Logs'].map((action) => (
                   <button key={action} onClick={() => { setIsAuditModalOpen(true); fetchAuditLogs(); }} className="p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider">
                     {action}
@@ -884,6 +932,37 @@ function App() {
                     <button onClick={() => setIsAuditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
                         <SafeIcon name="X" className="w-4 h-4" />
                     </button>
+                </div>
+                {/* Toolbar */}
+                <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/30 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-slate-400">Filter:</label>
+                    <select
+                      value={actionTypeFilter}
+                      onChange={(e) => setActionTypeFilter(e.target.value)}
+                      className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200 focus:outline-none focus:border-emerald-500/50"
+                    >
+                      <option value="All Actions">All Actions</option>
+                      <option value="audit-trigger">Audit Trigger</option>
+                      <option value="session-renewal">Session Renewal</option>
+                      <option value="circuit-reset">Circuit Reset</option>
+                      <option value="signal-test">Signal Test</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(auditLogs, null, 2));
+                      const downloadAnchorNode = document.createElement('a');
+                      downloadAnchorNode.setAttribute("href", dataStr);
+                      downloadAnchorNode.setAttribute("download", `green-machine-audit-trail-${new Date().toISOString()}.json`);
+                      document.body.appendChild(downloadAnchorNode); // required for firefox
+                      downloadAnchorNode.click();
+                      downloadAnchorNode.remove();
+                    }}
+                    className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-sm hover:bg-emerald-500/20 transition-colors"
+                  >
+                    Download Audit Trail
+                  </button>
                 </div>
                 <div className="p-4 flex-grow overflow-y-auto custom-scrollbar">
                     {isLoadingAuditLogs ? (

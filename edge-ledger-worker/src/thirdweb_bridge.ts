@@ -338,6 +338,49 @@ export default {
         ctx.waitUntil((async () => {
           try {
 
+            // DLQ Auto-Heal & Re-Queue
+            try {
+              const dbHealthRes = await fetch(`${env.SUPABASE_URL}/rest/v1/`, {
+                headers: { 'apikey': env.SUPABASE_SERVICE_KEY }
+              });
+              if (dbHealthRes.ok) {
+                const listResult = await env.GREEN_STATE.list({ prefix: 'audit_retry_queue:', limit: 10 });
+                let healedCount = 0;
+                for (const key of listResult.keys) {
+                  try {
+                    const payloadRaw = await env.GREEN_STATE.get(key.name);
+                    if (payloadRaw) {
+                      const payload = JSON.parse(payloadRaw);
+
+                      const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'apikey': env.SUPABASE_SERVICE_KEY,
+                          'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                          'Prefer': 'resolution=merge-duplicates'
+                        },
+                        body: JSON.stringify(payload)
+                      });
+
+                      if (dbRes.ok || dbRes.status === 200 || dbRes.status === 201) {
+                        await env.GREEN_STATE.delete(key.name);
+                        healedCount++;
+                      }
+                    }
+                  } catch (e) {}
+                }
+
+                await env.GREEN_STATE.put('dlq_autoheal_telemetry', JSON.stringify({
+                  last_autoheal_run: Date.now(),
+                  items_healed: healedCount,
+                  status: "OPERATIONAL"
+                }));
+              }
+            } catch (autoHealErr) {
+              console.error('Auto-heal failed:', autoHealErr);
+            }
+
             // Telemetry Pruning
             let prunedCount = 0;
             const now = Date.now();
@@ -730,11 +773,20 @@ export default {
         const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
         (execGovernance as any).next_briefing_countdown = `Next Briefing in ${diffHrs}h ${diffMins}m`;
 
+        let autohealTelemetry = null;
+        try {
+            const healRaw = await env.GREEN_STATE.get('dlq_autoheal_telemetry');
+            if (healRaw) {
+                autohealTelemetry = JSON.parse(healRaw);
+            }
+        } catch (e) {}
+
         return new Response(JSON.stringify({
            success: true,
            buffered_count: bufferedCount,
            quarantined_count: quarantinedCount,
            emailit_telemetry: emailitTelemetry,
+           autoheal_telemetry: autohealTelemetry,
            exec_governance: execGovernance,
            pending_queue_count: execGovernance.pending_retries,
            emailit_configured: Boolean(env.EMAILIT_API_KEY),
@@ -1771,7 +1823,11 @@ export default {
         return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
       }
 
-      const { prompt, session_id } = await request.json() as any;
+      const { prompt, session_id, model_preference } = await request.json() as any;
+
+      if (model_preference) {
+          await env.GREEN_STATE.put('ai_model_preference', model_preference);
+      }
 
       if (!env.AI) {
         return new Response(JSON.stringify({ error: "AI binding not configured" }), { status: 503, headers: corsHeaders });
@@ -1841,7 +1897,16 @@ export default {
         let response;
         let isFallback = false;
         try {
-          response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+          let targetModel = '@cf/meta/llama-3.1-8b-instruct';
+          let modelPref = model_preference;
+          if (!modelPref) {
+              modelPref = await env.GREEN_STATE.get('ai_model_preference');
+          }
+          if (modelPref === 'mistral-7b') {
+              targetModel = '@cf/mistral/mistral-7b-instruct-v0.2';
+          }
+
+          response = await env.AI.run(targetModel, {
             messages: [
               { role: 'system', content: systemMessage },
               { role: 'user', content: prompt }
@@ -1912,13 +1977,23 @@ export default {
         return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
       }
 
+      const actionType = url.searchParams.get('action_type');
+
       try {
         const listResult = await env.GREEN_STATE.list({ prefix: 'admin_action_log:', limit: 50 });
-        const logs = [];
+        let logs = [];
         for (const key of listResult.keys) {
           try {
             const logData = await env.GREEN_STATE.get(key.name, { type: 'json' });
-            if (logData) logs.push(logData);
+            if (logData) {
+              if (actionType && actionType !== 'All Actions') {
+                if (logData.action === actionType) {
+                  logs.push(logData);
+                }
+              } else {
+                logs.push(logData);
+              }
+            }
           } catch(e) {}
         }
 
@@ -1993,6 +2068,7 @@ export default {
         webhook_ingress_telemetry: await env.GREEN_STATE.get('webhook_ingress_telemetry', { type: 'json' }),
         settlement_telemetry_24h: await getSettlementTelemetry24h(env),
         kv_prune_telemetry: await env.GREEN_STATE.get('kv_prune_telemetry', { type: 'json' }),
+        dlq_autoheal_telemetry: await env.GREEN_STATE.get('dlq_autoheal_telemetry', { type: 'json' }),
         investing_brain_telemetry: await (async () => {
              const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
              const consultList = dlqList.keys.filter((k: any) => k.name.startsWith('ai_consult_log:'));
