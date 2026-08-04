@@ -13,6 +13,7 @@ export default function StrategyConsultantTerminal() {
   const [strategy, setStrategy] = useState('');
   const [strategyHistory, setStrategyHistory] = useState([]);
   const [provider, setProvider] = useState('{provider}'); // Default
+  const [modelPreference, setModelPreference] = useState('llama-3.1'); // Default model
 
   const [connectionStatus, setConnectionStatus] = useState('CONNECTING');
   const [isJsonValid, setIsJsonValid] = useState(false);
@@ -167,7 +168,8 @@ export default function StrategyConsultantTerminal() {
         },
         body: JSON.stringify({
           prompt: promptInput,
-          session_id: sessionId
+          session_id: sessionId,
+          model_preference: modelPreference
         })
       });
 
@@ -340,6 +342,23 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Model Preference Toggle */}
+          <div className="flex items-center bg-slate-800/80 rounded border border-slate-700/50 p-0.5 mr-2">
+            <button
+              type="button"
+              onClick={() => setModelPreference('llama-3.1')}
+              className={`px-2 py-1 text-xs font-mono rounded transition-colors ${modelPreference === 'llama-3.1' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-300'}`}
+            >
+              Llama 3.1 Primary
+            </button>
+            <button
+              type="button"
+              onClick={() => setModelPreference('mistral-7b')}
+              className={`px-2 py-1 text-xs font-mono rounded transition-colors ${modelPreference === 'mistral-7b' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-300'}`}
+            >
+              Mistral 7B Secondary
+            </button>
+          </div>
           <button
             onClick={() => {
               setDisplayText('');
