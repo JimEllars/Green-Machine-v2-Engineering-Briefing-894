@@ -29,6 +29,8 @@ function App() {
 
   const [showDeptSummaryModal, setShowDeptSummaryModal] = useState(false);
   const [isTestingSignal, setIsTestingSignal] = useState(false);
+  const [testSymbol, setTestSymbol] = useState('BTC');
+  const [testAmountUsdt, setTestAmountUsdt] = useState(500);
   const [signalTestResult, setSignalTestResult] = useState(null);
   const [deptSummaryForm, setDeptSummaryForm] = useState({ department: 'Financial Operations', updatesCompleted: '', activeWork: '', questions: '' });
   const [isSubmittingDept, setIsSubmittingDept] = useState(false);
@@ -42,6 +44,33 @@ function App() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
   const [actionTypeFilter, setActionTypeFilter] = useState('All Actions');
+
+  const [isClearingAudit, setIsClearingAudit] = useState(false);
+  const handleClearAuditLogs = async () => {
+    setIsClearingAudit(true);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/audit-logs`, {
+        method: 'DELETE',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        setAuditLogs([]);
+        setToastError('Logs Purged');
+        setTimeout(() => setToastError(''), 3000);
+      } else {
+        setToastError('Failed to clear audit logs');
+        setTimeout(() => setToastError(''), 3000);
+      }
+    } catch (e) {
+      setToastError('Failed to clear audit logs');
+      setTimeout(() => setToastError(''), 3000);
+    } finally {
+      setIsClearingAudit(false);
+    }
+  };
 
   const fetchAuditLogs = async (filter = 'All Actions') => {
     setIsLoadingAuditLogs(true);
@@ -272,7 +301,7 @@ function App() {
       });
       if (res.ok) {
          const data = await res.json();
-         setDlqStatus({ active: data.active || data.buffered_count > 0, count: data.count || data.buffered_count || 0, quarantine_count: data.quarantine_count || data.quarantined_count || 0, emailit_telemetry: data.emailit_telemetry, exec_governance: data.exec_governance, emailit_configured: data.emailit_configured });
+         setDlqStatus({ active: data.active || data.buffered_count > 0, count: data.count || data.buffered_count || 0, quarantine_count: data.quarantine_count || data.quarantined_count || 0, emailit_telemetry: data.emailit_telemetry, exec_governance: data.exec_governance, emailit_configured: data.emailit_configured, autoheal_telemetry: data.autoheal_telemetry, investing_brain_telemetry: data.investing_brain_telemetry, anny_oracle: data.anny_oracle, webhook_ingress_telemetry: data.webhook_ingress_telemetry, dlq_autoheal_telemetry: data.dlq_autoheal_telemetry });
       }
     } catch (e) {
       console.error("Failed to fetch DLQ status", e);
@@ -300,7 +329,7 @@ function App() {
           'Content-Type': 'application/json',
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         },
-        body: JSON.stringify({ symbol: 'BTC', action: 'buy', amount_usdt: 500 })
+        body: JSON.stringify({ symbol: testSymbol, action: 'buy', amount_usdt: Number(testAmountUsdt) })
       });
       const data = await res.json();
       if (res.ok) {
@@ -710,12 +739,35 @@ function App() {
                   {isResettingCircuit ? 'Resetting...' : resetCircuitSuccess ? 'Reset to CLOSED!' : 'Reset Oracle Circuit'}
                 </button>
 
-                <button
-                  onClick={handleTestSignal}
-                  className={`p-3 bg-slate-800/50 hover:bg-slate-800 rounded-lg border border-slate-700/50 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider ${isTestingSignal ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  {isTestingSignal ? 'Testing...' : 'Test Pre-Flight Signal'}
-                </button>
+              </div>
+              <div className="mt-4 p-4 bg-slate-800/30 border border-slate-700/50 rounded-lg flex flex-col sm:flex-row gap-4 items-end">
+                  <div className="flex flex-col gap-1 w-full sm:w-auto">
+                    <label className="text-[10px] font-mono text-slate-400 uppercase">Test Symbol</label>
+                    <select
+                      value={testSymbol}
+                      onChange={(e) => setTestSymbol(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                    >
+                      <option value="BTC">BTC</option>
+                      <option value="ETH">ETH</option>
+                      <option value="SOL">SOL</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1 w-full sm:w-auto">
+                    <label className="text-[10px] font-mono text-slate-400 uppercase">Amount (USDT)</label>
+                    <input
+                      type="number"
+                      value={testAmountUsdt}
+                      onChange={(e) => setTestAmountUsdt(e.target.value)}
+                      className="bg-slate-900 border border-slate-700 rounded p-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+                  <button
+                    onClick={handleTestSignal}
+                    className={`p-2.5 bg-slate-800/50 hover:bg-slate-800 rounded border border-slate-700/50 text-xs font-bold text-slate-300 transition-colors uppercase tracking-wider h-[38px] ${isTestingSignal ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {isTestingSignal ? 'Testing...' : 'Test Pre-Flight Signal'}
+                  </button>
               </div>
 
               {fullSignalResult && fullSignalResult.dry_run_simulation && (
@@ -929,9 +981,18 @@ function App() {
                         <SafeIcon name="List" className="w-4 h-4 text-emerald-500" />
                         Audit Trail Log Viewer
                     </h3>
-                    <button onClick={() => setIsAuditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
-                        <SafeIcon name="X" className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={handleClearAuditLogs}
+                            disabled={isClearingAudit}
+                            className="px-3 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/50 hover:bg-rose-500/40 rounded text-xs font-bold transition-colors disabled:opacity-50"
+                        >
+                            {isClearingAudit ? 'Clearing...' : 'Clear Audit Logs'}
+                        </button>
+                        <button onClick={() => setIsAuditModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+                            <SafeIcon name="X" className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
                 {/* Toolbar */}
                 <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/30 shrink-0">

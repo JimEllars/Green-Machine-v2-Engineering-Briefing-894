@@ -1,0 +1,6 @@
+feat: Implement Sprint 3.4 tasks for AXiM Green Machine v2
+
+- TASK 1: Render DLQ auto-heal telemetry badge in diagnostic HUD.
+- TASK 2: Aggregate AI model usage analytics & latency telemetry.
+- TASK 3: Add audit log purge endpoint (`DELETE /api/admin/audit-logs`) and Admin UI clear control.
+- TASK 4: Add signal parameter customizer in Admin Cockpit for dry-run simulation testing.
