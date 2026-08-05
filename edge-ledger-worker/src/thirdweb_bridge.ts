@@ -739,6 +739,8 @@ export default {
 
         let total_inference_ms = 0;
         let count_ms = 0;
+        let llama_count = 0;
+        let mistral_count = 0;
         for (const key of consultList) {
             try {
                 const logData = JSON.parse(await env.GREEN_STATE.get(key.name) || '{}');
@@ -746,9 +748,19 @@ export default {
                     total_inference_ms += logData.ai_inference_ms;
                     count_ms++;
                 }
+                if (logData.model_used === 'mistral-7b') {
+                    mistral_count++;
+                } else {
+                    llama_count++;
+                }
             } catch(e) {}
         }
         let ai_inference_ms = count_ms > 0 ? Math.round(total_inference_ms / count_ms) : 0;
+        let total_models = llama_count + mistral_count;
+        let model_usage = {
+           llama_3_1_pct: total_models > 0 ? (llama_count / total_models) * 100 : 0,
+           mistral_7b_pct: total_models > 0 ? (mistral_count / total_models) * 100 : 0
+        };
 
         const webhookIngressTelemetry = await env.GREEN_STATE.get('webhook_ingress_telemetry', { type: 'json' });
         const duration = Math.round(performance.now() - startTime);
@@ -790,7 +802,7 @@ export default {
            exec_governance: execGovernance,
            pending_queue_count: execGovernance.pending_retries,
            emailit_configured: Boolean(env.EMAILIT_API_KEY),
-           investing_brain_telemetry: { total_consultations_24h, risk_gates_passed, risk_warnings, ai_inference_ms },
+           investing_brain_telemetry: { total_consultations_24h, risk_gates_passed, risk_warnings, ai_inference_ms, model_usage },
            anny_oracle: {
              status: "active",
              session_valid: Boolean(await env.GREEN_STATE.get('anny_session_token')),
@@ -1938,7 +1950,8 @@ export default {
             riskViolation: parsed.riskViolation || false,
             riskLevel: parsed.riskLevel || 'Unknown',
             timestamp: Date.now(),
-            ai_inference_ms: duration
+            ai_inference_ms: duration,
+            model_used: aiModel
         }), { expirationTtl: 86400 });
 
         return new Response(JSON.stringify({ success: true, data: parsed, ai_model: aiModel, ai_inference_ms: duration }), { status: 200, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', 'Server-Timing': serverTiming, ...corsHeaders } });
@@ -2088,6 +2101,8 @@ export default {
 
              let total_inference_ms = 0;
              let count_ms = 0;
+             let llama_count = 0;
+             let mistral_count = 0;
              for (const key of consultList) {
                   try {
                       const logData = JSON.parse(await env.GREEN_STATE.get(key.name) || '{}');
@@ -2095,10 +2110,20 @@ export default {
                           total_inference_ms += logData.ai_inference_ms;
                           count_ms++;
                       }
+                      if (logData.model_used === 'mistral-7b') {
+                          mistral_count++;
+                      } else {
+                          llama_count++;
+                      }
                   } catch(e) {}
              }
              let ai_inference_ms = count_ms > 0 ? Math.round(total_inference_ms / count_ms) : 0;
-             return { total_consultations_24h, risk_gates_passed, risk_warnings, ai_inference_ms };
+             let total_models = llama_count + mistral_count;
+             let model_usage = {
+                llama_3_1_pct: total_models > 0 ? (llama_count / total_models) * 100 : 0,
+                mistral_7b_pct: total_models > 0 ? (mistral_count / total_models) * 100 : 0
+             };
+             return { total_consultations_24h, risk_gates_passed, risk_warnings, ai_inference_ms, model_usage };
         })()
       }), {
         status: 200,
@@ -2108,6 +2133,38 @@ export default {
           ...corsHeaders
         }
       });
+    }
+
+    if (request.method === 'DELETE' && url.pathname === '/api/admin/audit-logs') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        let listResult = await env.GREEN_STATE.list({ prefix: 'admin_action_log:' });
+        let deletedCount = 0;
+
+        while (true) {
+          if (listResult.keys.length > 0) {
+            const deletePromises = listResult.keys.map((key: any) => env.GREEN_STATE.delete(key.name));
+            await Promise.all(deletePromises);
+            deletedCount += listResult.keys.length;
+          }
+          if (listResult.list_complete) break;
+          listResult = await env.GREEN_STATE.list({ prefix: 'admin_action_log:', cursor: listResult.cursor });
+        }
+
+        return new Response(JSON.stringify({ success: true, message: 'Audit logs purged', count: deletedCount }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to purge audit logs' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
     }
 
     if (request.method === 'POST' && url.pathname === '/api/admin/quarantine-retry-purge') {
