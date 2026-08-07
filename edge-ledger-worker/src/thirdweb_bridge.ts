@@ -325,6 +325,48 @@ function assertKvBindings(env: Env): Response | null {
 }
 
 
+
+async function trackEdgeRequest(env: any, isError: boolean, isRateLimit: boolean = false) {
+    if (!env || !env.GREEN_STATE) return;
+    try {
+        const rawTelemetry = await env.GREEN_STATE.get('edge_error_telemetry');
+        let telemetry = rawTelemetry ? JSON.parse(rawTelemetry) : {
+            total_requests_24h: 0,
+            total_errors_24h: 0,
+            error_rate_pct: 0.0,
+            last_error_timestamp: null,
+            _tracking_start: Date.now()
+        };
+
+        const now = Date.now();
+        // Reset every 24h
+        if (now - (telemetry._tracking_start || now) > 86400000) {
+           telemetry = {
+               total_requests_24h: 0,
+               total_errors_24h: 0,
+               error_rate_pct: 0.0,
+               last_error_timestamp: telemetry.last_error_timestamp,
+               _tracking_start: now
+           };
+        }
+
+        telemetry.total_requests_24h += 1;
+        if (isError || isRateLimit) {
+            telemetry.total_errors_24h += 1;
+            telemetry.last_error_timestamp = now;
+        }
+
+        if (telemetry.total_requests_24h > 0) {
+           telemetry.error_rate_pct = Number(((telemetry.total_errors_24h / telemetry.total_requests_24h) * 100).toFixed(2));
+        }
+
+        await env.GREEN_STATE.put('edge_error_telemetry', JSON.stringify(telemetry));
+    } catch(e) {
+        console.error("Failed to update edge_error_telemetry", e);
+    }
+}
+
+
     const logAdminAction = async (env: any, action: string, details: any) => {
         const timestamp = Date.now();
         const keyName = `admin_action_log:${timestamp}`;
@@ -693,6 +735,14 @@ export default {
     const kvError = assertKvBindings(env);
     if (kvError) return kvError;
 
+    // Wrap the entire fetch in a try-catch and finally to track edge telemetry
+    let isError = false;
+    let isRateLimit = false;
+
+    try {
+        const response = await (async () => {
+
+
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -711,6 +761,11 @@ export default {
         let quarantinedCount = dlqList.keys.filter((k: any) => k.name.startsWith('quarantine:')).length;
 
         let emailitTelemetry = null;
+        let edgeErrorTelemetry = null;
+        try {
+            const errRaw = await env.GREEN_STATE.get('edge_error_telemetry');
+            if (errRaw) edgeErrorTelemetry = JSON.parse(errRaw);
+        } catch(e) {}
         try {
             const telemetryRaw = await env.GREEN_STATE.get('emailit_telemetry');
             if (telemetryRaw) {
@@ -2320,5 +2375,20 @@ export default {
         dlq_id: errorId 
       }), { status: 202, headers: { 'Content-Type': 'application/json', ...corsHeaders } }); // Accepted but deferred
     }
+
+        })(); // Close inner async IIFE
+
+        // Check response status for telemetry
+        if (response && response.status >= 500) isError = true;
+        if (response && response.status === 429) isRateLimit = true;
+
+        return response;
+    } catch (e: any) {
+        isError = true;
+        throw e;
+    } finally {
+        ctx.waitUntil(trackEdgeRequest(env, isError, isRateLimit));
+    }
+
   }
 };
