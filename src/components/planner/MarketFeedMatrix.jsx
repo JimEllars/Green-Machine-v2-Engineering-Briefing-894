@@ -111,6 +111,20 @@ export default function MarketFeedMatrix() {
   }, [refreshIntervalMs]);
 
 
+
+  const cfoDistribution = React.useMemo(() => {
+    const total = marketData.filter(a => a.cfo_state).length;
+    if (total === 0) return { accumulate: 0, wait: 0, distribute: 0 };
+    const acc = marketData.filter(a => a.cfo_state === 'accumulate').length;
+    const wait = marketData.filter(a => a.cfo_state === 'wait').length;
+    const dist = marketData.filter(a => a.cfo_state === 'distribute').length;
+    return {
+      accumulate: Math.round((acc / total) * 100),
+      wait: Math.round((wait / total) * 100),
+      distribute: Math.round((dist / total) * 100)
+    };
+  }, [marketData]);
+
   return (
     <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 rounded-xl p-6 shadow-2xl">
             {isDegraded && (
@@ -144,6 +158,39 @@ export default function MarketFeedMatrix() {
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             KV Cache: ACTIVE
           </div>
+        </div>
+      </div>
+
+
+      {/* CFO Trend Distribution Bar */}
+      <div className="mb-6 bg-zinc-900/50 rounded-lg p-3 border border-zinc-800/50">
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-xs font-semibold text-slate-400">Anny CFO Trend Distribution</span>
+        </div>
+        <div className="w-full h-3 rounded-full flex overflow-hidden mb-2 shadow-inner bg-slate-800">
+          <div
+            className="h-full bg-emerald-500 hover:brightness-110 cursor-pointer transition-all border-r border-emerald-600/50"
+            style={{ width: `${cfoDistribution.accumulate}%` }}
+            onClick={() => setCfoFilter('Accumulate')}
+            title={`Accumulate: ${cfoDistribution.accumulate}%`}
+          />
+          <div
+            className="h-full bg-amber-500 hover:brightness-110 cursor-pointer transition-all border-r border-amber-600/50"
+            style={{ width: `${cfoDistribution.wait}%` }}
+            onClick={() => setCfoFilter('Wait')}
+            title={`Wait: ${cfoDistribution.wait}%`}
+          />
+          <div
+            className="h-full bg-rose-500 hover:brightness-110 cursor-pointer transition-all"
+            style={{ width: `${cfoDistribution.distribute}%` }}
+            onClick={() => setCfoFilter('Distribute')}
+            title={`Distribute: ${cfoDistribution.distribute}%`}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] font-mono font-bold">
+          <button onClick={() => setCfoFilter('Accumulate')} className={`text-emerald-400 hover:text-emerald-300 ${cfoFilter === 'Accumulate' ? 'underline' : ''}`}>Accumulate: {cfoDistribution.accumulate}%</button>
+          <button onClick={() => setCfoFilter('Wait')} className={`text-amber-400 hover:text-amber-300 ${cfoFilter === 'Wait' ? 'underline' : ''}`}>Neutral: {cfoDistribution.wait}%</button>
+          <button onClick={() => setCfoFilter('Distribute')} className={`text-rose-400 hover:text-rose-300 ${cfoFilter === 'Distribute' ? 'underline' : ''}`}>Distribute: {cfoDistribution.distribute}%</button>
         </div>
       </div>
 
