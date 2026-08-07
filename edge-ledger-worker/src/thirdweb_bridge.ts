@@ -411,6 +411,34 @@ async function trackEdgeRequest(env: any, isError: boolean, isRateLimit: boolean
         await env.GREEN_STATE.put(keyName, JSON.stringify({ action, timestamp, details }), { expirationTtl: 2592000 });
     };
 
+
+function sanitizeTelemetry(data: any): any {
+  if (data === null || data === undefined) return data;
+
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeTelemetry(item));
+  }
+
+  if (typeof data === 'object') {
+    const result: any = {};
+    for (const key in data) {
+      const lowerKey = key.toLowerCase();
+      if (
+        lowerKey.includes('axim_internal_key') ||
+        lowerKey.includes('supabase_service_key') ||
+        lowerKey.includes('emailit_api_key') ||
+        lowerKey.includes('token')
+      ) {
+        result[key] = '[REDACTED]';
+      } else {
+        result[key] = sanitizeTelemetry(data[key]);
+      }
+    }
+    return result;
+  }
+  return data;
+}
+
 export default {
 
   async scheduled(event: any, env: any, ctx: any): Promise<void> {
@@ -886,7 +914,7 @@ export default {
             }
         } catch (e) {}
 
-        return new Response(JSON.stringify({
+        return new Response(JSON.stringify(sanitizeTelemetry({
            success: true,
            buffered_count: bufferedCount,
            quarantined_count: quarantinedCount,
@@ -902,7 +930,7 @@ export default {
              mode: env.ANNY_AUTH_MODE || "session-token"
            },
            anny_auth_telemetry: await env.GREEN_STATE.get('anny_auth_telemetry', { type: 'json' })
-        }), {
+        })), {
           status: 200,
           headers: {
             'Content-Type': 'application/json',
@@ -2277,8 +2305,9 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname === '/api/health') {
-      return new Response(JSON.stringify({
+      return new Response(JSON.stringify(sanitizeTelemetry({
         status: "healthy",
+        edge_version: "v2.4.0-stable",
         timestamp: new Date().toISOString(),
         environment: "production",
         cloudflareEdge: true,
@@ -2337,7 +2366,7 @@ export default {
              };
              return { total_consultations_24h, risk_gates_passed, risk_warnings, ai_inference_ms, model_usage };
         })()
-      }), {
+      })), {
         status: 200,
         headers: {
           'Content-Type': 'application/json',
@@ -2452,7 +2481,53 @@ export default {
       }
     }
 
-    if (request.method === 'DELETE' && url.pathname === '/api/admin/quarantine') {
+
+    if (request.method === 'DELETE' && url.pathname === '/api/admin/quarantine/all') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        let purgedCount = 0;
+
+        // Delete quarantine: keys
+        let listResult = await env.GREEN_STATE.list({ prefix: 'quarantine:' });
+        while (true) {
+          if (listResult.keys.length > 0) {
+            const deletePromises = listResult.keys.map((key: any) => env.GREEN_STATE.delete(key.name));
+            await Promise.all(deletePromises);
+            purgedCount += listResult.keys.length;
+          }
+          if (listResult.list_complete) break;
+          listResult = await env.GREEN_STATE.list({ prefix: 'quarantine:', cursor: listResult.cursor });
+        }
+
+        // Delete quarantine_retry: keys
+        listResult = await env.GREEN_STATE.list({ prefix: 'quarantine_retry:' });
+        while (true) {
+          if (listResult.keys.length > 0) {
+            const deletePromises = listResult.keys.map((key: any) => env.GREEN_STATE.delete(key.name));
+            await Promise.all(deletePromises);
+            purgedCount += listResult.keys.length;
+          }
+          if (listResult.list_complete) break;
+          listResult = await env.GREEN_STATE.list({ prefix: 'quarantine_retry:', cursor: listResult.cursor });
+        }
+
+        return new Response(JSON.stringify({ success: true, message: 'GLOBAL QUARANTINE PURGE COMPLETE', purged_count: purgedCount }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to execute global quarantine purge' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+if (request.method === 'DELETE' && url.pathname === '/api/admin/quarantine') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
         return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
@@ -2480,7 +2555,7 @@ export default {
         url.pathname !== '/api/dlq-flush' &&
         url.pathname !== '/api/market-cache' &&
         url.pathname !== '/api/strategy-consult' &&
-        url.pathname !== '/api/quarantine-purge' && url.pathname !== '/api/admin/quarantine' &&
+        url.pathname !== '/api/quarantine-purge' && url.pathname !== '/api/admin/quarantine' && url.pathname !== '/api/admin/quarantine/all' &&
         url.pathname !== '/api/health' &&
         url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment' && url.pathname !== '/api/admin/trigger-financial-audit' && url.pathname !== '/api/admin/audit-logs'
     ) {
