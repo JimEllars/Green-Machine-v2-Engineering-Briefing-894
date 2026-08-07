@@ -1354,6 +1354,48 @@ export default {
 
       try {
         const payload = await request.json() as any;
+
+        // Bounce Handling
+        if (payload.status === 'bounced' || payload.status === 'failed' || payload.status === 'complained' || payload.event === 'bounced' || payload.event === 'failed' || payload.event === 'complained') {
+           ctx.waitUntil((async () => {
+             const bounceId = `email_bounce_log:${Date.now()}`;
+             await env.GREEN_STATE.put(bounceId, JSON.stringify({ ...payload, timestamp: Date.now() }), { expirationTtl: 2592000 }); // 30 days
+
+             try {
+                const rawTelemetry = await env.GREEN_STATE.get('edge_error_telemetry');
+                let telemetry = rawTelemetry ? JSON.parse(rawTelemetry) : {
+                    total_requests_24h: 0,
+                    total_errors_24h: 0,
+                    error_rate_pct: 0.0,
+                    last_error_timestamp: null,
+                    _tracking_start: Date.now()
+                };
+
+                const now = Date.now();
+                if (now - (telemetry._tracking_start || now) > 86400000) {
+                   telemetry = {
+                       total_requests_24h: 0,
+                       total_errors_24h: 0,
+                       error_rate_pct: 0.0,
+                       last_error_timestamp: telemetry.last_error_timestamp,
+                       _tracking_start: now
+                   };
+                }
+
+                telemetry.total_errors_24h += 1;
+                telemetry.last_error_timestamp = now;
+
+                if (telemetry.total_requests_24h > 0) {
+                   telemetry.error_rate_pct = Number(((telemetry.total_errors_24h / telemetry.total_requests_24h) * 100).toFixed(2));
+                }
+
+                await env.GREEN_STATE.put('edge_error_telemetry', JSON.stringify(telemetry));
+             } catch(e) {
+                console.error("Failed to update edge_error_telemetry on bounce", e);
+             }
+           })());
+        }
+
         const from = payload.from || 'unknown';
         const subject = payload.subject || 'No Subject';
         const text = payload.text || '';
@@ -1643,7 +1685,7 @@ export default {
       }
       try {
         const bodyStr = await request.text();
-        const payload = JSON.parse(bodyStr) as { target_endpoint?: string, payload?: any };
+        const payload = JSON.parse(bodyStr) as { target_endpoint?: string, payload?: any, bypass_hmac?: boolean };
         if (!payload.target_endpoint || !payload.payload) {
              return new Response(JSON.stringify({ error: 'Missing target_endpoint or payload' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
         }
@@ -1651,9 +1693,14 @@ export default {
         const internalUrl = new URL(request.url);
         internalUrl.pathname = payload.target_endpoint;
 
+        const newHeaders = new Headers(request.headers);
+        if (payload.bypass_hmac) {
+            newHeaders.set('X-Axim-Signature', env.AXIM_INTERNAL_KEY);
+        }
+
         const syntheticRequest = new Request(internalUrl.toString(), {
             method: 'POST',
-            headers: request.headers,
+            headers: newHeaders,
             body: JSON.stringify(payload.payload)
         });
 
