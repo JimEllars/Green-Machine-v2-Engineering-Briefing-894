@@ -212,7 +212,7 @@ const corsHeaders = {
 
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, X-Axim-Signature',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
 };
 
 
@@ -245,6 +245,7 @@ async function sendEmailItNotification(
     return { success: false, error: "EMAILIT_API_KEY not configured" };
   }
   try {
+    const startFetchTime = performance.now();
     const response = await fetchWithTimeout("https://api.emailit.com/v1/emails", {
       method: "POST",
       headers: {
@@ -260,6 +261,23 @@ async function sendEmailItNotification(
         text: params.text || ""
       })
     });
+
+    const delivery_ms = Math.round(performance.now() - startFetchTime);
+
+    try {
+      let telemetryStr = await env.GREEN_STATE.get('emailit_telemetry') || '{}';
+      let telemetry = JSON.parse(telemetryStr);
+      telemetry.delivery_ms = delivery_ms;
+      if (response.ok) {
+        telemetry.status = 'OPERATIONAL';
+        telemetry.last_successful_dispatch = Date.now();
+      } else {
+        telemetry.status = 'ERROR';
+      }
+      telemetry.last_attempt = Date.now();
+      await env.GREEN_STATE.put('emailit_telemetry', JSON.stringify(telemetry));
+    } catch (e) {}
+
     let result: { success: boolean; error?: string };
     if (!response.ok) {
       const errText = await response.text();
@@ -2254,6 +2272,64 @@ export default {
       }
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/admin/quarantine') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        let items: any[] = [];
+
+        let listQ = await env.GREEN_STATE.list({ prefix: 'quarantine:' });
+        for (const key of listQ.keys) {
+           try {
+               const val = await env.GREEN_STATE.get(key.name);
+               items.push({ key_name: key.name, payload: val ? JSON.parse(val) : null });
+           } catch (e) {
+               items.push({ key_name: key.name, error: 'unparseable' });
+           }
+        }
+
+        let listQR = await env.GREEN_STATE.list({ prefix: 'quarantine_retry:' });
+        for (const key of listQR.keys) {
+           try {
+               const val = await env.GREEN_STATE.get(key.name);
+               items.push({ key_name: key.name, payload: val ? JSON.parse(val) : null });
+           } catch (e) {
+               items.push({ key_name: key.name, error: 'unparseable' });
+           }
+        }
+
+        return new Response(JSON.stringify({ success: true, items }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to fetch quarantine' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+    if (request.method === 'DELETE' && url.pathname === '/api/admin/quarantine') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+      try {
+        const payload = (await request.json()) as { key_name?: string };
+        if (payload.key_name) {
+           await env.GREEN_STATE.delete(payload.key_name);
+        }
+        return new Response(JSON.stringify({ success: true, message: 'Item purged' }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to purge item' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+      }
+    }
+
+
     // Explicit Fallback Route Evaluation
     if (
         url.pathname !== '/' &&
@@ -2265,7 +2341,7 @@ export default {
         url.pathname !== '/api/dlq-flush' &&
         url.pathname !== '/api/market-cache' &&
         url.pathname !== '/api/strategy-consult' &&
-        url.pathname !== '/api/quarantine-purge' &&
+        url.pathname !== '/api/quarantine-purge' && url.pathname !== '/api/admin/quarantine' &&
         url.pathname !== '/api/health' &&
         url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment' && url.pathname !== '/api/admin/trigger-financial-audit' && url.pathname !== '/api/admin/audit-logs'
     ) {

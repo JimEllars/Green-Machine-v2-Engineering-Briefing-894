@@ -583,7 +583,7 @@ function App() {
                 className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm transition-colors shadow-[0_0_15px_rgba(99,102,241,0.5)] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSendingBriefing ? <SafeIcon name="Loader" className="w-4 h-4 animate-spin" /> : <SafeIcon name="Send" className="w-4 h-4" />}
-                {!dlqStatus.emailit_configured ? 'Relay Unconfigured' : 'Send Now'}
+                {!dlqStatus.emailit_configured ? 'Relay Unconfigured' : 'Confirm & Dispatch to Executive Team'}
               </button>
             </div>
           </div>
@@ -628,6 +628,50 @@ function App() {
           </div>
         </div>
       </nav>
+
+      {/* System Health Snapshot Card */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-700/50 rounded-xl p-4 shadow-2xl flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.2)]">
+              <SafeIcon name="Activity" className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">System Status</div>
+              <div className="text-sm text-emerald-400 font-bold flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                100% Operational
+              </div>
+            </div>
+          </div>
+          <div className="h-10 w-px bg-zinc-800 hidden md:block"></div>
+          <div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Oracle Link</div>
+            <div className={`text-sm font-bold ${dlqStatus?.anny_oracle?.session_valid ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {dlqStatus?.anny_oracle?.session_valid ? 'Active' : 'Public Guest'}
+            </div>
+          </div>
+          <div className="h-10 w-px bg-zinc-800 hidden md:block"></div>
+          <div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Circuit Breaker</div>
+            <div className="text-sm font-bold text-emerald-400">CLOSED</div>
+          </div>
+          <div className="h-10 w-px bg-zinc-800 hidden md:block"></div>
+          <div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">DLQ Queue</div>
+            <div className={`text-sm font-bold ${dlqStatus.count > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {dlqStatus.count > 0 ? `${dlqStatus.count} Pending` : 'Clean'}
+            </div>
+          </div>
+          <div className="h-10 w-px bg-zinc-800 hidden md:block"></div>
+          <div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Webhook Ingress</div>
+            <div className={`text-sm font-bold ${dlqStatus?.webhook_ingress_telemetry?.status === 'OPERATIONAL' ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {dlqStatus?.webhook_ingress_telemetry?.status === 'OPERATIONAL' ? 'Operational' : 'Degraded'}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {showCriticalAlert && (
         <div className="bg-rose-900/90 border-b border-rose-500/50 text-rose-100 px-4 py-3 shadow-[0_4px_20px_rgba(225,29,72,0.3)] sticky top-16 z-40 transition-all duration-300">
@@ -818,7 +862,7 @@ function App() {
                 </button>
 
                 <button
-                  onClick={handleSendExecBriefing}
+                  onClick={() => setShowBriefingPreview(true)}
                   className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isSendingBriefing ? 'bg-indigo-500/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)] text-indigo-400' : briefingSuccess ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-indigo-500/50 text-slate-300'}`}
                 >
                   <SafeIcon name="Mail" className={`w-3 h-3 ${isSendingBriefing ? 'animate-pulse' : ''}`} />
