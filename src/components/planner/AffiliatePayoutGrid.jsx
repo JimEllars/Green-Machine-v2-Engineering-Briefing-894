@@ -194,9 +194,50 @@ export default function AffiliatePayoutGrid() {
             <option value="SOL">SOL</option>
             <option value="MATIC">MATIC</option>
           </select>
-          <button className="text-sm px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg border border-slate-700 transition-colors flex items-center gap-2">
-            <SafeIcon name="Download" /> Export CSV
+          <button
+            onClick={() => {
+              const headers = ['id', 'created_at', 'amount', 'token_type', 'status', 'transaction_hash'];
+              const csvRows = [];
+              csvRows.push(headers.join(','));
+
+              const currentFilteredTransactions = transactions.filter(tx => {
+                const matchesToken = selectedTokenFilter === 'All Tokens' || tx.token === selectedTokenFilter;
+                const matchesSearch = tx.wallet.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                      (tx.transaction_hash && tx.transaction_hash.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                                      tx.partner.toLowerCase().includes(searchQuery.toLowerCase());
+                return matchesToken && matchesSearch;
+              });
+              for (const tx of currentFilteredTransactions) {
+                const row = [
+                  tx.id,
+                  tx.created_at || new Date().toISOString(), // Mocking created_at if not present in mapped obj
+                  tx.amount,
+                  tx.token,
+                  tx.status,
+                  tx.transaction_hash || 'N/A'
+                ];
+                // Escape quotes and wrap in quotes for robust CSV
+                const escapedRow = row.map(cell => `"${String(cell).replace(/"/g, '""')}"`);
+                csvRows.push(escapedRow.join(','));
+              }
+
+              const csvString = csvRows.join('\n');
+              const blob = new Blob([csvString], { type: 'text/csv' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `green-machine-payouts-${new Date().toISOString()}.csv`;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              window.URL.revokeObjectURL(url);
+            }}
+            className="text-sm font-bold uppercase tracking-wider px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-emerald-900/20"
+          >
+            <SafeIcon name="Download" className="w-4 h-4" />
+            Download CSV
           </button>
+
         </div>
       </div>
 

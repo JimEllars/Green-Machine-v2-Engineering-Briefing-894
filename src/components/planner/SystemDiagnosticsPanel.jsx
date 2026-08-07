@@ -693,6 +693,11 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                       <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2">
                         <SafeIcon name="Brain" className="w-3 h-3" />
                         Workers AI Inference Benchmark
+                        {(deepTelemetry?.investing_brain_telemetry?.model_usage?.mistral_7b_pct > 5.0 || deepTelemetry?.investing_brain_telemetry?.mistral_7b_pct > 5.0) && (
+                          <div className="ml-2 px-2 py-1 bg-amber-500/20 text-amber-400 border border-rose-500/50 shadow-[0_0_10px_rgba(244,63,94,0.3)] rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                            <SafeIcon name="AlertTriangle" className="w-3 h-3 text-rose-500" /> AI Fallback Rate High (&gt;5%)
+                          </div>
+                        )}
                       </div>
                       <div className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
                         (deepTelemetry.investing_brain_telemetry.avg_latency_ms || 850) < 500 ? 'bg-emerald-500/20 text-emerald-400' :
