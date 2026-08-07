@@ -22,6 +22,10 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   const [latencyHistory, setLatencyHistory] = useState([]);
   const [activeAiModel, setActiveAiModel] = useState(window.localStorage.getItem("ai_model"));
   const [isDeepTelemetryOpen, setIsDeepTelemetryOpen] = useState(false);
+  const [webhookTarget, setWebhookTarget] = useState("/api/webhooks/anny-signal");
+  const [webhookPayload, setWebhookPayload] = useState("");
+  const [isReplayingWebhook, setIsReplayingWebhook] = useState(false);
+  const [webhookResult, setWebhookResult] = useState(null);
   const [deepTelemetry, setDeepTelemetry] = useState(null);
   const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
   const [healthData, setHealthData] = useState(null);
@@ -29,7 +33,10 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   useEffect(() => {
     const handleRealtimeStatus = (e) => setRealtimeStatus(e.detail);
     window.addEventListener('realtime-status-update', handleRealtimeStatus);
-    return () => window.removeEventListener('realtime-status-update', handleRealtimeStatus);
+
+
+
+  return () => window.removeEventListener('realtime-status-update', handleRealtimeStatus);
   }, []);
 
   useEffect(() => {
@@ -243,6 +250,37 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
       streamEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [tickerStream]);
+
+
+  const handleReplayWebhook = async () => {
+    setIsReplayingWebhook(true);
+    setWebhookResult(null);
+    try {
+      const payloadObj = JSON.parse(webhookPayload);
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/replay-webhook`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        },
+        body: JSON.stringify({
+          target_endpoint: webhookTarget,
+          payload: payloadObj
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setWebhookResult({ success: true, message: 'Webhook injected successfully' });
+      } else {
+        setWebhookResult({ success: false, message: data.error || 'Failed to inject webhook' });
+      }
+    } catch (e) {
+      setWebhookResult({ success: false, message: e.message || 'Invalid JSON or network error' });
+    } finally {
+      setIsReplayingWebhook(false);
+    }
+  };
 
   return (
     <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 shadow-2xl rounded-xl p-6 h-full flex flex-col">
@@ -604,6 +642,51 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                 </button>
               </div>
               <div className="pt-6">
+
+                <div className="mb-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+                  <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <SafeIcon name="Zap" className="w-3 h-3" />
+                    Webhook Replay Tool
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-[10px] text-slate-400 font-mono mb-1">Target Endpoint</label>
+                      <input
+                        type="text"
+                        value={webhookTarget}
+                        onChange={(e) => setWebhookTarget(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 font-mono focus:border-indigo-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 font-mono mb-1">Raw JSON Payload</label>
+                      <textarea
+                        value={webhookPayload}
+                        onChange={(e) => setWebhookPayload(e.target.value)}
+                        placeholder="{}"
+                        className="w-full h-24 bg-slate-900 border border-slate-700 rounded p-2 text-xs text-slate-200 font-mono focus:border-indigo-500 focus:outline-none custom-scrollbar"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <div className="text-xs">
+                        {webhookResult && (
+                          <span className={webhookResult.success ? 'text-emerald-400' : 'text-rose-400'}>
+                            {webhookResult.message}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleReplayWebhook}
+                        disabled={isReplayingWebhook || !webhookPayload.trim()}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-xs font-bold transition-colors flex items-center gap-2"
+                      >
+                        {isReplayingWebhook ? <SafeIcon name="Loader" className="w-3 h-3 animate-spin" /> : <SafeIcon name="Send" className="w-3 h-3" />}
+                        Inject Webhook
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 {deepTelemetry?.investing_brain_telemetry && (
                   <div className="mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700/50">
                     <div className="flex justify-between items-center mb-3">

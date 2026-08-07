@@ -23,6 +23,11 @@ function App() {
   const [isSendingBriefing, setIsSendingBriefing] = useState(false);
   const [briefingSuccess, setBriefingSuccess] = useState(false);
   const [showBriefingPreview, setShowBriefingPreview] = useState(false);
+  const [isBriefingConfirmModalOpen, setIsBriefingConfirmModalOpen] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [archiveItems, setArchiveItems] = useState([]);
+  const [selectedArchiveItem, setSelectedArchiveItem] = useState(null);
+  const [isLoadingArchive, setIsLoadingArchive] = useState(false);
   const [toastError, setToastError] = useState(null);
   const [readinessStatus, setReadinessStatus] = useState(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -138,6 +143,35 @@ function App() {
       setTimeout(() => setReadinessStatus(null), 5000);
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+
+
+  const fetchBriefingArchive = async () => {
+    setIsLoadingArchive(true);
+    setArchiveItems([]);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/briefing-archive`, {
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.archives) {
+          setArchiveItems(data.archives);
+        }
+      } else {
+        setToastError('Failed to fetch archive');
+        setTimeout(() => setToastError(''), 3000);
+      }
+    } catch (e) {
+      setToastError('Failed to fetch archive');
+      setTimeout(() => setToastError(''), 3000);
+    } finally {
+      setIsLoadingArchive(false);
     }
   };
 
@@ -926,12 +960,24 @@ function App() {
                 </button>
 
                 <button
-                  onClick={() => setShowBriefingPreview(true)}
+                  onClick={() => setIsBriefingConfirmModalOpen(true)}
                   className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider flex items-center justify-center gap-2 ${isSendingBriefing ? 'bg-indigo-500/20 border-indigo-500 shadow-[0_0_15px_rgba(99,102,241,0.5)] text-indigo-400' : briefingSuccess ? 'bg-indigo-500 text-white border-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-indigo-500/50 text-slate-300'}`}
                 >
                   <SafeIcon name="Mail" className={`w-3 h-3 ${isSendingBriefing ? 'animate-pulse' : ''}`} />
                   {isSendingBriefing ? 'Dispatching...' : briefingSuccess ? 'Briefing Sent!' : 'Dispatch Exec Briefing'}
                 </button>
+
+                <button
+                  onClick={() => {
+                    setIsArchiveModalOpen(true);
+                    fetchBriefingArchive();
+                  }}
+                  className="p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-800 text-[10px] font-bold text-slate-300 transition-colors uppercase tracking-wider flex items-center justify-center gap-2"
+                >
+                  <SafeIcon name="Archive" className="w-3 h-3" />
+                  View Briefing Archive
+                </button>
+
                 <button
                   onClick={async () => {
                     setShowDeptSummaryModal(true);
@@ -1141,6 +1187,93 @@ function App() {
                 </div>
             </div>
           </div>
+      )}
+
+
+      {isBriefingConfirmModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-700/50 rounded-xl shadow-2xl max-w-md w-full p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-500/50 flex items-center justify-center mx-auto mb-4">
+              <SafeIcon name="AlertTriangle" className="w-6 h-6 text-amber-500" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Manual Briefing Dispatch</h3>
+            <p className="text-slate-300 text-sm mb-6">Warning: You are about to dispatch an executive briefing out of the standard CRON schedule. Do you wish to proceed?</p>
+            <div className="flex gap-4 justify-center">
+              <button
+                onClick={() => setIsBriefingConfirmModalOpen(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setIsBriefingConfirmModalOpen(false);
+                  handleSendExecBriefing();
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-bold transition-colors shadow-[0_0_15px_rgba(99,102,241,0.5)] flex items-center gap-2"
+              >
+                Confirm & Dispatch to Executive Team
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {isArchiveModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900/90 border border-slate-700/50 rounded-xl shadow-2xl max-w-4xl w-full flex flex-col h-[85vh]">
+            <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/50 shrink-0">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <SafeIcon name="Archive" className="w-4 h-4 text-emerald-500" />
+                Briefing Archive Viewer
+              </h3>
+              <button onClick={() => { setIsArchiveModalOpen(false); setSelectedArchiveItem(null); }} className="text-slate-400 hover:text-white transition-colors">
+                <SafeIcon name="X" className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex flex-1 overflow-hidden">
+              <div className="w-1/3 border-r border-slate-700/50 bg-slate-800/30 overflow-y-auto">
+                {isLoadingArchive ? (
+                  <div className="p-8 flex justify-center"><SafeIcon name="Loader" className="w-6 h-6 text-emerald-500 animate-spin" /></div>
+                ) : archiveItems.length === 0 ? (
+                  <div className="p-8 text-center text-sm text-slate-500 italic">No archived briefings found.</div>
+                ) : (
+                  <ul className="divide-y divide-slate-700/50">
+                    {archiveItems.map((item, idx) => (
+                      <li key={idx}>
+                        <button
+                          onClick={() => setSelectedArchiveItem(item)}
+                          className={`w-full text-left p-4 hover:bg-slate-800/80 transition-colors ${selectedArchiveItem?.key === item.key ? 'bg-slate-800/80 border-l-2 border-emerald-500' : ''}`}
+                        >
+                          <div className="text-sm font-bold text-emerald-400 font-mono flex items-center gap-2">
+                             <SafeIcon name="FileText" className="w-3 h-3" />
+                             {new Date(parseInt(item.key.split(':')[1])).toLocaleString()}
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div className="w-2/3 bg-white overflow-hidden relative">
+                {selectedArchiveItem ? (
+                  <iframe
+                     title="Archive Viewer"
+                     className="w-full h-full border-0"
+                     srcDoc={selectedArchiveItem.html}
+                     sandbox=""
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-500 bg-slate-900/50">
+                     <SafeIcon name="Inbox" className="w-12 h-12 mb-4 opacity-20" />
+                     <p className="text-sm">Select an archived briefing to view.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {isAuditModalOpen && (

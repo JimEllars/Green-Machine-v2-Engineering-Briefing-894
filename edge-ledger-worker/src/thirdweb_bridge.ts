@@ -38,7 +38,7 @@ export async function getOrRefreshAnnySessionToken(env: Env, ctx?: ExecutionCont
 
   if (env.ANNY_EMAIL && env.ANNY_PASSWORD) {
     try {
-      const res = await fetch("https://api.anny.trade/backend/login", {
+      const res = await fetchWithRetry("https://api.anny.trade/backend/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: env.ANNY_EMAIL, password: env.ANNY_PASSWORD })
@@ -237,6 +237,26 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
+
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries: number = 2, timeoutMs: number = 5000): Promise<Response> {
+  let lastError: any;
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      const response = await fetchWithTimeout(url, options, timeoutMs);
+      if (!response.ok && response.status >= 500) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      return response;
+    } catch (e: any) {
+      lastError = e;
+      if (i < maxRetries) {
+        await new Promise(res => setTimeout(res, Math.pow(2, i) * 500));
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function sendEmailItNotification(
   params: { to: string; cc?: string[]; subject: string; html: string; text?: string; _retryId?: string },
   env: Env
@@ -246,7 +266,7 @@ async function sendEmailItNotification(
   }
   try {
     const startFetchTime = performance.now();
-    const response = await fetchWithTimeout("https://api.emailit.com/v1/emails", {
+    const response = await fetchWithRetry("https://api.emailit.com/v1/emails", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
