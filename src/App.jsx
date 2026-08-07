@@ -41,6 +41,10 @@ function App() {
   const [isPurgingDept, setIsPurgingDept] = useState(null);
 
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [isQuarantineModalOpen, setIsQuarantineModalOpen] = useState(false);
+  const [quarantineItems, setQuarantineItems] = useState([]);
+  const [isLoadingQuarantine, setIsLoadingQuarantine] = useState(false);
+  const [deletingQuarantineItem, setDeletingQuarantineItem] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
   const [actionTypeFilter, setActionTypeFilter] = useState('All Actions');
@@ -136,6 +140,66 @@ function App() {
       setIsVerifying(false);
     }
   };
+
+
+  const fetchQuarantineItems = async () => {
+    setIsLoadingQuarantine(true);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/quarantine`, {
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQuarantineItems(data.items || []);
+      } else {
+        setToastError('Failed to fetch quarantine items');
+        setTimeout(() => setToastError(null), 3000);
+      }
+    } catch(e) {
+      console.error('Failed to fetch quarantine items:', e);
+      setToastError('Network error fetching quarantine items');
+      setTimeout(() => setToastError(null), 3000);
+    } finally {
+      setIsLoadingQuarantine(false);
+    }
+  };
+
+  const deleteQuarantineItem = async (keyName) => {
+    setDeletingQuarantineItem(keyName);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/quarantine`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        },
+        body: JSON.stringify({ key_name: keyName })
+      });
+      if (res.ok) {
+        setQuarantineItems(prev => prev.filter(item => item.key_name !== keyName));
+      } else {
+        setToastError('Failed to delete quarantine item');
+        setTimeout(() => setToastError(null), 3000);
+      }
+    } catch(e) {
+      console.error('Failed to delete quarantine item:', e);
+      setToastError('Network error deleting quarantine item');
+      setTimeout(() => setToastError(null), 3000);
+    } finally {
+      setDeletingQuarantineItem(null);
+    }
+  };
+
+  useEffect(() => {
+    if (isQuarantineModalOpen) {
+      fetchQuarantineItems();
+    }
+  }, [isQuarantineModalOpen]);
+
 
   const handleClearDept = async (department) => {
     setIsPurgingDept(department);
@@ -719,7 +783,7 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Alerts & Stats */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            <SystemDiagnosticsPanel dlqStatus={dlqStatus} onDiagnosticsUpdate={handleDiagnosticsUpdate} />
+            <SystemDiagnosticsPanel dlqStatus={dlqStatus} onDiagnosticsUpdate={handleDiagnosticsUpdate} onOpenQuarantineManager={() => setIsQuarantineModalOpen(true)} />
           </div>
 
           {/* Center Column: Market & Ledger */}
@@ -1012,6 +1076,68 @@ function App() {
                             </div>
                         </>
                     )}
+                </div>
+            </div>
+          </div>
+      )}
+
+
+      {isQuarantineModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-900/90 border border-slate-700/50 rounded-xl shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col max-h-[80vh]">
+                <div className="p-4 border-b border-slate-700/50 flex justify-between items-center bg-slate-800/50 shrink-0">
+                    <h3 className="text-white font-bold flex items-center gap-2">
+                        <SafeIcon name="AlertTriangle" className="w-4 h-4 text-amber-500" />
+                        Quarantine Manager
+                    </h3>
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => setIsQuarantineModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+                            <SafeIcon name="X" className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+                <div className="p-4 flex-grow overflow-y-auto custom-scrollbar">
+                    {isLoadingQuarantine ? (
+                        <div className="flex items-center justify-center p-8">
+                            <SafeIcon name="Loader" className="w-6 h-6 text-amber-500 animate-spin" />
+                        </div>
+                    ) : quarantineItems.length > 0 ? (
+                        <div className="space-y-3">
+                            {quarantineItems.map((item, idx) => (
+                                <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 flex justify-between items-start gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-amber-400 font-mono text-xs font-bold mb-1 truncate">
+                                            {item.key_name}
+                                        </div>
+                                        <pre className="text-slate-300 text-[10px] font-mono whitespace-pre-wrap break-all bg-slate-900/50 p-2 rounded border border-slate-800">
+                                            {item.error ? item.error : JSON.stringify(item.payload, null, 2).substring(0, 100) + (JSON.stringify(item.payload, null, 2).length > 100 ? '...' : '')}
+                                        </pre>
+                                    </div>
+                                    <button
+                                        onClick={() => deleteQuarantineItem(item.key_name)}
+                                        disabled={deletingQuarantineItem === item.key_name}
+                                        className="px-3 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/50 hover:bg-rose-500/40 rounded text-xs font-bold transition-colors shrink-0 disabled:opacity-50"
+                                    >
+                                        {deletingQuarantineItem === item.key_name ? 'Deleting...' : 'Delete Item'}
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-slate-500 text-sm text-center italic p-8 bg-slate-800/30 rounded-lg border border-slate-800">
+                            No quarantined items found.
+                        </div>
+                    )}
+                </div>
+                <div className="p-4 border-t border-slate-700/50 bg-slate-800/50 flex justify-end shrink-0">
+                    <button
+                        onClick={() => fetchQuarantineItems()}
+                        disabled={isLoadingQuarantine}
+                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-2"
+                    >
+                        <SafeIcon name="RefreshCw" className={`w-3 h-3 ${isLoadingQuarantine ? 'animate-spin' : ''}`} />
+                        Refresh
+                    </button>
                 </div>
             </div>
           </div>

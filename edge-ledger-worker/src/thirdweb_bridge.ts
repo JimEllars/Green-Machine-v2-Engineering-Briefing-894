@@ -1563,13 +1563,85 @@ export default {
             html: html
         }, env);
 
+
         if (dispatchResult.success) {
+            try {
+                await env.GREEN_STATE.put(`briefing_archive:${Date.now()}`, html, { expirationTtl: 604800 });
+            } catch(e) { console.error('Failed to archive briefing', e); }
             return new Response(JSON.stringify({ success: true, recipient: "james.ellars@axim.us.com" }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
+
         } else {
             return new Response(JSON.stringify({ error: dispatchResult.error }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
         }
       } catch (e) {
         return new Response(JSON.stringify({ error: 'Failed to send exec briefing' }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+      }
+    }
+
+
+    if (request.method === 'GET' && url.pathname === '/api/admin/briefing-archive') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+
+      try {
+        const listResult = await env.GREEN_STATE.list({ prefix: 'briefing_archive:' });
+        // Sort keys by timestamp (newest first)
+        const sortedKeys = listResult.keys.sort((a: any, b: any) => {
+            const tsA = parseInt(a.name.split(':')[1], 10);
+            const tsB = parseInt(b.name.split(':')[1], 10);
+            return tsB - tsA;
+        });
+
+        const recentKeys = sortedKeys.slice(0, 5);
+        const archives = [];
+        for (const key of recentKeys) {
+            const html = await env.GREEN_STATE.get(key.name);
+            if (html) {
+                archives.push({ key: key.name, html });
+            }
+        }
+
+        return new Response(JSON.stringify({ success: true, archives }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to fetch briefing archives' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
+
+    if (request.method === 'POST' && url.pathname === '/api/admin/replay-webhook') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+      try {
+        const bodyStr = await request.text();
+        const payload = JSON.parse(bodyStr) as { target_endpoint?: string, payload?: any };
+        if (!payload.target_endpoint || !payload.payload) {
+             return new Response(JSON.stringify({ error: 'Missing target_endpoint or payload' }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
+        }
+
+        const internalUrl = new URL(request.url);
+        internalUrl.pathname = payload.target_endpoint;
+
+        const syntheticRequest = new Request(internalUrl.toString(), {
+            method: 'POST',
+            headers: request.headers,
+            body: JSON.stringify(payload.payload)
+        });
+
+        // Recursively call fetch handler
+        return await this.fetch(syntheticRequest, env, ctx);
+
+      } catch(e: any) {
+         return new Response(JSON.stringify({ error: 'Replay failed', details: e.message }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders }});
       }
     }
 
@@ -2336,7 +2408,7 @@ export default {
         url.pathname !== '/api/dlq-status' &&
         url.pathname !== '/api/cache-sync' &&
         url.pathname !== '/api/admin/dept-summary' &&
-        url.pathname !== '/api/admin/send-exec-briefing' &&
+        url.pathname !== '/api/admin/send-exec-briefing' && url.pathname !== '/api/admin/briefing-archive' && url.pathname !== '/api/admin/replay-webhook' &&
         url.pathname !== '/api/webhooks/emailit-inbound' && url.pathname !== '/api/webhooks/anny-signal' && url.pathname !== '/api/anny-signals' &&
         url.pathname !== '/api/dlq-flush' &&
         url.pathname !== '/api/market-cache' &&
