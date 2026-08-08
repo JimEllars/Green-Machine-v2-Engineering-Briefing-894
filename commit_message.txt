@@ -1,6 +1,6 @@
-feat: Implement Sprint 3.4 tasks for AXiM Green Machine v2
+feat: Implement Sprint 4.1 features
 
-- TASK 1: Render DLQ auto-heal telemetry badge in diagnostic HUD.
-- TASK 2: Aggregate AI model usage analytics & latency telemetry.
-- TASK 3: Add audit log purge endpoint (`DELETE /api/admin/audit-logs`) and Admin UI clear control.
-- TASK 4: Add signal parameter customizer in Admin Cockpit for dry-run simulation testing.
+- Implement Supabase Read-Replica Routing for Read-Heavy Queries (SUPABASE_READ_URL and getSupabaseReadUrl)
+- Inject Workers AI Insights into Manual Financial Audits (Llama-3.1-8b-instruct)
+- Add Manual Anny Oracle Ping Override & UI Control (force-oracle-ping and Force Oracle Sync button)
+- Add CFO Trend "Pulse" Animation to CFO Trend Distribution Bar (animate-pulse)
