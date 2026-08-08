@@ -19,6 +19,8 @@ function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [isPurgingQuarantine, setIsPurgingQuarantine] = useState(false);
+  const [isForcingOraclePing, setIsForcingOraclePing] = useState(false);
+  const [forceOraclePingSuccess, setForceOraclePingSuccess] = useState(false);
   const [purgeSuccess, setPurgeSuccess] = useState(false);
   const [isSendingBriefing, setIsSendingBriefing] = useState(false);
   const [briefingSuccess, setBriefingSuccess] = useState(false);
@@ -29,6 +31,7 @@ function App() {
   const [selectedArchiveItem, setSelectedArchiveItem] = useState(null);
   const [isLoadingArchive, setIsLoadingArchive] = useState(false);
   const [toastError, setToastError] = useState(null);
+  const [toastSuccess, setToastSuccess] = useState(null);
   const [readinessStatus, setReadinessStatus] = useState(null);
   const [edgeVersion, setEdgeVersion] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
@@ -523,7 +526,33 @@ function App() {
   };
 
 
-  const handleSyncKV = async () => {
+
+  const handleForceOraclePing = async () => {
+    setIsForcingOraclePing(true);
+    setForceOraclePingSuccess(false);
+    try {
+      const res = await fetch(`${getWorkerUrl()}/api/admin/force-oracle-ping`, {
+        method: 'POST',
+        headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY }
+      });
+      if (res.ok) {
+        setForceOraclePingSuccess(true);
+        setTimeout(() => setForceOraclePingSuccess(false), 3000);
+        checkDlq();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsForcingOraclePing(false);
+    }
+  };
+
+  const handleRefreshTelemetry = async () => {
+    checkDlq();
+    setToastSuccess('Telemetry Refreshed!');
+    setTimeout(() => setToastSuccess(null), 3000);
+  };
+const handleSyncKV = async () => {
     setIsSyncing(true);
     setSyncSuccess(false);
     try {
@@ -778,7 +807,10 @@ function App() {
 
       {/* System Health Snapshot Card */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-700/50 rounded-xl p-4 shadow-2xl flex flex-wrap gap-4 items-center justify-between">
+        <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-700/50 rounded-xl p-4 shadow-2xl flex flex-wrap gap-4 items-center justify-between relative">
+          <button onClick={handleRefreshTelemetry} className="absolute top-4 right-4 text-slate-400 hover:text-emerald-400 transition-colors" title="Refresh Telemetry">
+            <SafeIcon name="RefreshCw" className="w-4 h-4" />
+          </button>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.2)]">
               <SafeIcon name="Activity" className="w-4 h-4 text-emerald-400" />
@@ -923,7 +955,14 @@ function App() {
                   {isRenewingSession ? 'Renewing...' : renewSessionSuccess ? 'Session Renewed!' : 'Renew Anny Session'}
                 </button>
 
+
                 <button
+                  onClick={handleForceOraclePing}
+                  className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider ${isForcingOraclePing ? 'bg-cyan-500/20 border-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.5)] text-cyan-400' : forceOraclePingSuccess ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-cyan-500/50 text-slate-300'}`}
+                >
+                  {isForcingOraclePing ? 'Syncing...' : forceOraclePingSuccess ? 'Cache Synced!' : 'Force Oracle Sync'}
+                </button>
+<button
                   onClick={handleResetCircuit}
                   className={`p-3 rounded-lg border text-[10px] font-bold transition-colors uppercase tracking-wider ${isResettingCircuit ? 'bg-amber-500/20 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] text-amber-400' : resetCircuitSuccess ? 'bg-emerald-500 text-white border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'bg-slate-800/50 hover:bg-slate-800 border-rose-500/50 text-slate-300'}`}
                 >
@@ -1444,6 +1483,14 @@ function App() {
         </div>
       </footer>
 
+      {toastSuccess && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-emerald-500/90 text-white px-6 py-3 rounded-full shadow-2xl border border-emerald-400 z-50 animate-bounce font-bold tracking-wide">
+          <div className="flex items-center gap-2">
+            <SafeIcon name="CheckCircle" className="w-5 h-5" />
+            {toastSuccess}
+          </div>
+        </div>
+      )}
       {/* Verify Readiness Toast */}
       {readinessStatus && (
         <div className={`fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-2xl border flex items-center gap-3 backdrop-blur-md transition-all duration-500 animate-in slide-in-from-bottom-5 ${readinessStatus.isOperational ? 'bg-emerald-900/90 border-emerald-500/50 text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.3)]' : 'bg-amber-900/90 border-amber-500/50 text-amber-100 shadow-[0_0_20px_rgba(245,158,11,0.3)]'}`}>
