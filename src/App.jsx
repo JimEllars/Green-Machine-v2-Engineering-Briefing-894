@@ -30,6 +30,7 @@ function App() {
   const [isLoadingArchive, setIsLoadingArchive] = useState(false);
   const [toastError, setToastError] = useState(null);
   const [readinessStatus, setReadinessStatus] = useState(null);
+  const [edgeVersion, setEdgeVersion] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
 
   const [showDeptSummaryModal, setShowDeptSummaryModal] = useState(false);
@@ -53,6 +54,39 @@ function App() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
   const [actionTypeFilter, setActionTypeFilter] = useState('All Actions');
+
+
+  const [isNukingQuarantine, setIsNukingQuarantine] = useState(false);
+  const handleNukeQuarantine = async () => {
+    const confirmation = prompt("WARNING: This will permanently delete all quarantined payloads. Type 'NUKE' to confirm.");
+    if (confirmation !== 'NUKE') {
+      return;
+    }
+
+    setIsNukingQuarantine(true);
+    try {
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/quarantine/all`, {
+        method: 'DELETE',
+        headers: {
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+        }
+      });
+      if (res.ok) {
+        setQuarantineItems([]);
+        setToastError('GLOBAL QUARANTINE PURGE COMPLETE');
+        setTimeout(() => setToastError(''), 3000);
+      } else {
+        setToastError('Failed to nuke quarantine');
+        setTimeout(() => setToastError(''), 3000);
+      }
+    } catch (e) {
+      setToastError('Failed to nuke quarantine');
+      setTimeout(() => setToastError(''), 3000);
+    } finally {
+      setIsNukingQuarantine(false);
+    }
+  };
 
   const [isClearingAudit, setIsClearingAudit] = useState(false);
   const handleClearAuditLogs = async () => {
@@ -406,11 +440,26 @@ function App() {
     }
   };
 
+
   useEffect(() => {
+    const fetchHealth = async () => {
+      try {
+        const workerUrl = getWorkerUrl();
+        const res = await fetch(`${workerUrl}/api/health`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.edge_version) setEdgeVersion(data.edge_version);
+        }
+      } catch (e) {
+        console.error("Failed to fetch health for version", e);
+      }
+    };
+    fetchHealth();
     checkDlq();
     const interval = setInterval(checkDlq, 15000); // Check every 15s
     return () => clearInterval(interval);
   }, []);
+
 
 
   const [fullSignalResult, setFullSignalResult] = useState(null);
@@ -1137,6 +1186,13 @@ function App() {
                         Quarantine Manager
                     </h3>
                     <div className="flex items-center gap-4">
+                        <button
+                          onClick={handleNukeQuarantine}
+                          disabled={isNukingQuarantine || quarantineItems.length === 0}
+                          className="bg-red-900/80 hover:bg-red-700 text-red-200 px-3 py-1.5 rounded text-xs font-bold transition-colors disabled:opacity-50"
+                        >
+                          {isNukingQuarantine ? 'Nuking...' : 'NUKE ALL QUARANTINED'}
+                        </button>
                         <button onClick={() => setIsQuarantineModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
                             <SafeIcon name="X" className="w-4 h-4" />
                         </button>
