@@ -1,6 +1,8 @@
-feat: Implement Sprint 4.1 features
+feat: Implement Sprint 4.2 features
 
-- Implement Supabase Read-Replica Routing for Read-Heavy Queries (SUPABASE_READ_URL and getSupabaseReadUrl)
-- Inject Workers AI Insights into Manual Financial Audits (Llama-3.1-8b-instruct)
-- Add Manual Anny Oracle Ping Override & UI Control (force-oracle-ping and Force Oracle Sync button)
-- Add CFO Trend "Pulse" Animation to CFO Trend Distribution Bar (animate-pulse)
+- Document production secrets in README.md and .dev.vars.example (3.1)
+- Resolve and apply patch.diff for DLQ auto-heal telemetry badge (3.2)
+- Clean up dead code in market_watcher.ts (3.3)
+- Harden fetchAnnyCombinedPortfolio to clear auth on 401 (3.4)
+- Add constant-time signature comparison using timingSafeEqual (3.5)
+- Document findings for AffiliatePayoutGrid and migration in FINDINGS_LOG.md (4)
