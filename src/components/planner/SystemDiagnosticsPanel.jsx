@@ -49,18 +49,26 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
 
 
+
   const fetchDeepTelemetry = async () => {
     try {
       const workerUrl = getWorkerUrl();
-      const response = await fetch(`${workerUrl}/api/health`, {
+      // Use the new telemetry endpoint
+      const response = await fetch(`${workerUrl}/api/telemetry`, {
         headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
       });
       if (response.ok) {
         const data = await response.json();
 
-        // Let's also fetch circuit breaker state from KV directly or a known endpoint?
-        // Actually /api/health doesn't return circuit breaker state. Let's just use what we have or /api/market-cache if it has it.
-        // Wait, market-cache returns is_circuit_breaker. Let's fetch both or just use health endpoint for what's requested.
+        // Also fetch original health endpoint for legacy AI telemetry
+        const healthResponse = await fetch(`${workerUrl}/api/health`, {
+          headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
+        });
+        let healthData = {};
+        if (healthResponse.ok) {
+           healthData = await healthResponse.json();
+        }
+
         const marketResponse = await fetch(`${workerUrl}/api/market-cache`, {
             headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
         });
@@ -71,12 +79,18 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
         }
 
         setDeepTelemetry({
-          investing_brain_telemetry: data.investing_brain_telemetry || {},
-          anny_auth_telemetry: data.anny_auth_telemetry || {},
+          investing_brain_telemetry: healthData.investing_brain_telemetry || {},
+          anny_auth_telemetry: healthData.anny_auth_telemetry || {},
+          edge_telemetry: data,
           circuit_breaker: {
             status: cbStatus
           }
         });
+
+        // Also update edge latency if it's available in the new telemetry response
+        if (data.latencyMs) {
+           setEdgeLatency(data.latencyMs);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -84,10 +98,21 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   };
 
   useEffect(() => {
+    let interval;
+    const tick = () => {
+       if (document.visibilityState === 'visible' && isDeepTelemetryOpen) {
+          fetchDeepTelemetry();
+       }
+    };
+
     if (isDeepTelemetryOpen) {
-      fetchDeepTelemetry();
+      tick();
+      interval = setInterval(tick, 30000);
     }
+
+    return () => clearInterval(interval);
   }, [isDeepTelemetryOpen]);
+
 
   const handleExportAudit = () => {
     const timestamp = new Date().toISOString();
@@ -643,7 +668,63 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
               </div>
               <div className="pt-6">
 
+
                 <div className="mb-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+                  <div className="flex justify-between items-center mb-3">
+                     <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider flex items-center gap-2">
+                       <SafeIcon name="Server" className="w-3 h-3" />
+                       Edge Telemetry & Diagnostics
+                     </div>
+                     <button
+                        onClick={() => fetchDeepTelemetry()}
+                        className="px-2 py-1 bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 rounded text-[10px] font-bold uppercase transition-colors flex items-center gap-1 border border-indigo-500/30"
+                     >
+                        <SafeIcon name="RefreshCw" className="w-3 h-3" /> Run System Ping
+                     </button>
+                  </div>
+
+                  {deepTelemetry?.edge_telemetry && (
+                     <div className="grid grid-cols-2 gap-3 mb-2 text-xs">
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Edge Latency</span>
+                           <span className={`font-mono font-bold ${deepTelemetry.edge_telemetry.latencyMs < 100 ? 'text-emerald-400' : deepTelemetry.edge_telemetry.latencyMs < 300 ? 'text-amber-400' : 'text-rose-400'}`}>
+                              {deepTelemetry.edge_telemetry.latencyMs} ms
+                           </span>
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">KV Latency</span>
+                           <span className="font-mono font-bold text-emerald-400">{deepTelemetry.edge_telemetry.kv_cache_latency_ms} ms</span>
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Upstream RPC</span>
+                           <span className={`font-mono font-bold ${deepTelemetry.edge_telemetry.upstream_rpc_status === 'connected' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {deepTelemetry.edge_telemetry.upstream_rpc_status.toUpperCase()}
+                           </span>
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Auth Handshake</span>
+                           <span className={`font-mono font-bold ${deepTelemetry.edge_telemetry.auth_handshake_status === 'verified' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {deepTelemetry.edge_telemetry.auth_handshake_status.toUpperCase()}
+                           </span>
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Ledger Sync</span>
+                           <span className="font-mono font-bold text-emerald-400">
+                              {deepTelemetry.edge_telemetry.ledger_sync_state.toUpperCase()}
+                           </span>
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Edge Uptime</span>
+                           <span className="font-mono font-bold text-indigo-400">
+                              {deepTelemetry.edge_telemetry.uptimeSeconds}s
+                           </span>
+                        </div>
+                     </div>
+                  )}
+                </div>
+
+                <div className="mb-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+
                   <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
                     <SafeIcon name="Zap" className="w-3 h-3" />
                     Webhook Replay Tool
