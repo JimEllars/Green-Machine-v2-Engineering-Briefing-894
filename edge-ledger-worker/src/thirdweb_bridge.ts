@@ -2,6 +2,7 @@ import type { ExecutionContext } from '@cloudflare/workers-types';
 import { syncMarketCache } from './market_watcher';
 
 export interface Env {
+  SUPABASE_READ_URL?: string;
   ANNY_AUTH_MODE?: "session-token" | "bearer-pat";
   ANNY_AUTH_TOKEN?: string;
   ANNY_EMAIL?: string;
@@ -16,6 +17,8 @@ export interface Env {
   AI: any;
 }
 
+
+export const getSupabaseReadUrl = (env: Env) => env.SUPABASE_READ_URL || env.SUPABASE_URL;
 
 export type AnnyAuthMode = "session-token" | "bearer-pat";
 
@@ -1765,7 +1768,7 @@ export default {
             }
         }
         // Fetch from Supabase
-        const dbResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions?select=amount,status,created_at&status=eq.minted&created_at=gte.${new Date(Date.now() - 86400000).toISOString()}`, {
+        const dbResponse = await fetch(`${getSupabaseReadUrl(env)}/rest/v1/blockchain_transactions?select=amount,status,created_at&status=eq.minted&created_at=gte.${new Date(Date.now() - 86400000).toISOString()}`, {
           headers: { 'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`, 'apikey': env.SUPABASE_SERVICE_KEY }
         });
         if (!dbResponse.ok) return { count: 0, volume_usd: 0 };
@@ -2265,6 +2268,26 @@ export default {
       }
     }
 
+
+    if (request.method === 'POST' && url.pathname === '/api/admin/force-oracle-ping') {
+      const signature = request.headers.get('X-Axim-Signature');
+      if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        return new Response('Unauthorized Edge Ingress', { status: 401, headers: corsHeaders });
+      }
+      try {
+        await syncMarketCache(env);
+        return new Response(JSON.stringify({ success: true, message: 'Oracle Cache Synced' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
+        });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: 'Failed to sync oracle' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders }
+        });
+      }
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/admin/trigger-financial-audit') {
       const signature = request.headers.get('X-Axim-Signature');
       if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
@@ -2287,7 +2310,31 @@ export default {
            throw new Error(`Financial Audit failed: ${dbResponse.statusText}`);
         }
 
-        return new Response(JSON.stringify({ success: true, message: 'Financial audit invoked via Edge Worker proxy', timestamp: Date.now() }), {
+        const auditData = await dbResponse.json() as any;
+        let ai_insight = "";
+        try {
+          const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+            messages: [
+              { role: "system", content: "You are a financial analyst AI." },
+              { role: "user", content: `Summarize the following financial audit metadata into a concise 2-sentence executive summary for the CFO. Data: ${JSON.stringify(auditData)}` }
+            ]
+          });
+          if (aiResponse && aiResponse.response) {
+            ai_insight = aiResponse.response;
+          } else {
+             ai_insight = "AI insight generation failed.";
+          }
+        } catch(e) {
+          console.error("Workers AI failed", e);
+          ai_insight = "AI summary temporarily unavailable due to upstream constraint.";
+        }
+
+        return new Response(JSON.stringify({
+           success: true,
+           message: 'Financial audit invoked via Edge Worker proxy',
+           timestamp: Date.now(),
+           ai_insight
+        }), {
           status: 200,
           headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store, private', ...corsHeaders }
         });
@@ -2557,7 +2604,7 @@ if (request.method === 'DELETE' && url.pathname === '/api/admin/quarantine') {
         url.pathname !== '/api/strategy-consult' &&
         url.pathname !== '/api/quarantine-purge' && url.pathname !== '/api/admin/quarantine' && url.pathname !== '/api/admin/quarantine/all' &&
         url.pathname !== '/api/health' &&
-        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment' && url.pathname !== '/api/admin/trigger-financial-audit' && url.pathname !== '/api/admin/audit-logs'
+        url.pathname !== '/api/admin/renew-anny-session' && url.pathname !== '/api/admin/validate-signal' && url.pathname !== '/api/admin/quarantine-retry-purge' && url.pathname !== '/api/admin/verify-deployment' && url.pathname !== '/api/admin/trigger-financial-audit' && url.pathname !== '/api/admin/force-oracle-ping' && url.pathname !== '/api/admin/audit-logs'
     ) {
         return new Response('404 Not Found', { status: 404, headers: corsHeaders });
     }
