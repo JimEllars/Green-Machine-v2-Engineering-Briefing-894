@@ -43,14 +43,18 @@ export default function MarketFeedMatrix() {
 
   useEffect(() => {
     const fetchMarketData = async () => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3500);
       try {
         // Calling Cloudflare Worker Endpoint
         const workerUrl = getWorkerUrl();
         const response = await fetch(`${workerUrl}/api/market-cache`, {
+          signal: controller.signal,
           headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY
           }
         });
+        clearTimeout(timeoutId);
         
         if (!response.ok) {
            throw new Error(`Edge Connection Degraded: ${response.status}`);
@@ -90,6 +94,7 @@ export default function MarketFeedMatrix() {
           setMarketData(formattedData);
         }
             } catch (error) {
+        clearTimeout(timeoutId);
         console.error("Failed to fetch market data", error);
         setIsDegraded(true);
         // Only set fallback data if no existing data is present
@@ -138,6 +143,12 @@ export default function MarketFeedMatrix() {
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <SafeIcon name="TrendingUp" className="text-emerald-500" />
             Live Market Telemetry
+            {(isDegraded || isCircuitBreaker || isRateLimited) && (
+              <span className="ml-3 px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-[0_0_8px_rgba(245,158,11,0.2)]">
+                <SafeIcon name="Server" className="w-3 h-3" />
+                Cached View
+              </span>
+            )}
           </h2>
           <p className="text-slate-400 text-sm mt-1">Sub-10ms edge cache reads via Cloudflare KV</p>
         </div>
