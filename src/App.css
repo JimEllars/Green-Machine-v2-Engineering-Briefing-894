@@ -1,3 +1,69 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* Cyber-HUD Polish additions */
+.hud-border {
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.05);
+}
+
+.hud-badge-glowing {
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+.hud-badge-warning-glowing {
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+.hud-badge-error-glowing {
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.4);
+}
+
+/* Tooltip styles */
+.hud-tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.hud-tooltip .hud-tooltip-text {
+  visibility: hidden;
+  width: 200px;
+  background-color: rgba(9, 9, 11, 0.95);
+  color: #a1a1aa;
+  text-align: center;
+  border-radius: 6px;
+  padding: 8px;
+  position: absolute;
+  z-index: 10;
+  bottom: 125%;
+  left: 50%;
+  margin-left: -100px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  font-size: 10px;
+  text-transform: none;
+  font-weight: normal;
+  letter-spacing: normal;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+}
+
+.hud-tooltip .hud-tooltip-text::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: rgba(16, 185, 129, 0.2) transparent transparent transparent;
+}
+
+.hud-tooltip:hover .hud-tooltip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+.monotonic-numbers {
+  font-variant-numeric: tabular-nums;
+}

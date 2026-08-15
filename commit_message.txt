@@ -1,8 +1,6 @@
-feat: Implement Sprint 4.2 features
+feat: live diagnostics, error boundaries, and cyber-hud UI polish
 
-- Document production secrets in README.md and .dev.vars.example (3.1)
-- Resolve and apply patch.diff for DLQ auto-heal telemetry badge (3.2)
-- Clean up dead code in market_watcher.ts (3.3)
-- Harden fetchAnnyCombinedPortfolio to clear auth on 401 (3.4)
-- Add constant-time signature comparison using timingSafeEqual (3.5)
-- Document findings for AffiliatePayoutGrid and migration in FINDINGS_LOG.md (4)
+- Polling and exponential backoff for edge health
+- Stale-while-revalidate UI state for market cache
+- React error boundaries for isolated UI failures
+- Smooth styling updates for HUD interface

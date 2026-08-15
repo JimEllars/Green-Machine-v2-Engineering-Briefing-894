@@ -5,6 +5,7 @@ import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
 
 
+import ComponentErrorBoundary from './common/ComponentErrorBoundary';
 import SafeIcon from './common/SafeIcon';
 import SystemDiagnosticsPanel from './components/planner/SystemDiagnosticsPanel';
 import { getWorkerUrl } from './utils/workerUrl';
@@ -903,7 +904,9 @@ const handleSyncKV = async () => {
 
           {/* Center Column: Market & Ledger */}
           <div className="lg:col-span-5 flex flex-col gap-6">
-            <MarketFeedMatrix />
+            <ComponentErrorBoundary>
+                    <MarketFeedMatrix />
+                  </ComponentErrorBoundary>
             <AffiliatePayoutGrid onSelectTx={setSelectedTx} />
           </div>
 
