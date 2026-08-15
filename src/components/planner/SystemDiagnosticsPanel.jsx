@@ -17,6 +17,9 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   const [dbLatency, setDbLatency] = useState(0);
   const [dbJitter, setDbJitter] = useState(0);
   const prevDbLatencyRef = useRef(0);
+  const backoffRef = useRef(10000); // Start at 10s backoff for /api/health
+  const [edgeColo, setEdgeColo] = useState('dev');
+
   const [tickerStream, setTickerStream] = useState([]);
   const [healthTickerLogs, setHealthTickerLogs] = useState([]);
   const [latencyHistory, setLatencyHistory] = useState([]);
@@ -137,6 +140,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   const streamEndRef = useRef(null);
   const activeChannelRef = useRef(null);
 
+
   const checkEdgeHealth = async () => {
     let edgeOk = false;
     let dbOk = false;
@@ -148,7 +152,14 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         }
       });
-      if (res.ok) { setHealthData(await res.clone().json()); }
+      let healthResp = {};
+      if (res.ok) {
+        healthResp = await res.clone().json();
+        setHealthData(healthResp);
+        if (healthResp.region) {
+          setEdgeColo(healthResp.region);
+        }
+      }
       const end = performance.now();
       let currentLatency = Math.round(end - start);
 
@@ -162,16 +173,33 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
       setEdgeJitter(Math.abs(currentLatency - prevLatencyRef.current));
       prevLatencyRef.current = currentLatency;
-      setEdgeLatency(currentLatency);
-      setLatencyHistory(prev => [...prev, currentLatency].slice(-10));
+
+      // Smoothing latency data with a rolling average
+      setLatencyHistory(prev => {
+        const newHistory = [...prev, currentLatency].slice(-5); // Keep last 5
+        const avg = Math.round(newHistory.reduce((a, b) => a + b, 0) / newHistory.length);
+        setEdgeLatency(avg);
+        return newHistory;
+      });
+
       setEdgeCacheAvailable(res.ok);
       edgeOk = res.ok;
       if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: res.ok });
-    } catch (e) {
 
+      // Reset backoff on success
+      if (res.ok) {
+        backoffRef.current = 10000;
+      } else {
+        // Increase backoff on non-OK response
+        backoffRef.current = Math.min(backoffRef.current * 1.5, 60000);
+      }
+
+    } catch (e) {
       setEdgeCacheAvailable(false);
-      setEdgeLatency(0);
+      setEdgeLatency(0); // Optional: could show something else for 'down'
       if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: false });
+      // Increase backoff on network error
+      backoffRef.current = Math.min(backoffRef.current * 1.5, 60000);
     }
 
     // Check Database Node Health State
@@ -200,28 +228,37 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   };
 
   useEffect(() => {
-    checkEdgeHealth();
-    let intervalId = setInterval(checkEdgeHealth, 15000);
+    let timeoutId;
+
+    const poll = async () => {
+      if (!document.hidden) {
+        await checkEdgeHealth();
+        timeoutId = setTimeout(poll, backoffRef.current);
+      } else {
+        // Just delay checking again until visible or use a very slow poll
+        timeoutId = setTimeout(poll, 60000);
+      }
+    };
+
+    // Initial call
+    poll();
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        clearInterval(intervalId);
-        // Throttle to 60s when hidden to save resources, or we could just clear it
-        intervalId = setInterval(checkEdgeHealth, 60000);
-      } else {
-        clearInterval(intervalId);
-        checkEdgeHealth(); // Immediate check on return
-        intervalId = setInterval(checkEdgeHealth, 15000);
+      if (!document.hidden) {
+        // When coming back, clear timeout and check immediately
+        clearTimeout(timeoutId);
+        poll();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      clearInterval(intervalId);
+      clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
+
 
 
   useEffect(() => {
@@ -308,7 +345,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   };
 
   return (
-    <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 shadow-2xl rounded-xl p-6 h-full flex flex-col">
+    <div className="bg-zinc-900/90 backdrop-blur-xl hud-border shadow-2xl rounded-xl p-6 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-4">
           <h3 className="text-white font-bold flex items-center gap-2 text-sm">
