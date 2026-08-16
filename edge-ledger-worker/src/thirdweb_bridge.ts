@@ -1,5 +1,14 @@
 import type { ExecutionContext } from "@cloudflare/workers-types";
 import { jwtVerify } from "jose";
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
 import { syncMarketCache } from "./market_watcher";
 
 export interface Env {
@@ -405,6 +414,70 @@ async function sendEmailItNotification(
         JSON.stringify(params),
         { expirationTtl: 86400 },
       );
+
+            // Async logging to api_usage_logs
+            ctx.waitUntil((async () => {
+              try {
+                // Estimate tokens: roughly 1 token per 4 chars of prompt/response as a naive fallback if not provided
+                let estimatedTokens = 0;
+                if (response?.usage?.total_tokens) {
+                  estimatedTokens = response.usage.total_tokens;
+                } else {
+                  const promptStr = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+                  const resStr = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+                  estimatedTokens = Math.ceil((promptStr.length + resStr.length) / 4);
+                }
+
+                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": env.SUPABASE_SERVICE_KEY,
+                    "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
+                  },
+                  body: JSON.stringify({
+                    endpoint: "/api/strategy-consult",
+                    token_count: estimatedTokens,
+                    execution_time_ms: duration
+                  })
+                });
+              } catch (e) {
+                console.error("Failed to log AI usage to Supabase:", e);
+              }
+            })());
+
+
+            // Async logging to api_usage_logs
+            ctx.waitUntil((async () => {
+              try {
+                // Estimate tokens: roughly 1 token per 4 chars of prompt/response as a naive fallback if not provided
+                let estimatedTokens = 0;
+                if (response?.usage?.total_tokens) {
+                  estimatedTokens = response.usage.total_tokens;
+                } else {
+                  const promptStr = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+                  const resStr = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+                  estimatedTokens = Math.ceil((promptStr.length + resStr.length) / 4);
+                }
+
+                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": env.SUPABASE_SERVICE_KEY,
+                    "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
+                  },
+                  body: JSON.stringify({
+                    endpoint: "/api/strategy-consult",
+                    token_count: estimatedTokens,
+                    execution_time_ms: duration
+                  })
+                });
+              } catch (e) {
+                console.error("Failed to log AI usage to Supabase:", e);
+              }
+            })());
+
     }
     return result;
   } catch (err: any) {
@@ -1002,7 +1075,7 @@ export default {
 
         if (request.method === "GET" && url.pathname === "/api/dlq-status") {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized", {
               status: 401,
               headers: corsHeaders,
@@ -1203,7 +1276,7 @@ export default {
           url.pathname === "/api/admin/verify-deployment"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized", {
               status: 401,
               headers: corsHeaders,
@@ -1254,7 +1327,7 @@ export default {
         ) {
 
         const signature = request.headers.get("X-Axim-Signature");
-        if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
           return new Response("Unauthorized Edge Ingress", {
             status: 401,
             headers: corsHeaders,
@@ -1321,7 +1394,7 @@ export default {
           url.pathname === "/api/admin/dept-summary"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -1383,7 +1456,7 @@ export default {
           url.pathname === "/api/admin/dept-summary"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -1446,7 +1519,7 @@ export default {
 
         if (request.method === "POST" && url.pathname === "/api/cache-sync") {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized", {
               status: 401,
               headers: corsHeaders,
@@ -1480,7 +1553,7 @@ export default {
 
         if (request.method === "GET" && url.pathname === "/api/anny-signals") {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -1530,7 +1603,7 @@ export default {
           const signature = request.headers.get("X-Axim-Signature");
           const token = url.searchParams.get("token");
 
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             if (
               !token ||
               (token !== env.AXIM_INTERNAL_KEY &&
@@ -2074,7 +2147,7 @@ export default {
           url.pathname === "/api/admin/send-exec-briefing"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -2339,7 +2412,7 @@ export default {
           url.pathname === "/api/admin/briefing-archive"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -2390,7 +2463,7 @@ export default {
           url.pathname === "/api/admin/replay-webhook"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -2448,7 +2521,7 @@ export default {
           url.pathname === "/api/admin/force-briefing-dispatch"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -2535,7 +2608,7 @@ export default {
 
         if (request.method === "POST" && url.pathname === "/api/dlq-flush") {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized", {
               status: 401,
               headers: corsHeaders,
@@ -2666,7 +2739,7 @@ export default {
 
         if (request.method === "GET" && url.pathname === "/api/market-cache") {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -2746,7 +2819,7 @@ export default {
           url.pathname === "/api/quarantine-purge"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized", {
               status: 401,
               headers: corsHeaders,
@@ -2803,7 +2876,7 @@ export default {
           url.pathname === "/api/admin/validate-signal"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -2882,7 +2955,7 @@ export default {
           url.pathname === "/api/admin/renew-anny-session"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -2927,7 +3000,7 @@ export default {
           url.pathname === "/api/strategy-consult"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3094,6 +3167,36 @@ export default {
               { expirationTtl: 86400 },
             );
 
+            // Async logging to api_usage_logs
+            ctx.waitUntil((async () => {
+              try {
+                let estimatedTokens = 0;
+                if (response?.usage?.total_tokens) {
+                  estimatedTokens = response.usage.total_tokens;
+                } else {
+                  const promptStr = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+                  const resStr = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
+                  estimatedTokens = Math.ceil((promptStr.length + resStr.length) / 4);
+                }
+
+                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "apikey": env.SUPABASE_SERVICE_KEY,
+                    "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
+                  },
+                  body: JSON.stringify({
+                    endpoint: "/api/strategy-consult",
+                    token_count: estimatedTokens,
+                    execution_time_ms: duration
+                  })
+                });
+              } catch (e) {
+                console.error("Failed to log AI usage to Supabase:", e);
+              }
+            })());
+
             return new Response(
               JSON.stringify({
                 success: true,
@@ -3124,7 +3227,7 @@ export default {
           url.pathname === "/api/admin/circuit-breaker-reset"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3172,7 +3275,7 @@ export default {
           url.pathname === "/api/admin/audit-logs"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3227,7 +3330,7 @@ export default {
           url.pathname === "/api/admin/force-oracle-ping"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3262,7 +3365,7 @@ export default {
           url.pathname === "/api/admin/trigger-financial-audit"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3358,7 +3461,7 @@ export default {
 
         if (request.method === "GET" && url.pathname === "/api/telemetry") {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response(
               JSON.stringify({
                 success: false,
@@ -3421,48 +3524,6 @@ export default {
           );
         }
 
-
-        if (request.method === "GET" && url.pathname === "/api/telemetry") {
-          const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", latencyMs: Math.round(performance.now() - startTime), timestamp: new Date().toISOString() }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
-          }
-
-          let kvLatency = 0;
-          let rpcStatus = "unknown";
-          try {
-            const kvStart = performance.now();
-            await env.GREEN_STATE.get("telemetry_ping");
-            kvLatency = Math.round(performance.now() - kvStart);
-
-            const rpcStart = performance.now();
-            const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/`, { headers: { "apikey": env.SUPABASE_SERVICE_KEY } });
-            rpcStatus = rpcRes.ok ? "connected" : "disconnected";
-          } catch (e) {
-             rpcStatus = "error";
-          }
-
-          return new Response(JSON.stringify(sanitizeTelemetry({
-            success: true,
-            latencyMs: Math.round(performance.now() - startTime),
-            timestamp: new Date().toISOString(),
-            uptimeSeconds: 0,
-            kv_cache_latency_ms: kvLatency,
-            upstream_rpc_status: rpcStatus,
-            edge_version: "v2.4.0-stable",
-            environment: "production",
-            cloudflareEdge: true,
-            auth_handshake_status: Boolean(await env.GREEN_STATE.get("anny_session_token")) ? "verified" : "unverified",
-            ledger_sync_state: "synchronized" // Simulated for now
-          })), {
-            status: 200,
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "no-store, private",
-              ...corsHeaders
-            }
-          });
-        }
 
         if (request.method === "GET" && url.pathname === "/api/health") {
           return new Response(
@@ -3582,7 +3643,7 @@ export default {
           url.pathname === "/api/admin/audit-logs"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3641,7 +3702,7 @@ export default {
           url.pathname === "/api/admin/quarantine-retry-purge"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3696,7 +3757,7 @@ export default {
           url.pathname === "/api/admin/quarantine"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3758,7 +3819,7 @@ export default {
           url.pathname === "/api/admin/quarantine/all"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3839,7 +3900,7 @@ export default {
           url.pathname === "/api/admin/quarantine"
         ) {
           const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response("Unauthorized Edge Ingress", {
               status: 401,
               headers: corsHeaders,
@@ -3906,7 +3967,7 @@ export default {
         // 1. HMAC Validation (The Ingress Token Isolation Rule)
 
         const signature = request.headers.get("X-Axim-Signature");
-        if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+        if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
           return new Response("Unauthorized Edge Ingress", {
             status: 401,
             headers: corsHeaders,
