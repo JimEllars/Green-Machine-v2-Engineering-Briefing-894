@@ -53,6 +53,12 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
 
 
+  const [edgeHeaders, setEdgeHeaders] = useState({
+    region: 'N/A',
+    cacheStatus: 'N/A',
+    execTime: '0'
+  });
+
   const fetchDeepTelemetry = async () => {
     try {
       const workerUrl = getWorkerUrl();
@@ -60,6 +66,14 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
       const response = await fetch(`${workerUrl}/api/telemetry`, {
         headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
       });
+      if (response) {
+        setEdgeHeaders(prev => ({
+          ...prev,
+          region: response.headers.get('X-Edge-Region') || prev.region,
+          cacheStatus: response.headers.get('X-Cache-Status') || prev.cacheStatus,
+          execTime: response.headers.get('X-Execution-Time-Ms') || prev.execTime
+        }));
+      }
       if (response.ok) {
         const data = await response.json();
 
@@ -101,19 +115,25 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   };
 
   useEffect(() => {
-    let interval;
-    const tick = () => {
-       if (document.visibilityState === 'visible' && isDeepTelemetryOpen) {
-          fetchDeepTelemetry();
+    let timeoutId;
+    let baseDelay = 30000;
+
+    const tick = async () => {
+       if (isDeepTelemetryOpen) {
+          await fetchDeepTelemetry();
        }
+
+       const isIdle = document.hidden;
+       const delay = isIdle ? baseDelay * 2 : baseDelay; // Simple exponential backoff simulation when idle
+
+       timeoutId = setTimeout(tick, delay);
     };
 
     if (isDeepTelemetryOpen) {
       tick();
-      interval = setInterval(tick, 30000);
     }
 
-    return () => clearInterval(interval);
+    return () => clearTimeout(timeoutId);
   }, [isDeepTelemetryOpen]);
 
 
@@ -754,6 +774,24 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Edge Uptime</span>
                            <span className="font-mono font-bold text-indigo-400">
                               {deepTelemetry.edge_telemetry.uptimeSeconds}s
+                           </span>
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Edge Region</span>
+                           <span className="font-mono font-bold text-cyan-400">
+                              {edgeHeaders.region}
+                           </span>
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Cache Status</span>
+                           <span className="font-mono font-bold text-fuchsia-400">
+                              {edgeHeaders.cacheStatus}
+                           </span>
+                        </div>
+                        <div className="flex flex-col">
+                           <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Execution Time</span>
+                           <span className="font-mono font-bold text-amber-400">
+                              {edgeHeaders.execTime}ms
                            </span>
                         </div>
                      </div>

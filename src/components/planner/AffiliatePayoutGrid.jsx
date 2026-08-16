@@ -16,6 +16,15 @@ export default function AffiliatePayoutGrid() {
   const [selectedTokenFilter, setSelectedTokenFilter] = useState('All Tokens');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTx, setSelectedTx] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const copyToClipboard = (text, type) => {
+    navigator.clipboard.writeText(text);
+    setToastMessage(`Copied ${type} to clipboard`);
+    setTimeout(() => setToastMessage(null), 2000);
+  };
+
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('realtime-status-update', { detail: connectionStatus }));
@@ -134,7 +143,19 @@ export default function AffiliatePayoutGrid() {
   };
 
   return (
-    <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 shadow-2xl rounded-xl overflow-hidden flex flex-col h-full">
+        <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 shadow-2xl rounded-xl overflow-hidden flex flex-col h-full relative">
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 10, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="absolute top-0 left-1/2 z-50 px-4 py-2 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-sm font-medium shadow-lg backdrop-blur-md"
+          >
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -253,46 +274,78 @@ export default function AffiliatePayoutGrid() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/50">
-            <AnimatePresence>
-              {transactions.filter(tx => {
-                const matchesToken = selectedTokenFilter === 'All Tokens' || tx.currency === selectedTokenFilter;
-                if (!searchQuery) return matchesToken;
-                const query = searchQuery.toLowerCase();
-                const matchesSearch = (tx.txHash && tx.txHash.toLowerCase().includes(query)) ||
-                                      (tx.fullWallet && tx.fullWallet.toLowerCase().includes(query));
-                return matchesToken && matchesSearch;
-              }).map((tx) => {
-                const config = getStatusConfig(tx.status);
-                return (
-                  <motion.tr 
-                    key={tx.id}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{
-                      opacity: 1,
-                      y: 0,
-                      backgroundColor: tx.status === 'minted' ? ['rgba(16, 185, 129, 0.4)', 'rgba(30, 41, 59, 0)'] : 'rgba(30, 41, 59, 0)'
-                    }}
-                    transition={{ duration: 0.5 }}
-                    className={`hover:bg-slate-800/30 transition-colors cursor-pointer ${recentTxIds.has(tx.id) ? 'bg-emerald-500/10 border border-emerald-500/30 animate-pulse' : ''}`}
-                    onClick={() => setSelectedTx(tx)}
-                  >
-                    <td className="px-6 py-4 font-mono text-emerald-400">{tx.partner}</td>
-                    <td className="px-6 py-4 font-mono text-slate-300">{tx.wallet}</td>
-                    <td className="px-6 py-4 font-semibold text-white">
-                      ${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} <span className="text-slate-500 font-normal">{tx.currency}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium ${config.bg} ${config.color} ${config.border}`}>
-                        <SafeIcon name={config.icon} className="w-3.5 h-3.5" />
-                        {tx.status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right text-slate-400">{tx.time}</td>
-                  </motion.tr>
-                );
-              })}
-            </AnimatePresence>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, idx) => (
+                <tr key={idx} className="animate-pulse">
+                  <td className="px-6 py-4"><div className="h-4 bg-slate-700/50 rounded w-16"></div></td>
+                  <td className="px-6 py-4"><div className="h-4 bg-slate-700/50 rounded w-24"></div></td>
+                  <td className="px-6 py-4"><div className="h-4 bg-slate-700/50 rounded w-16"></div></td>
+                  <td className="px-6 py-4"><div className="h-6 bg-slate-700/50 rounded w-20"></div></td>
+                  <td className="px-6 py-4 flex justify-end"><div className="h-4 bg-slate-700/50 rounded w-20"></div></td>
+                </tr>
+              ))
+            ) : (
+              <AnimatePresence mode="popLayout">
+                {transactions.filter(tx => {
+                  const matchesToken = selectedTokenFilter === 'All Tokens' || tx.currency === selectedTokenFilter;
+                  if (!searchQuery) return matchesToken;
+                  const query = searchQuery.toLowerCase();
+                  const matchesSearch = (tx.txHash && tx.txHash.toLowerCase().includes(query)) ||
+                                        (tx.fullWallet && tx.fullWallet.toLowerCase().includes(query));
+                  return matchesToken && matchesSearch;
+                }).map((tx) => {
+                  const config = getStatusConfig(tx.status);
+                  return (
+                    <motion.tr
+                      key={tx.id}
+                      layout
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                        backgroundColor: tx.status === 'minted' ? ['rgba(16, 185, 129, 0.4)', 'rgba(30, 41, 59, 0)'] : 'rgba(30, 41, 59, 0)'
+                      }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.3 }}
+                      className={`hover:bg-slate-800/30 transition-colors cursor-pointer ${recentTxIds.has(tx.id) ? 'bg-emerald-500/10 border border-emerald-500/30 animate-pulse' : ''}`}
+                      onClick={() => setSelectedTx(tx)}
+                    >
+                      <td className="px-6 py-4 font-mono text-emerald-400">{tx.partner}</td>
+                      <td className="px-6 py-4 font-mono text-slate-300">
+                        {tx.wallet}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.fullWallet, 'wallet'); }}
+                          className="ml-2 text-slate-500 hover:text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <SafeIcon name="Copy" className="w-3 h-3 inline" />
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-white">
+                        ${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} <span className="text-slate-500 font-normal">{tx.currency}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium ${config.bg} ${config.color} ${config.border}`}>
+                          <SafeIcon name={config.icon} className="w-3.5 h-3.5" />
+                          {tx.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right text-slate-400">
+                        {tx.time}
+                        {tx.txHash && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.txHash, 'transaction hash'); }}
+                            className="ml-2 text-slate-500 hover:text-emerald-400 transition-colors"
+                            title="Copy TxHash"
+                          >
+                            <SafeIcon name="Link" className="w-3 h-3 inline" />
+                          </button>
+                        )}
+                      </td>
+                    </motion.tr>
+                  );
+                })}
+              </AnimatePresence>
+            )}
           </tbody>
         </table>
       </div>

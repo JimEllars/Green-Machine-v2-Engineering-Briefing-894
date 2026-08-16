@@ -26,6 +26,36 @@ export default function StrategyConsultantTerminal() {
   const [isConsulting, setIsConsulting] = useState(false);
   const [showFallbackBanner, setShowFallbackBanner] = useState(false);
   const [consultError, setConsultError] = useState(null);
+  const [networkStatus, setNetworkStatus] = useState(navigator.onLine ? 'Connected' : 'Offline');
+  const terminalRef = useRef(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  useEffect(() => {
+    const handleOnline = () => setNetworkStatus('Connected');
+    const handleOffline = () => setNetworkStatus('Offline');
+
+    // Listen for custom reconnecting events if needed, but online/offline is good
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 10;
+    setAutoScroll(isAtBottom);
+  };
+
+  useEffect(() => {
+    if (autoScroll && terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [displayText, autoScroll]);
+
 
 
   useEffect(() => {
@@ -442,7 +472,11 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
       </div>
 
       {/* Terminal Body */}
-      <div className="p-6 flex-1 overflow-y-auto font-mono text-sm leading-relaxed relative">
+      <div
+        ref={terminalRef}
+        onScroll={handleScroll}
+        className="p-6 flex-1 overflow-y-auto font-mono text-sm leading-relaxed relative custom-scrollbar"
+      >
         <div className="text-emerald-500/50 mb-4 select-none">
           {'>'} Initializing weekly financial audit cron...<br/>
           {'>'} Connecting to public.blockchain_transactions... OK<br/>
