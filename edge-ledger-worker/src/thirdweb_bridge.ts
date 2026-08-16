@@ -625,6 +625,12 @@ function sanitizeTelemetry(data: any): any {
 
 const workerStartTime = Date.now();
 
+async function recordKvMetric(env: Env, hit: boolean): Promise<void> {
+  const key = hit ? "telemetry_kv_hits" : "telemetry_kv_misses";
+  const count = parseInt(await env.GREEN_STATE.get(key) || "0", 10);
+  await env.GREEN_STATE.put(key, (count + 1).toString());
+}
+
 export default {
   async scheduled(event: any, env: any, ctx: any): Promise<void> {
     if (event.cron === "* * * * *") {
@@ -1567,6 +1573,7 @@ export default {
               prefix: "anny_signal_log:",
               limit: 10,
             });
+            await recordKvMetric(env, true);
             let signals = [];
 
             for (const key of signalList.keys) {
@@ -2750,6 +2757,7 @@ export default {
 
           const cacheResult =
             await env.MARKET_CACHE.getWithMetadata("latest_prices");
+          if (cacheResult.value) { await recordKvMetric(env, true); } else { await recordKvMetric(env, false); }
           if (!cacheResult.value) {
             return new Response(JSON.stringify({ type: "about:blank", title: "Error", detail: "Cache miss" }), {
               status: 404,

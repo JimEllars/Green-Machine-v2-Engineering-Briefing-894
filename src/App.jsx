@@ -9,6 +9,7 @@ import ComponentErrorBoundary from './common/ComponentErrorBoundary';
 import SafeIcon from './common/SafeIcon';
 import SystemDiagnosticsPanel from './components/planner/SystemDiagnosticsPanel';
 import { getWorkerUrl } from './utils/workerUrl';
+import { useSystemDiagnostics } from './hooks/useSystemDiagnostics';
 
 
 function App() {
@@ -37,6 +38,7 @@ function App() {
   const [readinessStatus, setReadinessStatus] = useState(null);
   const [edgeVersion, setEdgeVersion] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
+  const { refetch: refetchSystemDiagnostics } = useSystemDiagnostics();
 
   const [showDeptSummaryModal, setShowDeptSummaryModal] = useState(false);
   const [isTestingSignal, setIsTestingSignal] = useState(false);
@@ -551,6 +553,7 @@ function App() {
 
   const handleRefreshTelemetry = async () => {
     checkDlq();
+    refetchSystemDiagnostics();
     setToastSuccess('Telemetry Refreshed!');
     setTimeout(() => setToastSuccess(null), 3000);
   };

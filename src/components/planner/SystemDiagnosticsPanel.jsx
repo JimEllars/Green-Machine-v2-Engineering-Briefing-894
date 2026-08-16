@@ -41,6 +41,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
 
 
+
   return () => window.removeEventListener('realtime-status-update', handleRealtimeStatus);
   }, []);
 
@@ -138,6 +139,41 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
     return () => clearTimeout(timeoutId);
   }, [isDeepTelemetryOpen]);
 
+
+
+  // Render Sparkline
+  const renderSparkline = () => {
+    if (!latencyHistory || latencyHistory.length === 0) return null;
+    const points = latencyHistory.slice(-8);
+    const max = Math.max(...points, 100); // Ensure max is at least 100
+    const min = Math.min(...points, 0);
+    const range = max - min || 1;
+
+    const svgWidth = 64;
+    const svgHeight = 16;
+
+    const coordinates = points.map((val, idx) => {
+      const x = (idx / (points.length - 1)) * svgWidth;
+      const y = svgHeight - ((val - min) / range) * svgHeight;
+      return `${x},${y}`;
+    }).join(' ');
+
+    const avg = points.reduce((sum, val) => sum + val, 0) / points.length;
+    const color = avg < 100 ? '#10B981' : avg <= 300 ? '#F59E0B' : '#F43F5E';
+
+    return (
+      <svg width={svgWidth} height={svgHeight} className="ml-2 overflow-visible">
+        <polyline
+          fill="none"
+          stroke={color}
+          strokeWidth="1.5"
+          points={coordinates}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  };
 
   const handleExportAudit = () => {
     const timestamp = new Date().toISOString();
@@ -414,6 +450,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
             </div>
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${sysLatency < 100 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : sysLatency <= 300 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
               Edge RTT: {sysLatency}ms
+              {renderSparkline()}
             </div>
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${dbLatency < 150 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : dbLatency <= 400 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
               DB RTT: {dbLatency}ms
