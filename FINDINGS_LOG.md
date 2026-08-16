@@ -14,3 +14,18 @@
 
 ## Non-Regression Compliance
 - Ran ESLint, vite build, and wrangler TS compliance checks locally. Zero downtime or database structure modification introduced. Edge isolate is safely catching unmapped routes and JSON serialization issues through generic JSON 502 fallback objects.
+
+## Production Hardening, Edge Telemetry Binding, and UI Modernization (Phase 2.1)
+- Measured latency baselines dynamically using \`useSystemDiagnostics.js\`, tracking Edge latency and Database RPC access times, caching history up to 50 datapoints.
+- Implemented Stale-While-Revalidate pattern in \`market_watcher.ts\` via KV Caching to effectively mitigate third-party oracle rate limits, preserving availability.
+- Enforced uniform CORS and strict Supabase JWT verification on Edge entry points inside \`thirdweb_bridge.ts\`.
+- Refined \`StrategyConsultantTerminal.jsx\` with glassmorphism aesthetic, smooth auto-scrolling log streams, and live AI response generation latency tracking.
+- Implemented responsive column wrapping and robust alignments across Affiliate & Market grid UI components.
+- Modified files:
+  - \`edge-ledger-worker/src/market_watcher.ts\`
+  - \`edge-ledger-worker/src/thirdweb_bridge.ts\`
+  - \`src/hooks/useSystemDiagnostics.js\`
+  - \`src/components/planner/SystemDiagnosticsPanel.jsx\`
+  - \`src/components/planner/StrategyConsultantTerminal.jsx\`
+  - \`src/components/planner/AffiliatePayoutGrid.jsx\`
+  - \`src/components/planner/MarketFeedMatrix.jsx\`

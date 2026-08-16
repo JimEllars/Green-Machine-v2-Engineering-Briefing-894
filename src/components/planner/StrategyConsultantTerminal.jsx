@@ -32,6 +32,15 @@ export default function StrategyConsultantTerminal() {
   const [consultError, setConsultError] = useState(null);
   const [networkStatus, setNetworkStatus] = useState(navigator.onLine ? 'Connected' : 'Offline');
   const terminalRef = useRef(null);
+
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTo({
+        top: terminalRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  }, [displayText, isTyping]);
   const [autoScroll, setAutoScroll] = useState(true);
 
   useEffect(() => {
@@ -358,6 +367,11 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
       {/* Terminal Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-3">
+          {parsedStrategyData && parsedStrategyData.ai_inference_ms !== undefined && (
+            <span className="text-[10px] font-mono px-2 py-1 bg-slate-800/50 rounded text-slate-400 border border-slate-700">
+              Inference: {parsedStrategyData.ai_inference_ms}ms
+            </span>
+          )}
           <div className="flex gap-1.5">
             <div
               className={`w-3 h-3 rounded-full ${
