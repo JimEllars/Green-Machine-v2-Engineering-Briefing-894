@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
 import { getWorkerUrl } from '../../utils/workerUrl';
+import { useSystemDiagnostics } from '../../hooks/useSystemDiagnostics';
 
 export default function MarketFeedMatrix() {
   const [marketData, setMarketData] = useState([]);
@@ -15,6 +16,7 @@ export default function MarketFeedMatrix() {
 
 
   const [annySignals, setAnnySignals] = useState([]);
+  const { isFetching: sysIsFetching, refetch: forceResync } = useSystemDiagnostics();
   const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
 
   useEffect(() => {

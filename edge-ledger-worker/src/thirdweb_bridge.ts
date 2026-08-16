@@ -623,6 +623,8 @@ function sanitizeTelemetry(data: any): any {
   return data;
 }
 
+const workerStartTime = Date.now();
+
 export default {
   async scheduled(event: any, env: any, ctx: any): Promise<void> {
     if (event.cron === "* * * * *") {
@@ -3478,10 +3480,15 @@ export default {
 
           let kvLatency = 0;
           let rpcStatus = "unknown";
+          let kvHits = parseInt(await env.GREEN_STATE.get("telemetry_kv_hits") || "0", 10);
+          let kvMisses = parseInt(await env.GREEN_STATE.get("telemetry_kv_misses") || "0", 10);
+
           try {
             const kvStart = performance.now();
             await env.GREEN_STATE.get("telemetry_ping");
             kvLatency = Math.round(performance.now() - kvStart);
+            kvHits++;
+            await env.GREEN_STATE.put("telemetry_kv_hits", kvHits.toString());
 
             const rpcStart = performance.now();
             const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/`, {
@@ -3490,11 +3497,18 @@ export default {
             rpcStatus = rpcRes.ok ? "connected" : "disconnected";
           } catch (e) {
             rpcStatus = "error";
+            kvMisses++;
+            await env.GREEN_STATE.put("telemetry_kv_misses", kvMisses.toString());
           }
+
+          const ratio = kvHits + kvMisses > 0 ? (kvHits / (kvHits + kvMisses)).toFixed(2) : "1.00";
 
           return new Response(
             JSON.stringify(
               sanitizeTelemetry({
+                worker_region: (request as any).cf?.colo || 'DEV',
+                uptimeSeconds: Math.floor((Date.now() - workerStartTime) / 1000),
+                kv_cache_ratio: ratio,
                 success: true,
                 latencyMs: Math.round(performance.now() - startTime),
                 timestamp: new Date().toISOString(),
@@ -3526,9 +3540,16 @@ export default {
 
 
         if (request.method === "GET" && url.pathname === "/api/health") {
+          let kvHits = parseInt(await env.GREEN_STATE.get("telemetry_kv_hits") || "0", 10);
+          let kvMisses = parseInt(await env.GREEN_STATE.get("telemetry_kv_misses") || "0", 10);
+          const ratio = kvHits + kvMisses > 0 ? (kvHits / (kvHits + kvMisses)).toFixed(2) : "1.00";
+
           return new Response(
             JSON.stringify(
               sanitizeTelemetry({
+                worker_region: (request as any).cf?.colo || 'DEV',
+                uptimeSeconds: Math.floor((Date.now() - workerStartTime) / 1000),
+                kv_cache_ratio: ratio,
                 success: true,
                 latencyMs: Math.round(performance.now() - startTime),
                 status: "healthy",
@@ -4115,7 +4136,17 @@ export default {
 
     } catch (e: any) {
       isError = true;
-      throw e;
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: e.message || "Internal Edge Error",
+          timestamp: Date.now()
+        }),
+        {
+          status: 502,
+          headers: { "Content-Type": "application/json", ...corsHeaders }
+        }
+      );
     } finally {
       ctx.waitUntil(trackEdgeRequest(env, isError, isRateLimit));
     }

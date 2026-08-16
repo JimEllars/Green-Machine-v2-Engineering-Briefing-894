@@ -1,6 +1,6 @@
-feat: live diagnostics, error boundaries, and cyber-hud UI polish
+feat: Activate edge telemetry and live diagnostics
 
-- Polling and exponential backoff for edge health
-- Stale-while-revalidate UI state for market cache
-- React error boundaries for isolated UI failures
-- Smooth styling updates for HUD interface
+- Edge Worker Telemetry updated to capture region, uptime, and KV cache hits
+- Auth continuity enhanced via pub/sub subscriber cache
+- Live diagnostics panel updated to use custom hook with robust fallbacks
+- Market Matrix updated with resync action

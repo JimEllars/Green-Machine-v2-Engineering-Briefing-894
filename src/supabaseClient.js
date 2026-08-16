@@ -19,12 +19,38 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // The best we can do natively without overriding the whole storage interface is simply
 // listen to auth state changes and prevent hard redirects.
 
+let sessionState = null;
+
+// Enhance auth state continuity across long-lived dashboard sessions.
+// Add a simple pub/sub pattern for auth state subscribers to update user session context
+// in-memory while preserving active terminal state
+const authSubscribers = new Set();
+
+export const subscribeToAuth = (callback) => {
+  authSubscribers.add(callback);
+  return () => authSubscribers.delete(callback);
+};
+
+export const getSessionState = () => sessionState;
+
 supabase.auth.onAuthStateChange((event, session) => {
+  sessionState = session;
   if (event === 'TOKEN_REFRESHED') {
-    console.log('Session token refreshed successfully');
+    console.log('[AUTH] Session token refreshed successfully');
   } else if (event === 'SIGNED_OUT') {
     // We intentionally do not forcefully clear all application state or redirect here,
     // to preserve fault tolerance and "Stale-While-Revalidate" UI workflows.
-    console.log('Auth session ended. Gracefully degrading to unauthenticated mode if applicable.');
+    console.log('[AUTH] Auth session ended. Gracefully degrading to unauthenticated mode if applicable.');
+  } else if (event === 'INITIAL_SESSION') {
+    console.log('[AUTH] Initial session loaded');
   }
+
+  // Notify subscribers
+  authSubscribers.forEach(sub => {
+    try {
+      sub(event, session);
+    } catch (e) {
+      console.error('Error in auth subscriber', e);
+    }
+  });
 });
