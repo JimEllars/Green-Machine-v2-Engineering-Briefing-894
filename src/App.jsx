@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase, subscribeToAuth, getSessionState } from './supabaseClient';
 import StrategyConsultantTerminal from './components/planner/StrategyConsultantTerminal.jsx';
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
@@ -15,6 +15,7 @@ function App() {
   const [selectedTx, setSelectedTx] = useState(null);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isSweeping, setIsSweeping] = useState(false);
+  const [authState, setAuthState] = useState(getSessionState() ? 'Authenticated' : 'Guest Mode');
   const [dlqStatus, setDlqStatus] = useState({ active: false, count: 0, quarantine_count: 0 });
   const [isFlushing, setIsFlushing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -822,6 +823,18 @@ const handleSyncKV = async () => {
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 100% Operational
               </div>
+            </div>
+          </div>
+          <div className="h-10 w-px bg-zinc-800 hidden md:block"></div>
+          <div>
+            <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Auth Session</div>
+            <div className={`text-sm font-bold flex items-center gap-2 ${authState === 'Authenticated' ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {authState === 'Authenticated' ? (
+                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              ) : (
+                 <div className="w-2 h-2 rounded-full bg-amber-500" />
+              )}
+              {authState}
             </div>
           </div>
           <div className="h-10 w-px bg-zinc-800 hidden md:block"></div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
+import { getWorkerUrl } from '../utils/workerUrl';
 
 export const useSystemDiagnostics = () => {
   const [telemetry, setTelemetry] = useState(null);
@@ -18,7 +19,7 @@ export const useSystemDiagnostics = () => {
 
     try {
       // 1. Edge Worker Telemetry
-      const workerUrl = import.meta.env.VITE_WORKER_URL || 'https://green-machine-edge-ledger.jrellars.workers.dev';
+      const workerUrl = getWorkerUrl();
       const edgeRes = await fetch(`${workerUrl}/api/health`, {
          headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'

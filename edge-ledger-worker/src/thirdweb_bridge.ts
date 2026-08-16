@@ -3508,12 +3508,10 @@ export default {
               sanitizeTelemetry({
                 worker_region: (request as any).cf?.colo || 'DEV',
                 uptimeSeconds: Math.floor((Date.now() - workerStartTime) / 1000),
-                kv_cache_ratio: ratio,
+                kv_cache_ratio: Math.round(Number(ratio) * 100) + "%",
                 success: true,
                 latencyMs: Math.round(performance.now() - startTime),
                 timestamp: new Date().toISOString(),
-                uptimeSeconds:
-                  0,
                 kv_cache_latency_ms: kvLatency,
                 upstream_rpc_status: rpcStatus,
                 edge_version: "v2.4.0-stable",
@@ -3549,7 +3547,7 @@ export default {
               sanitizeTelemetry({
                 worker_region: (request as any).cf?.colo || 'DEV',
                 uptimeSeconds: Math.floor((Date.now() - workerStartTime) / 1000),
-                kv_cache_ratio: ratio,
+                kv_cache_ratio: Math.round(Number(ratio) * 100) + "%",
                 success: true,
                 latencyMs: Math.round(performance.now() - startTime),
                 status: "healthy",
@@ -3969,7 +3967,6 @@ export default {
           url.pathname !== "/api/admin/quarantine" &&
           url.pathname !== "/api/admin/quarantine/all" &&
           url.pathname !== "/api/health" &&
-          url.pathname !== "/api/telemetry" &&
           url.pathname !== "/api/telemetry" &&
           url.pathname !== "/api/admin/renew-anny-session" &&
           url.pathname !== "/api/admin/validate-signal" &&
