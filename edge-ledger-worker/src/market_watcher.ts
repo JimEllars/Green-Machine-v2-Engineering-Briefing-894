@@ -138,9 +138,12 @@ export async function syncMarketCache(env: Env): Promise<void> {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+
+    const startTime = Date.now();
+    let response;
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/health') {
-      return new Response(JSON.stringify({
+      response = new Response(JSON.stringify({
         status: "healthy",
         timestamp: new Date().toISOString(),
         environment: "production",
@@ -151,12 +154,12 @@ export default {
           'Content-Type': 'application/json',
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-Axim-Signature'
+          'Access-Control-Allow-Headers': 'Content-Type, X-Axim-Signature',
+          'Cache-Control': 'public, max-age=15, s-maxage=30, stale-while-revalidate=60'
         }
       });
-    }
-    if (request.method === 'OPTIONS') {
-        return new Response(null, {
+    } else if (request.method === 'OPTIONS') {
+        response = new Response(null, {
             status: 204,
             headers: {
                 'Access-Control-Allow-Origin': '*',
@@ -164,8 +167,24 @@ export default {
                 'Access-Control-Allow-Headers': 'Content-Type, X-Axim-Signature'
             }
         });
+    } else {
+        response = new Response('Not Found', { status: 404 });
     }
-    return new Response('Not Found', { status: 404 });
+
+    if (response) {
+        const newHeaders = new Headers(response.headers);
+        newHeaders.set('X-Edge-Region', ((request as any).cf && ((request as any).cf as any).colo) || 'DEV');
+        newHeaders.set('X-Cache-Status', url.pathname === '/health' ? 'HIT' : 'MISS');
+        newHeaders.set('X-Execution-Time-Ms', Math.round(Date.now() - startTime).toString());
+
+        response = new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: newHeaders
+        });
+    }
+    return response;
+
   },
 
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {

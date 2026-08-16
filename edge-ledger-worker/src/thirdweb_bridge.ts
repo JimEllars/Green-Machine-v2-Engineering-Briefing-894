@@ -1,4 +1,5 @@
 import type { ExecutionContext } from "@cloudflare/workers-types";
+import { jwtVerify } from "jose";
 import { syncMarketCache } from "./market_watcher";
 
 export interface Env {
@@ -12,6 +13,7 @@ export interface Env {
   AXIM_INTERNAL_KEY: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
+  SUPABASE_JWT_SECRET: string;
   GREEN_STATE: any; // DLQ Namespace
   MARKET_CACHE: any;
   AI: any;
@@ -991,7 +993,7 @@ export default {
     let isRateLimit = false;
 
     try {
-      const response = await (async () => {
+      let response = await (async () => {
         const url = new URL(request.url);
 
         if (request.method === "OPTIONS") {
@@ -1187,7 +1189,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to read DLQ status" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to read DLQ status" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -1237,7 +1239,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to verify deployment status" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to verify deployment status" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -1250,13 +1252,29 @@ export default {
           request.method === "GET" &&
           url.pathname === "/api/admin/dept-summary"
         ) {
-          const signature = request.headers.get("X-Axim-Signature");
-          if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
-            return new Response("Unauthorized Edge Ingress", {
+
+        const signature = request.headers.get("X-Axim-Signature");
+        if (!signature || signature !== env.AXIM_INTERNAL_KEY) {
+          return new Response("Unauthorized Edge Ingress", {
+            status: 401,
+            headers: corsHeaders,
+          });
+        }
+
+        const authHeader = request.headers.get("Authorization");
+        if (request.method === "POST" && authHeader && authHeader.startsWith("Bearer ")) {
+          const token = authHeader.substring(7);
+          try {
+            const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
+            await jwtVerify(token, secret);
+          } catch (e) {
+            return new Response(JSON.stringify({ type: "https://tools.ietf.org/html/rfc7235#section-3.1", title: "Unauthorized", detail: "Invalid JWT signature", status: 401 }), {
               status: 401,
-              headers: corsHeaders,
+              headers: { "Content-Type": "application/json", ...corsHeaders }
             });
           }
+        }
+
           try {
             const deptSummaryList = await env.GREEN_STATE.list({
               prefix: "dept_summary:",
@@ -1313,7 +1331,7 @@ export default {
           const department = url.searchParams.get("department");
           if (!department) {
             return new Response(
-              JSON.stringify({ error: "Department parameter is required" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Department parameter is required" }),
               {
                 status: 400,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -1384,7 +1402,7 @@ export default {
 
             if (!department) {
               return new Response(
-                JSON.stringify({ error: "Department is required" }),
+                JSON.stringify({ type: "about:blank", title: "Error", detail: "Department is required" }),
                 {
                   status: 400,
                   headers: {
@@ -1417,7 +1435,7 @@ export default {
             );
           } catch (e: any) {
             return new Response(
-              JSON.stringify({ error: "Failed to process department summary" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to process department summary" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -1496,7 +1514,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to fetch anny signals" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to fetch anny signals" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -1609,7 +1627,7 @@ export default {
             }
           } catch (e: any) {
             return new Response(
-              JSON.stringify({ error: "Failed to ingest inbound webhook" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to ingest inbound webhook" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -2042,7 +2060,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to ingest inbound webhook" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to ingest inbound webhook" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -2307,7 +2325,7 @@ export default {
             }
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to send exec briefing" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to send exec briefing" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -2358,7 +2376,7 @@ export default {
             });
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to fetch briefing archives" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to fetch briefing archives" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -2387,7 +2405,7 @@ export default {
             };
             if (!payload.target_endpoint || !payload.payload) {
               return new Response(
-                JSON.stringify({ error: "Missing target_endpoint or payload" }),
+                JSON.stringify({ type: "about:blank", title: "Error", detail: "Missing target_endpoint or payload" }),
                 {
                   status: 400,
                   headers: {
@@ -2461,7 +2479,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to dispatch briefing" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to dispatch briefing" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -2637,7 +2655,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to flush DLQ" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to flush DLQ" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -2658,7 +2676,7 @@ export default {
           const cacheResult =
             await env.MARKET_CACHE.getWithMetadata("latest_prices");
           if (!cacheResult.value) {
-            return new Response(JSON.stringify({ error: "Cache miss" }), {
+            return new Response(JSON.stringify({ type: "about:blank", title: "Error", detail: "Cache miss" }), {
               status: 404,
               headers: {
                 "Content-Type": "application/json",
@@ -2771,7 +2789,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to purge quarantine" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to purge quarantine" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -2925,7 +2943,7 @@ export default {
 
           if (!env.AI) {
             return new Response(
-              JSON.stringify({ error: "AI binding not configured" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "AI binding not configured" }),
               { status: 503, headers: corsHeaders },
             );
           }
@@ -3095,7 +3113,7 @@ export default {
             );
           } catch (err) {
             return new Response(
-              JSON.stringify({ error: "AI Evaluation Failed" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "AI Evaluation Failed" }),
               { status: 500, headers: corsHeaders },
             );
           }
@@ -3140,7 +3158,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to reset oracle circuit" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to reset oracle circuit" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -3195,7 +3213,7 @@ export default {
             });
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to fetch audit logs" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to fetch audit logs" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -3230,7 +3248,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to sync oracle" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to sync oracle" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -3378,9 +3396,7 @@ export default {
                 latencyMs: Math.round(performance.now() - startTime),
                 timestamp: new Date().toISOString(),
                 uptimeSeconds:
-                  typeof process !== "undefined" && process.uptime
-                    ? Math.round(process.uptime())
-                    : 0,
+                  0,
                 kv_cache_latency_ms: kvLatency,
                 upstream_rpc_status: rpcStatus,
                 edge_version: "v2.4.0-stable",
@@ -3430,7 +3446,7 @@ export default {
             success: true,
             latencyMs: Math.round(performance.now() - startTime),
             timestamp: new Date().toISOString(),
-            uptimeSeconds: typeof process !== "undefined" && process.uptime ? Math.round(process.uptime()) : 0,
+            uptimeSeconds: 0,
             kv_cache_latency_ms: kvLatency,
             upstream_rpc_status: rpcStatus,
             edge_version: "v2.4.0-stable",
@@ -3611,7 +3627,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to purge audit logs" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to purge audit logs" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -3666,7 +3682,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to purge quarantined retries" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to purge quarantined retries" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -3728,7 +3744,7 @@ export default {
             });
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to fetch quarantine" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to fetch quarantine" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -3843,7 +3859,7 @@ export default {
             );
           } catch (e) {
             return new Response(
-              JSON.stringify({ error: "Failed to purge item" }),
+              JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to purge item" }),
               {
                 status: 500,
                 headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -4009,12 +4025,7 @@ export default {
           });
 
           return new Response(
-            JSON.stringify({
-              success: false,
-              status: "buffered_to_dlq",
-              error: (error as Error).message,
-              dlq_id: errorId,
-            }),
+            JSON.stringify({ type: "about:blank", title: "Buffered to DLQ", detail: (error as Error).message, status: 202, dlq_id: errorId }),
             {
               status: 202,
               headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -4022,12 +4033,25 @@ export default {
           ); // Accepted but deferred
         }
       })(); // Close inner async IIFE
-
       // Check response status for telemetry
       if (response && response.status >= 500) isError = true;
       if (response && response.status === 429) isRateLimit = true;
 
+      if (response) {
+        const newHeaders = new Headers(response.headers);
+        newHeaders.set('X-Edge-Region', (request as any).cf?.colo || 'DEV');
+        newHeaders.set('X-Cache-Status', 'MISS'); // Default for thirdweb_bridge
+        newHeaders.set('X-Execution-Time-Ms', Math.round(performance.now() - startTime).toString());
+
+        response = new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: newHeaders
+        });
+      }
+
       return response;
+
     } catch (e: any) {
       isError = true;
       throw e;
