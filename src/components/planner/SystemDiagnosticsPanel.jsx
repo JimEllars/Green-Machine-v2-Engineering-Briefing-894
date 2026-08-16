@@ -381,6 +381,20 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
               {activeAiModel === "llama-3.1" ? "AI Engine: Llama 3.1 Primary" : "AI Engine: Mistral 7B Failover"}
             </div>
           )}
+
+          <div className="flex items-center gap-2 ml-4">
+            <div className="px-2 py-1 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)] text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400"></div>
+              Colo: {edgeHeaders.region}
+            </div>
+            <div className={`px-2 py-1 rounded border text-[10px] font-bold uppercase tracking-wider shadow-[0_0_10px_rgba(0,0,0,0.3)] ${edgeHeaders.cacheStatus === 'HIT' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50' : 'bg-amber-500/20 text-amber-400 border-amber-500/50'}`}>
+              KV Cache: {edgeHeaders.cacheStatus}
+            </div>
+            <div className="px-2 py-1 rounded bg-slate-800/80 text-amber-400 border border-slate-700/50 text-[10px] font-bold uppercase tracking-wider">
+              Execution: {edgeHeaders.execTime}ms
+            </div>
+          </div>
+
           <button
             onClick={handleExportAudit}
             title="Export Audit Snapshot"
