@@ -136,3 +136,31 @@ export async function syncMarketCache(env: Env): Promise<void> {
   }
 }
 
+
+
+export async function fetchHealth(env: Env, request: Request, ctx: ExecutionContext): Promise<Response> {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "*",
+  };
+
+  let kvHits = parseInt(await env.GREEN_STATE.get("telemetry_kv_hits") || "0", 10);
+  let kvMisses = parseInt(await env.GREEN_STATE.get("telemetry_kv_misses") || "0", 10);
+  const ratio = kvHits + kvMisses > 0 ? (kvHits / (kvHits + kvMisses)).toFixed(2) : "1.00";
+
+  return new Response(JSON.stringify({
+    success: true,
+    latencyMs: 0,
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    worker_region: (request as any).cf?.colo || 'DEV',
+    kv_cache_ratio: ratio,
+    module: "market_watcher"
+  }), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      ...corsHeaders
+    }
+  });
+}

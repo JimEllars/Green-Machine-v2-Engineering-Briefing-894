@@ -21,7 +21,11 @@ export default function StrategyConsultantTerminal() {
   const [isCopied, setIsCopied] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [exportFormat, setExportFormat] = useState(() => localStorage.getItem('terminal_export_format') || 'Markdown');
-  const [promptInput, setPromptInput] = useState('');
+  const [promptInput, setPromptInput] = useState(() => sessionStorage.getItem('strategy_prompt_cache') || '');
+
+  useEffect(() => {
+    sessionStorage.setItem('strategy_prompt_cache', promptInput);
+  }, [promptInput]);
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [isConsulting, setIsConsulting] = useState(false);
   const [showFallbackBanner, setShowFallbackBanner] = useState(false);
@@ -372,6 +376,7 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
           </span>
         </div>
         <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" title="Edge AI Pipeline Ready"></div>
           {/* Model Preference Toggle */}
           <div className="flex items-center bg-slate-800/80 rounded border border-slate-700/50 p-0.5 mr-2">
             <button

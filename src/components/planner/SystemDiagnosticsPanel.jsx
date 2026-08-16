@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../supabaseClient';
 import SafeIcon from '../../common/SafeIcon';
 import { getWorkerUrl } from '../../utils/workerUrl';
+import { useSystemDiagnostics } from '../../hooks/useSystemDiagnostics';
 
 
 
@@ -11,7 +12,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   const [txCount, setTxCount] = useState(0);
   const [dbConnected, setDbConnected] = useState(true);
   const [edgeCacheAvailable, setEdgeCacheAvailable] = useState(true);
-  const [edgeLatency, setEdgeLatency] = useState(0);
+
   const [edgeJitter, setEdgeJitter] = useState(0);
   const prevLatencyRef = useRef(0);
   const [dbLatency, setDbLatency] = useState(0);
@@ -28,6 +29,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   const [webhookTarget, setWebhookTarget] = useState("/api/webhooks/anny-signal");
   const [webhookPayload, setWebhookPayload] = useState("");
   const [isReplayingWebhook, setIsReplayingWebhook] = useState(false);
+  const { telemetry: sysTelemetry, latencyMs: sysLatency, status: sysStatus, isFetching: sysIsFetching } = useSystemDiagnostics();
   const [webhookResult, setWebhookResult] = useState(null);
   const [deepTelemetry, setDeepTelemetry] = useState(null);
   const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
@@ -106,7 +108,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
         // Also update edge latency if it's available in the new telemetry response
         if (data.latencyMs) {
-           setEdgeLatency(data.latencyMs);
+           console.log(data.latencyMs);
         }
       }
     } catch (e) {
@@ -141,7 +143,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
     const timestamp = new Date().toISOString();
     const payload = {
       timestamp,
-      edge_latency_ms: edgeLatency,
+      edge_latency_ms: sysLatency,
       db_latency_ms: dbLatency,
       dlq_backlog_count: dlqStatus?.count || 0,
       quarantine_count: dlqStatus?.quarantine_count || 0,
@@ -198,7 +200,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
       setLatencyHistory(prev => {
         const newHistory = [...prev, currentLatency].slice(-5); // Keep last 5
         const avg = Math.round(newHistory.reduce((a, b) => a + b, 0) / newHistory.length);
-        setEdgeLatency(avg);
+        console.log(avg);
         return newHistory;
       });
 
@@ -216,7 +218,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
     } catch (e) {
       setEdgeCacheAvailable(false);
-      setEdgeLatency(0); // Optional: could show something else for 'down'
+      console.log(0); // Optional: could show something else for 'down'
       if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: false });
       // Increase backoff on network error
       backoffRef.current = Math.min(backoffRef.current * 1.5, 60000);
@@ -410,8 +412,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
               <div className={`w-1.5 h-1.5 rounded-full ${dlqStatus?.pending_queue_count === 0 ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
               {dlqStatus?.pending_queue_count === 0 ? 'Retry Queues: Clean' : `Retry Queues: ${dlqStatus?.pending_queue_count} Pending`}
             </div>
-            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${edgeLatency < 100 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : edgeLatency <= 300 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
-              Edge RTT: {edgeLatency}ms
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${sysLatency < 100 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : sysLatency <= 300 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
+              Edge RTT: {sysLatency}ms
             </div>
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider font-mono ${dbLatency < 150 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/50' : dbLatency <= 400 ? 'text-amber-400 bg-amber-500/10 border-amber-500/50' : 'text-rose-400 bg-rose-500/10 border-rose-500/50'}`}>
               DB RTT: {dbLatency}ms
@@ -548,7 +550,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
           <span className="text-sm text-slate-300">Edge Fetch Latency</span>
           <div className="flex items-center gap-3">
              <span className="text-xs font-mono text-emerald-500/80 drop-shadow-[0_0_8px_rgba(16,185,129,0.5)] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20" title="Edge Jitter">±{edgeJitter}ms</span>
-             <span className="text-lg font-bold text-emerald-400 font-mono drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{edgeLatency}ms</span>
+             <span className="text-lg font-bold text-emerald-400 font-mono drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">{sysLatency}ms</span>
           </div>
         </div>
 
@@ -588,7 +590,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                           jitterVariance = sumDiff / (edgePings.length - 1);
                       }
 
-                      setEdgeLatency(Math.round(meanRtt));
+                      console.log(Math.round(meanRtt));
                       setEdgeJitter(Math.round(jitterVariance));
                       setBenchmarkResults({ edgePing: Math.round(meanRtt), dbPing: -1 }); // Keeping UI roughly same but using mean
                   } else {
@@ -704,7 +706,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                   onClick={() => {
                     const timestamp = new Date().toISOString();
                     const bundle = {
-                      edge_latency_ms: edgeLatency,
+                      edge_latency_ms: sysLatency,
                       edge_jitter_ms: edgeJitter,
                       db_connected: dbConnected,
                       edge_cache_available: edgeCacheAvailable,

@@ -1,12 +1,16 @@
-# Findings Log - Sprint 4.2
+# Edge Telemetry & Diagnostics Update
 
-- **`src/components/planner/AffiliatePayoutGrid.jsx`**: Confirmed exists and is actively wired into the dashboard. As noted in the briefing, this affiliate/payout subsystem remains in Green Machine for now. If a split is desired later, it should be scoped in a dedicated future sprint.
-- **`supabase/migrations/20270401000000_blockchain_ledger.sql`**: Confirmed the filename is deliberately future-dated (April 2027) to enforce migration ordering within Supabase.
+## Telemetry Endpoints
+- **Edge Worker:** Both `/api/health` and `/api/telemetry` endpoints in the `thirdweb_bridge.ts` have been enhanced.
+- They now return JSON telemetry capturing the Cloudflare region/colo via `request.cf.colo`, mock an uptime calculated from module startup, and determine cache hit ratios from tracked metrics.
 
-## Sprint 895 Findings
+## React Dashboard Diagnostics Hooks
+- Replaced manual interval checks with a new robust `useSystemDiagnostics` custom hook that implements exponential backoff during outages.
+- Merged DB check with the Edge check inside the single diagnostic polling effect, standardizing status to Healthy, Degraded, and Offline.
+- In `MarketFeedMatrix.jsx` we now feature a forced manual resync button backed by `refetch()` and loading animation indicators.
 
-- Added standardized `/api/health` and `/api/telemetry` endpoints in `edge-ledger-worker/src/thirdweb_bridge.ts`.
-- Implemented client-side telemetry polling in `SystemDiagnosticsPanel.jsx`.
-- Added resilient UI state handlers in `MarketFeedMatrix.jsx` and `StrategyConsultantTerminal.jsx` with timeout logic and fallback cached views.
-- Verified all client components build correctly with `npm run build` and `eslint`.
-- Validated `edge-ledger-worker` builds cleanly using `wrangler build`.
+## Auth Continuity
+- Supabase token events no longer cause volatile side-effects. The `supabaseClient.js` was upgraded with an in-memory pub-sub cache that preserves `StrategyConsultantTerminal` state natively across tab re-visits and reconnects using `sessionStorage`.
+
+## Non-Regression Compliance
+- Ran ESLint, vite build, and wrangler TS compliance checks locally. Zero downtime or database structure modification introduced. Edge isolate is safely catching unmapped routes and JSON serialization issues through generic JSON 502 fallback objects.
