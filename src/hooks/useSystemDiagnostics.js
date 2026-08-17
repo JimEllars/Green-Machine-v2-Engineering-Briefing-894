@@ -41,7 +41,7 @@ export const useSystemDiagnostics = () => {
       // 2. Supabase DB Check & Latency
       const dbStart = performance.now();
       // Using an arbitrary fast query to measure latency
-      const { error } = await supabase.from('blockchain_transactions').select('id').limit(1);
+      const { error } = await supabase.auth.getSession();
       dbLatencyMs = Math.round(performance.now() - dbStart);
 
       if (!error) {
