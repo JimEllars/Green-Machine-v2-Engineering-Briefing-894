@@ -16,37 +16,27 @@ export interface Env {
  * If a 429 rate-limit is encountered, it preserves the existing cache and updates
  * the metadata to reflect the rate-limited status.
  */
-export async function syncMarketCache(env: Env): Promise<void> {
-  let circuitBreakerStr = await env.GREEN_STATE.get('oracle_circuit_breaker');
-  let circuitBreaker = circuitBreakerStr ? JSON.parse(circuitBreakerStr) : { state: 'CLOSED', failure_count: 0, last_failure: 0 };
 
-  if (circuitBreaker.state === 'OPEN') {
-    const now = Date.now();
-    if (now - circuitBreaker.last_failure < 300000) {
-      // Still in cooldown period, fallback to cache
-      console.warn('[CIRCUIT_BREAKER] Oracle fetch skipped due to OPEN circuit breaker.');
-      try {
-        const oldCache = await env.MARKET_CACHE.get('latest_prices');
-        if (oldCache) {
-          await env.MARKET_CACHE.put('latest_prices', oldCache, {
-            expirationTtl: 60,
-            metadata: { updated_at: Date.now(), rate_limited: true, circuit_breaker: true, provider: "anny_trade_rest" }
-          });
-        }
-      } catch (fallbackError) {
-        console.error('[MARKET_WATCHER] Fallback also failed:', fallbackError);
-      }
+export async function syncMarketCache(env: Env): Promise<void> {
+  const CACHE_KEY = 'latest_prices';
+  const MAX_AGE = 60; // Fresh for 60 seconds
+  const STALE_WHILE_REVALIDATE = 300; // Stale but acceptable for up to 5 mins
+
+  const now = Date.now();
+  const { value, metadata } = await env.MARKET_CACHE.getWithMetadata(CACHE_KEY);
+
+  if (value && metadata && (metadata as any).updated_at) {
+    const age = (now - (metadata as any).updated_at) / 1000;
+    if (age < MAX_AGE) {
+      console.log(`[MARKET_WATCHER] Cache is fresh (${age.toFixed(1)}s old). Skipping sync.`);
       return;
     } else {
-      circuitBreaker.state = 'HALF_OPEN';
-      await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(circuitBreaker));
+      console.log(`[MARKET_WATCHER] Cache is stale (${age.toFixed(1)}s old). Revalidating...`);
     }
   }
 
   try {
     // 1. Fetch from Upstream Oracles (Simulated aggregation)
-    // In production, this hits CoinGecko, Alpaca, etc.
-
     const assets = ['BTC', 'ETH', 'SOL'];
     const results: any = {};
     for (const asset of assets) {
@@ -89,19 +79,16 @@ export async function syncMarketCache(env: Env): Promise<void> {
       provider: "anny_trade_rest"
     };
 
-
-    // 2. Cache in KV with strict 30-second TTL
-    await env.MARKET_CACHE.put('latest_prices', JSON.stringify(multiSourceData), {
-      expirationTtl: 60,
+    // Cache in KV with strict 30-second TTL
+    // In stale-while-revalidate, we could set a longer KV expiration
+    // and store the 'freshness' in metadata, but KV expiration handles removal.
+    await env.MARKET_CACHE.put(CACHE_KEY, JSON.stringify(multiSourceData), {
+      expirationTtl: MAX_AGE + STALE_WHILE_REVALIDATE,
       metadata: { updated_at: Date.now() }
     });
 
     console.log(`[MARKET_WATCHER] Market cache updated at ${new Date().toISOString()}`);
-    if (circuitBreaker.state !== 'CLOSED' || circuitBreaker.failure_count > 0) {
-      circuitBreaker.state = 'CLOSED';
-      circuitBreaker.failure_count = 0;
-      await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(circuitBreaker));
-    }
+
   } catch (error: any) {
     if (error.status === 429) {
       console.warn(`[ORACLE_RATE_LIMIT] 429 received from oracle. Preserving cached prices. Retry-After: ${error.retryAfter || 'unknown'}`);
@@ -109,39 +96,28 @@ export async function syncMarketCache(env: Env): Promise<void> {
       console.error(`[MARKET_WATCHER] Oracle fetch failed:`, error);
     }
 
-    circuitBreaker.failure_count += 1;
-    circuitBreaker.last_failure = Date.now();
-    if (circuitBreaker.failure_count >= 3) {
-      circuitBreaker.state = 'OPEN';
-    }
-    await env.GREEN_STATE.put('oracle_circuit_breaker', JSON.stringify(circuitBreaker));
-
-    // Fallback gracefully to historical keys without overwriting valid data blocks
-    // By re-putting the old cache, we prevent KV from expiring it.
+    // Stale-While-Revalidate fallback
     try {
-      const oldCache = await env.MARKET_CACHE.get('latest_prices');
-      if (oldCache) {
-        await env.MARKET_CACHE.put('latest_prices', oldCache, {
-          expirationTtl: 60,
-          metadata: { updated_at: Date.now(), rate_limited: true, provider: "anny_trade_rest", circuit_breaker: circuitBreaker.state === 'OPEN' }
+      const { value, metadata } = await env.MARKET_CACHE.getWithMetadata(CACHE_KEY);
+      if (value) {
+        // Prolong the existing stale cache
+        await env.MARKET_CACHE.put(CACHE_KEY, value as string, {
+          expirationTtl: MAX_AGE + STALE_WHILE_REVALIDATE,
+          metadata: { ...(metadata as object), rate_limited: error.status === 429, fallback: true }
         });
-        console.log(`[MARKET_WATCHER] Fallback to historical cache successful`);
+        console.log(`[MARKET_WATCHER] Fallback to stale cache successful`);
       }
     } catch (fallbackError) {
       console.error(`[MARKET_WATCHER] Fallback also failed:`, fallbackError);
     }
-
-    // Log error to supabase usage aggregates if env is passed properly
-    // This function doesn't have ctx here, so we will just return gracefully.
   }
 }
-
-
 
 export async function fetchHealth(env: Env, request: Request, ctx: ExecutionContext): Promise<Response> {
   const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Axim-Signature",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
   };
 
   let kvHits = parseInt(await env.GREEN_STATE.get("telemetry_kv_hits") || "0", 10);

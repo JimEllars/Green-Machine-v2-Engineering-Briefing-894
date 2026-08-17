@@ -185,7 +185,7 @@ export default function AffiliatePayoutGrid() {
           </h2>
           <p className="text-slate-400 text-sm mt-1">Real-time smart contract settlements</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto">
                     {(selectedTokenFilter !== 'All Tokens' || searchQuery.trim() !== '') && (
             <button
               onClick={() => {

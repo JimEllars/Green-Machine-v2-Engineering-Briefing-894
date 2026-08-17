@@ -4,6 +4,7 @@ import { getWorkerUrl } from '../utils/workerUrl';
 
 export const useSystemDiagnostics = () => {
   const [telemetry, setTelemetry] = useState(null);
+  const [telemetryHistory, setTelemetryHistory] = useState([]);
   const [latencyMs, setLatencyMs] = useState(0);
   const [status, setStatus] = useState('Offline'); // 'Healthy', 'Degraded', 'Offline'
   const [isFetching, setIsFetching] = useState(false);
@@ -16,6 +17,7 @@ export const useSystemDiagnostics = () => {
     let edgeSuccess = false;
     let dbSuccess = false;
     let localTelemetry = null;
+    let dbLatencyMs = 0;
 
     try {
       // 1. Edge Worker Telemetry
@@ -36,8 +38,12 @@ export const useSystemDiagnostics = () => {
     }
 
     try {
-      // 2. Supabase DB Check
-      const { data, error } = await supabase.from('blockchain_transactions').select('*', { count: 'exact', head: true });
+      // 2. Supabase DB Check & Latency
+      const dbStart = performance.now();
+      // Using an arbitrary fast query to measure latency
+      const { error } = await supabase.from('blockchain_transactions').select('id').limit(1);
+      dbLatencyMs = Math.round(performance.now() - dbStart);
+
       if (!error) {
          dbSuccess = true;
       }
@@ -47,6 +53,19 @@ export const useSystemDiagnostics = () => {
 
     currentLatency = Math.round(performance.now() - start);
     setLatencyMs(currentLatency);
+
+    const newTelemetryEvent = {
+       timestamp: new Date().toISOString(),
+       edgeLatencyMs: localTelemetry?.latencyMs || currentLatency,
+       dbLatencyMs,
+       totalLatencyMs: currentLatency,
+       status: edgeSuccess && dbSuccess ? 'Healthy' : (edgeSuccess || dbSuccess ? 'Degraded' : 'Offline')
+    };
+
+    setTelemetryHistory(prev => {
+       const newHistory = [...prev, newTelemetryEvent];
+       return newHistory.slice(-50); // Cap at 50 data points
+    });
 
     if (edgeSuccess && dbSuccess) {
        setStatus('Healthy');
@@ -85,5 +104,5 @@ export const useSystemDiagnostics = () => {
     return () => clearInterval(interval);
   }, [fetchDiagnostics, errorCount]);
 
-  return { telemetry, latencyMs, status, isFetching, refetch: fetchDiagnostics };
+  return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics };
 };

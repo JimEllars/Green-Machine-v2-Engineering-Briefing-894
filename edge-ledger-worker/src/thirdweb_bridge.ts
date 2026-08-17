@@ -270,7 +270,7 @@ export async function fetchAnnyCombinedPortfolio(
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "Content-Type, X-Axim-Signature",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Axim-Signature",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
 };
 
@@ -416,67 +416,17 @@ async function sendEmailItNotification(
       );
 
             // Async logging to api_usage_logs
-            ctx.waitUntil((async () => {
-              try {
-                // Estimate tokens: roughly 1 token per 4 chars of prompt/response as a naive fallback if not provided
-                let estimatedTokens = 0;
-                if (response?.usage?.total_tokens) {
-                  estimatedTokens = response.usage.total_tokens;
-                } else {
-                  const promptStr = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-                  const resStr = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-                  estimatedTokens = Math.ceil((promptStr.length + resStr.length) / 4);
-                }
 
-                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "apikey": env.SUPABASE_SERVICE_KEY,
-                    "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
-                  },
-                  body: JSON.stringify({
-                    endpoint: "/api/strategy-consult",
-                    token_count: estimatedTokens,
-                    execution_time_ms: duration
-                  })
-                });
-              } catch (e) {
-                console.error("Failed to log AI usage to Supabase:", e);
-              }
-            })());
+            // Async logging removed/fixed to avoid compilation errors
+            // The original code was throwing errors because 'ctx', 'prompt', 'parsed', 'duration' and 'response.usage' were not defined in scope.
+
 
 
             // Async logging to api_usage_logs
-            ctx.waitUntil((async () => {
-              try {
-                // Estimate tokens: roughly 1 token per 4 chars of prompt/response as a naive fallback if not provided
-                let estimatedTokens = 0;
-                if (response?.usage?.total_tokens) {
-                  estimatedTokens = response.usage.total_tokens;
-                } else {
-                  const promptStr = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-                  const resStr = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-                  estimatedTokens = Math.ceil((promptStr.length + resStr.length) / 4);
-                }
 
-                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "apikey": env.SUPABASE_SERVICE_KEY,
-                    "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
-                  },
-                  body: JSON.stringify({
-                    endpoint: "/api/strategy-consult",
-                    token_count: estimatedTokens,
-                    execution_time_ms: duration
-                  })
-                });
-              } catch (e) {
-                console.error("Failed to log AI usage to Supabase:", e);
-              }
-            })());
+            // Async logging removed/fixed to avoid compilation errors
+            // The original code was throwing errors because 'ctx', 'prompt', 'parsed', 'duration' and 'response.usage' were not defined in scope.
+
 
     }
     return result;
@@ -1077,9 +1027,27 @@ export default {
       let response = await (async () => {
         const url = new URL(request.url);
 
+
+        // 0. Uniform CORS Preflight
         if (request.method === "OPTIONS") {
           return new Response(null, { headers: corsHeaders });
         }
+
+        // 0.5 Uniform JWT Validation (if Authorization header is present)
+        const authHeader = request.headers.get("Authorization");
+        if (authHeader && authHeader.startsWith("Bearer ")) {
+          const token = authHeader.substring(7);
+          try {
+            const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
+            await jwtVerify(token, secret);
+          } catch (e) {
+            return new Response(JSON.stringify({ type: "https://tools.ietf.org/html/rfc7235#section-3.1", title: "Unauthorized", detail: "Invalid Supabase JWT signature", status: 401 }), {
+              status: 401,
+              headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+          }
+        }
+
 
         if (request.method === "GET" && url.pathname === "/api/dlq-status") {
           const signature = request.headers.get("X-Axim-Signature");
@@ -1342,19 +1310,7 @@ export default {
           });
         }
 
-        const authHeader = request.headers.get("Authorization");
-        if (request.method === "POST" && authHeader && authHeader.startsWith("Bearer ")) {
-          const token = authHeader.substring(7);
-          try {
-            const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
-            await jwtVerify(token, secret);
-          } catch (e) {
-            return new Response(JSON.stringify({ type: "https://tools.ietf.org/html/rfc7235#section-3.1", title: "Unauthorized", detail: "Invalid JWT signature", status: 401 }), {
-              status: 401,
-              headers: { "Content-Type": "application/json", ...corsHeaders }
-            });
-          }
-        }
+
 
           try {
             const deptSummaryList = await env.GREEN_STATE.list({
@@ -3178,34 +3134,10 @@ export default {
             );
 
             // Async logging to api_usage_logs
-            ctx.waitUntil((async () => {
-              try {
-                let estimatedTokens = 0;
-                if (response?.usage?.total_tokens) {
-                  estimatedTokens = response.usage.total_tokens;
-                } else {
-                  const promptStr = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-                  const resStr = typeof parsed === 'string' ? parsed : JSON.stringify(parsed);
-                  estimatedTokens = Math.ceil((promptStr.length + resStr.length) / 4);
-                }
 
-                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                    "apikey": env.SUPABASE_SERVICE_KEY,
-                    "Authorization": `Bearer ${env.SUPABASE_SERVICE_KEY}`
-                  },
-                  body: JSON.stringify({
-                    endpoint: "/api/strategy-consult",
-                    token_count: estimatedTokens,
-                    execution_time_ms: duration
-                  })
-                });
-              } catch (e) {
-                console.error("Failed to log AI usage to Supabase:", e);
-              }
-            })());
+            // Async logging removed/fixed to avoid compilation errors
+            // The original code was throwing errors because 'ctx', 'prompt', 'parsed', 'duration' and 'response.usage' were not defined in scope.
+
 
             return new Response(
               JSON.stringify({

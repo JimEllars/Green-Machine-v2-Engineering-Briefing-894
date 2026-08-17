@@ -29,7 +29,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   const [webhookTarget, setWebhookTarget] = useState("/api/webhooks/anny-signal");
   const [webhookPayload, setWebhookPayload] = useState("");
   const [isReplayingWebhook, setIsReplayingWebhook] = useState(false);
-  const { telemetry: sysTelemetry, latencyMs: sysLatency, status: sysStatus, isFetching: sysIsFetching } = useSystemDiagnostics();
+  const { telemetry: sysTelemetry, telemetryHistory, latencyMs: sysLatency, status: sysStatus, isFetching: sysIsFetching } = useSystemDiagnostics();
   const [webhookResult, setWebhookResult] = useState(null);
   const [deepTelemetry, setDeepTelemetry] = useState(null);
   const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
@@ -503,6 +503,20 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
            'Realtime: Offline'}
         </div>
 
+        {/* Network Blip Fallback Status */}
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+            sysStatus === 'Healthy' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
+            sysStatus === 'Degraded' ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' :
+            'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(243,24,73,0.3)]'
+        }`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${
+            sysStatus === 'Healthy' ? 'bg-emerald-500' :
+            sysStatus === 'Degraded' ? 'bg-amber-500 animate-pulse' :
+            'bg-rose-500'
+          }`} />
+          System: {sysStatus}
+        </div>
+
                 {/* Edge Error Telemetry Badge */}
         {dlqStatus?.edge_error_telemetry && (
           <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
@@ -797,36 +811,36 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                      <div className="grid grid-cols-2 gap-3 mb-2 text-xs">
                         <div className="flex flex-col">
                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Edge Latency</span>
-                           <span className={`font-mono font-bold ${deepTelemetry.edge_telemetry.latencyMs < 100 ? 'text-emerald-400' : deepTelemetry.edge_telemetry.latencyMs < 300 ? 'text-amber-400' : 'text-rose-400'}`}>
-                              {deepTelemetry.edge_telemetry.latencyMs} ms
+                           <span className={`font-mono font-bold ${(deepTelemetry?.edge_telemetry || {}).latencyMs < 100 ? 'text-emerald-400' : (deepTelemetry?.edge_telemetry || {}).latencyMs < 300 ? 'text-amber-400' : 'text-rose-400'}`}>
+                              {(deepTelemetry?.edge_telemetry || {}).latencyMs} ms
                            </span>
                         </div>
                         <div className="flex flex-col">
                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">KV Latency</span>
-                           <span className="font-mono font-bold text-emerald-400">{deepTelemetry.edge_telemetry.kv_cache_latency_ms} ms</span>
+                           <span className="font-mono font-bold text-emerald-400">{(deepTelemetry?.edge_telemetry || {}).kv_cache_latency_ms} ms</span>
                         </div>
                         <div className="flex flex-col">
                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Upstream RPC</span>
-                           <span className={`font-mono font-bold ${deepTelemetry.edge_telemetry.upstream_rpc_status === 'connected' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                              {deepTelemetry.edge_telemetry.upstream_rpc_status.toUpperCase()}
+                           <span className={`font-mono font-bold ${(deepTelemetry?.edge_telemetry || {}).upstream_rpc_status === 'connected' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {(deepTelemetry?.edge_telemetry || {}).upstream_rpc_status.toUpperCase()}
                            </span>
                         </div>
                         <div className="flex flex-col">
                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Auth Handshake</span>
-                           <span className={`font-mono font-bold ${deepTelemetry.edge_telemetry.auth_handshake_status === 'verified' ? 'text-emerald-400' : 'text-amber-400'}`}>
-                              {deepTelemetry.edge_telemetry.auth_handshake_status.toUpperCase()}
+                           <span className={`font-mono font-bold ${(deepTelemetry?.edge_telemetry || {}).auth_handshake_status === 'verified' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {(deepTelemetry?.edge_telemetry || {}).auth_handshake_status.toUpperCase()}
                            </span>
                         </div>
                         <div className="flex flex-col">
                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Ledger Sync</span>
                            <span className="font-mono font-bold text-emerald-400">
-                              {deepTelemetry.edge_telemetry.ledger_sync_state.toUpperCase()}
+                              {(deepTelemetry?.edge_telemetry || {}).ledger_sync_state.toUpperCase()}
                            </span>
                         </div>
                         <div className="flex flex-col">
                            <span className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">Edge Uptime</span>
                            <span className="font-mono font-bold text-indigo-400">
-                              {deepTelemetry.edge_telemetry.uptimeSeconds}s
+                              {(deepTelemetry?.edge_telemetry || {}).uptimeSeconds}s
                            </span>
                         </div>
                         <div className="flex flex-col">
@@ -905,15 +919,15 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                         KV Cache Hit-Rate
                       </div>
                       <div className="text-[10px] font-mono font-bold text-slate-300">
-                        {deepTelemetry.edge_telemetry.kv_cache_ratio}
+                        {(deepTelemetry?.edge_telemetry || {}).kv_cache_ratio}
                       </div>
                     </div>
                     <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
                       <div className={`h-full transition-all ${
-                        parseFloat(deepTelemetry.edge_telemetry.kv_cache_ratio) > 90 ? 'bg-emerald-500' :
-                        parseFloat(deepTelemetry.edge_telemetry.kv_cache_ratio) >= 70 ? 'bg-amber-500' :
+                        parseFloat((deepTelemetry?.edge_telemetry || {}).kv_cache_ratio) > 90 ? 'bg-emerald-500' :
+                        parseFloat((deepTelemetry?.edge_telemetry || {}).kv_cache_ratio) >= 70 ? 'bg-amber-500' :
                         'bg-rose-500'
-                      }`} style={{ width: deepTelemetry.edge_telemetry.kv_cache_ratio }} />
+                      }`} style={{ width: (deepTelemetry?.edge_telemetry || {}).kv_cache_ratio }} />
                     </div>
                   </div>
                 )}
@@ -931,44 +945,44 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                         )}
                       </div>
                       <div className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                        (deepTelemetry.investing_brain_telemetry.avg_latency_ms || 850) < 500 ? 'bg-emerald-500/20 text-emerald-400' :
-                        (deepTelemetry.investing_brain_telemetry.avg_latency_ms || 850) < 1000 ? 'bg-amber-500/20 text-amber-400' :
+                        ((deepTelemetry?.investing_brain_telemetry || {}).avg_latency_ms || 850) < 500 ? 'bg-emerald-500/20 text-emerald-400' :
+                        ((deepTelemetry?.investing_brain_telemetry || {}).avg_latency_ms || 850) < 1000 ? 'bg-amber-500/20 text-amber-400' :
                         'bg-rose-500/20 text-rose-400'
                       }`}>
-                        {deepTelemetry.investing_brain_telemetry.avg_latency_ms || 850} ms
+                        {(deepTelemetry?.investing_brain_telemetry || {}).avg_latency_ms || 850} ms
                       </div>
                     </div>
 
                     <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mb-4">
                       <div className={`h-full transition-all ${
-                        (deepTelemetry.investing_brain_telemetry.avg_latency_ms || 850) < 500 ? 'bg-emerald-500' :
-                        (deepTelemetry.investing_brain_telemetry.avg_latency_ms || 850) < 1000 ? 'bg-amber-500' :
+                        ((deepTelemetry?.investing_brain_telemetry || {}).avg_latency_ms || 850) < 500 ? 'bg-emerald-500' :
+                        ((deepTelemetry?.investing_brain_telemetry || {}).avg_latency_ms || 850) < 1000 ? 'bg-amber-500' :
                         'bg-rose-500'
-                      }`} style={{ width: `${Math.min(((deepTelemetry.investing_brain_telemetry.avg_latency_ms || 850) / 1000) * 100, 100)}%` }} />
+                      }`} style={{ width: `${Math.min((((deepTelemetry?.investing_brain_telemetry || {}).avg_latency_ms || 850) / 1000) * 100, 100)}%` }} />
                     </div>
 
-                    {deepTelemetry.investing_brain_telemetry.model_usage ? (
+                    {(deepTelemetry?.investing_brain_telemetry || {}).model_usage ? (
                       <div>
                         <div className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider mb-2">Model Distribution</div>
                         <div className="flex w-full h-2 rounded-full overflow-hidden mb-2 border border-slate-700/50">
-                           <div className="h-full bg-emerald-500 hover:brightness-110 transition-all" style={{ width: `${deepTelemetry.investing_brain_telemetry.model_usage.llama_3_1_pct}%` }} title={`Llama 3.1: ${deepTelemetry.investing_brain_telemetry.model_usage.llama_3_1_pct.toFixed(1)}%`} />
-                           <div className="h-full bg-indigo-500 hover:brightness-110 transition-all" style={{ width: `${deepTelemetry.investing_brain_telemetry.model_usage.mistral_7b_pct}%` }} title={`Mistral 7B: ${deepTelemetry.investing_brain_telemetry.model_usage.mistral_7b_pct.toFixed(1)}%`} />
+                           <div className="h-full bg-emerald-500 hover:brightness-110 transition-all" style={{ width: `${(deepTelemetry?.investing_brain_telemetry || {}).model_usage.llama_3_1_pct}%` }} title={`Llama 3.1: ${(deepTelemetry?.investing_brain_telemetry || {}).model_usage.llama_3_1_pct.toFixed(1)}%`} />
+                           <div className="h-full bg-indigo-500 hover:brightness-110 transition-all" style={{ width: `${(deepTelemetry?.investing_brain_telemetry || {}).model_usage.mistral_7b_pct}%` }} title={`Mistral 7B: ${(deepTelemetry?.investing_brain_telemetry || {}).model_usage.mistral_7b_pct.toFixed(1)}%`} />
                         </div>
                         <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> Llama 3.1: {deepTelemetry.investing_brain_telemetry.model_usage.llama_3_1_pct.toFixed(1)}%</span>
-                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500"/> Mistral 7B: {deepTelemetry.investing_brain_telemetry.model_usage.mistral_7b_pct.toFixed(1)}%</span>
+                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> Llama 3.1: {(deepTelemetry?.investing_brain_telemetry || {}).model_usage.llama_3_1_pct.toFixed(1)}%</span>
+                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500"/> Mistral 7B: {(deepTelemetry?.investing_brain_telemetry || {}).model_usage.mistral_7b_pct.toFixed(1)}%</span>
                         </div>
                       </div>
                     ) : (
                       <div>
                         <div className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider mb-2">Model Distribution</div>
                         <div className="flex w-full h-2 rounded-full overflow-hidden mb-2 border border-slate-700/50">
-                           <div className="h-full bg-emerald-500 hover:brightness-110 transition-all" style={{ width: `${deepTelemetry.investing_brain_telemetry.llama_3_1_pct || 0}%` }} title={`Llama 3.1: ${(deepTelemetry.investing_brain_telemetry.llama_3_1_pct || 0).toFixed(1)}%`} />
-                           <div className="h-full bg-indigo-500 hover:brightness-110 transition-all" style={{ width: `${deepTelemetry.investing_brain_telemetry.mistral_7b_pct || 0}%` }} title={`Mistral 7B: ${(deepTelemetry.investing_brain_telemetry.mistral_7b_pct || 0).toFixed(1)}%`} />
+                           <div className="h-full bg-emerald-500 hover:brightness-110 transition-all" style={{ width: `${(deepTelemetry?.investing_brain_telemetry || {}).llama_3_1_pct || 0}%` }} title={`Llama 3.1: ${((deepTelemetry?.investing_brain_telemetry || {}).llama_3_1_pct || 0).toFixed(1)}%`} />
+                           <div className="h-full bg-indigo-500 hover:brightness-110 transition-all" style={{ width: `${(deepTelemetry?.investing_brain_telemetry || {}).mistral_7b_pct || 0}%` }} title={`Mistral 7B: ${((deepTelemetry?.investing_brain_telemetry || {}).mistral_7b_pct || 0).toFixed(1)}%`} />
                         </div>
                         <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> Llama 3.1: {(deepTelemetry.investing_brain_telemetry.llama_3_1_pct || 0).toFixed(1)}%</span>
-                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500"/> Mistral 7B: {(deepTelemetry.investing_brain_telemetry.mistral_7b_pct || 0).toFixed(1)}%</span>
+                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"/> Llama 3.1: {((deepTelemetry?.investing_brain_telemetry || {}).llama_3_1_pct || 0).toFixed(1)}%</span>
+                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-indigo-500"/> Mistral 7B: {((deepTelemetry?.investing_brain_telemetry || {}).mistral_7b_pct || 0).toFixed(1)}%</span>
                         </div>
                       </div>
                     )}
