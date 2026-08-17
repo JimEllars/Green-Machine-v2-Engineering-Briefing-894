@@ -249,6 +249,19 @@ export default function MarketFeedMatrix() {
       </div>
 
       <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 ${isStale ? 'opacity-80 blur-[1px]' : ''}`}>
+
+      {marketData.filter(asset => {
+          if (cfoFilter === 'All') return true;
+          if (!asset.cfo_state) return false;
+          return asset.cfo_state.toLowerCase() === cfoFilter.toLowerCase();
+        }).length === 0 && (
+        <div className="col-span-full py-12 flex flex-col items-center justify-center border border-zinc-800/50 border-dashed rounded-xl bg-zinc-900/30">
+          <SafeIcon name="Activity" className="w-8 h-8 text-slate-600 mb-3" />
+          <p className="text-slate-400 font-mono text-sm">No market feed data available</p>
+          <p className="text-slate-600 text-xs mt-1">Awaiting synchronization from edge cache...</p>
+        </div>
+      )}
+
         {marketData.filter(asset => {
           if (cfoFilter === 'All') return true;
           if (!asset.cfo_state) return false;
@@ -274,8 +287,8 @@ export default function MarketFeedMatrix() {
                   <SafeIcon name={asset.icon} className="text-slate-300 w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-white font-bold">{asset.symbol}</h3>
-                  <p className="text-slate-400 text-xs">{asset.name}</p>
+                  <h3 className="text-white font-extrabold">{asset.symbol}</h3>
+                  <p className="text-slate-300 text-xs font-medium">{asset.name}</p>
                 </div>
               </div>
               <span className={`text-sm font-semibold flex items-center gap-1 ${asset.change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>

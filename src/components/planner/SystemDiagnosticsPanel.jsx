@@ -510,11 +510,14 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
             'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(243,24,73,0.3)]'
         }`}>
           <div className={`w-1.5 h-1.5 rounded-full ${
-            sysStatus === 'Healthy' ? 'bg-emerald-500' :
+            sysStatus === 'Healthy' ? 'bg-emerald-500 animate-pulse' :
             sysStatus === 'Degraded' ? 'bg-amber-500 animate-pulse' :
             'bg-rose-500'
           }`} />
           System: {sysStatus}
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-slate-700/50 bg-slate-800/30 text-[10px] font-mono text-slate-300">
+           {sysLatency > 0 ? `${sysLatency}ms` : '--ms'}
         </div>
 
                 {/* Edge Error Telemetry Badge */}
