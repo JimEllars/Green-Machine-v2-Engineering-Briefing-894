@@ -1052,7 +1052,7 @@ export default {
         if (request.method === "GET" && url.pathname === "/api/dlq-status") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -1253,7 +1253,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -1304,7 +1304,7 @@ export default {
 
         const signature = request.headers.get("X-Axim-Signature");
         if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-          return new Response("Unauthorized Edge Ingress", {
+          return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
             status: 401,
             headers: corsHeaders,
           });
@@ -1359,7 +1359,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -1421,7 +1421,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -1484,7 +1484,7 @@ export default {
         if (request.method === "POST" && url.pathname === "/api/cache-sync") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -1518,7 +1518,7 @@ export default {
         if (request.method === "GET" && url.pathname === "/api/anny-signals") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -1574,7 +1574,7 @@ export default {
               (token !== env.AXIM_INTERNAL_KEY &&
                 token !== (env as any).ANNY_AUTH_TOKEN)
             ) {
-              return new Response("Unauthorized Edge Ingress", {
+              return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
                 status: 401,
                 headers: corsHeaders,
               });
@@ -2113,7 +2113,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2378,7 +2378,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2429,7 +2429,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2487,7 +2487,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2574,7 +2574,7 @@ export default {
         if (request.method === "POST" && url.pathname === "/api/dlq-flush") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2705,7 +2705,7 @@ export default {
         if (request.method === "GET" && url.pathname === "/api/market-cache") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2786,7 +2786,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2843,7 +2843,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2922,7 +2922,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -2967,7 +2967,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3170,7 +3170,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3218,7 +3218,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3273,7 +3273,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3308,7 +3308,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3395,7 +3395,7 @@ export default {
 
         // Strict Edge Route Catch-All Termination
         if (url.pathname !== "/" && !url.pathname.startsWith("/api/")) {
-          return new Response("404 Not Found", {
+          return new Response(JSON.stringify({ success: false, error: "404 Not Found", timestamp: Date.now() }), {
             status: 404,
             headers: corsHeaders,
           });
@@ -3603,7 +3603,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3662,7 +3662,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3717,7 +3717,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3779,7 +3779,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3860,7 +3860,7 @@ export default {
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-            return new Response("Unauthorized Edge Ingress", {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
               status: 401,
               headers: corsHeaders,
             });
@@ -3916,7 +3916,7 @@ export default {
           url.pathname !== "/api/admin/force-oracle-ping" &&
           url.pathname !== "/api/admin/audit-logs"
         ) {
-          return new Response("404 Not Found", {
+          return new Response(JSON.stringify({ success: false, error: "404 Not Found", timestamp: Date.now() }), {
             status: 404,
             headers: corsHeaders,
           });
@@ -3926,7 +3926,7 @@ export default {
 
         const signature = request.headers.get("X-Axim-Signature");
         if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
-          return new Response("Unauthorized Edge Ingress", {
+          return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
             status: 401,
             headers: corsHeaders,
           });
