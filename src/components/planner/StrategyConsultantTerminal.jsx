@@ -65,7 +65,7 @@ export default function StrategyConsultantTerminal() {
 
   useEffect(() => {
     if (autoScroll && terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+      terminalRef.current.scrollTo({ top: terminalRef.current.scrollHeight, behavior: 'smooth' });
     }
   }, [displayText, autoScroll]);
 
@@ -625,6 +625,15 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
           )}
           {displayText}
           {isTyping && <span className="inline-block w-2 h-4 bg-emerald-500 ml-1 animate-pulse" />}
+
+          {isConsulting && !displayText && !isTyping && (
+             <div className="flex flex-col gap-3 mt-4 animate-pulse opacity-60">
+               <div className="h-4 bg-emerald-900/40 rounded w-3/4"></div>
+               <div className="h-4 bg-emerald-900/40 rounded w-1/2"></div>
+               <div className="h-4 bg-emerald-900/40 rounded w-5/6"></div>
+             </div>
+          )}
+
         </div>
       </div>
 

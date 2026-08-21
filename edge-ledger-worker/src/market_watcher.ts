@@ -19,7 +19,7 @@ export interface Env {
 
 export async function syncMarketCache(env: Env): Promise<void> {
   const CACHE_KEY = 'latest_prices';
-  const MAX_AGE = 60; // Fresh for 60 seconds
+  const MAX_AGE = 30; // Fresh for 30 seconds
   const STALE_WHILE_REVALIDATE = 300; // Stale but acceptable for up to 5 mins
 
   const now = Date.now();
@@ -125,13 +125,14 @@ export async function fetchHealth(env: Env, request: Request, ctx: ExecutionCont
   const ratio = kvHits + kvMisses > 0 ? (kvHits / (kvHits + kvMisses)).toFixed(2) : "1.00";
 
   return new Response(JSON.stringify({
-    success: true,
+    status: "ok",
+    data: [{
+      worker_region: (request as any).cf?.colo || 'DEV',
+      kv_cache_ratio: ratio,
+      module: "market_watcher"
+    }],
     latencyMs: 0,
-    status: "healthy",
-    timestamp: new Date().toISOString(),
-    worker_region: (request as any).cf?.colo || 'DEV',
-    kv_cache_ratio: ratio,
-    module: "market_watcher"
+    timestamp: new Date().toISOString()
   }), {
     status: 200,
     headers: {

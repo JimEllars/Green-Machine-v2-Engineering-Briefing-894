@@ -1041,7 +1041,7 @@ export default {
             const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
             await jwtVerify(token, secret);
           } catch (e) {
-            return new Response(JSON.stringify({ type: "https://tools.ietf.org/html/rfc7235#section-3.1", title: "Unauthorized", detail: "Invalid Supabase JWT signature", status: 401 }), {
+            return new Response(JSON.stringify({ status: "error", error: "Unauthorized", detail: "Invalid Supabase JWT signature", timestamp: new Date().toISOString() }), {
               status: 401,
               headers: { "Content-Type": "application/json", ...corsHeaders }
             });
@@ -4056,13 +4056,55 @@ export default {
       if (response && response.status >= 500) isError = true;
       if (response && response.status === 429) isRateLimit = true;
 
-      if (response) {
+            if (response) {
         const newHeaders = new Headers(response.headers);
         newHeaders.set('X-Edge-Region', (request as any).cf?.colo || 'DEV');
         newHeaders.set('X-Cache-Status', 'MISS'); // Default for thirdweb_bridge
-        newHeaders.set('X-Execution-Time-Ms', Math.round(performance.now() - startTime).toString());
+        const latencyMs = Math.round(performance.now() - startTime);
+        newHeaders.set('X-Execution-Time-Ms', latencyMs.toString());
 
-        response = new Response(response.body, {
+        // ENFORCE UNIFORM JSON STRUCTURE
+        let newBody = response.body;
+        const contentType = newHeaders.get('Content-Type') || '';
+        if (contentType.includes('application/json')) {
+           try {
+             const oldText = await response.clone().text();
+             const oldJson = JSON.parse(oldText);
+
+             let newStatus = "ok";
+             if (response.status >= 500) newStatus = "error";
+             else if (response.status >= 400) newStatus = "error";
+             // Map some internal flags to 'degraded' or 'error'
+             if (oldJson.success === false) newStatus = "error";
+             if (oldJson.status === "degraded") newStatus = "degraded";
+
+             let dataArray = oldJson.data || [oldJson];
+             if (!Array.isArray(dataArray)) {
+                if (oldJson.data !== undefined) {
+                   dataArray = [oldJson.data];
+                } else {
+                   // copy fields excluding success/status
+                   const { success, status, error, ...rest } = oldJson;
+                   dataArray = [rest];
+                   if (error) {
+                     dataArray[0].error_detail = error;
+                   }
+                }
+             }
+
+             const uniformPayload = {
+                status: newStatus,
+                data: dataArray,
+                latencyMs: latencyMs,
+                timestamp: new Date().toISOString()
+             };
+             newBody = JSON.stringify(uniformPayload);
+           } catch(e) {
+             // Ignore parse errors, leave body as is
+           }
+        }
+
+        response = new Response(newBody, {
           status: response.status,
           statusText: response.statusText,
           headers: newHeaders
@@ -4071,13 +4113,15 @@ export default {
 
       return response;
 
-    } catch (e: any) {
+        } catch (e: any) {
       isError = true;
+      const latencyMs = Math.round(performance.now() - startTime);
       return new Response(
         JSON.stringify({
-          success: false,
-          error: e.message || "Internal Edge Error",
-          timestamp: Date.now()
+          status: "error",
+          data: [{ error_detail: e.message || "Internal Edge Error" }],
+          latencyMs: latencyMs,
+          timestamp: new Date().toISOString()
         }),
         {
           status: 502,

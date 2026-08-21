@@ -28,7 +28,7 @@ export const useSystemDiagnostics = () => {
          }
       });
       if (edgeRes.ok) {
-        const data = await edgeRes.json();
+        const data = await edgeRes.json().catch(() => ({}));
         localTelemetry = data;
         setTelemetry(data);
         edgeSuccess = true;
@@ -91,18 +91,52 @@ export const useSystemDiagnostics = () => {
     setIsFetching(false);
   }, []);
 
+
   useEffect(() => {
-    fetchDiagnostics();
+    let isMounted = true;
+    let timeoutId = null;
 
-    // Exponential backoff logic based on error count
-    const intervalTime = errorCount === 0 ? 30000 : Math.min(30000 * Math.pow(2, errorCount), 300000);
+    const runFetch = async () => {
+      if (document.visibilityState === 'hidden') {
+         // Backoff when hidden, delay next check significantly
+         timeoutId = setTimeout(runFetch, 120000); // 2 minutes
+         return;
+      }
 
-    const interval = setInterval(() => {
-      fetchDiagnostics();
-    }, intervalTime);
+      if (isMounted) {
+        await fetchDiagnostics().catch(e => console.error("Diagnostics fetch error handled:", e));
+      }
 
-    return () => clearInterval(interval);
-  }, [fetchDiagnostics, errorCount]);
+      if (isMounted) {
+        // Exponential backoff logic based on error count
+        // Using a function form of state to ensure latest value
+        setErrorCount(currentErrorCount => {
+           const intervalTime = currentErrorCount === 0 ? 30000 : Math.min(30000 * Math.pow(2, currentErrorCount), 300000);
+           timeoutId = setTimeout(runFetch, intervalTime);
+           return currentErrorCount;
+        });
+      }
+    };
+
+    runFetch();
+
+    const handleVisibilityChange = () => {
+       if (document.visibilityState === 'visible') {
+          // If returning to tab, fetch immediately and reset timer
+          clearTimeout(timeoutId);
+          runFetch();
+       }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchDiagnostics]);
+
 
   return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics };
 };
