@@ -270,7 +270,7 @@ export default function MarketFeedMatrix() {
           <motion.div
             key={asset.symbol}
             layout
-            className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50 hover:border-slate-600 transition-colors relative"
+            className="bg-slate-800/80 rounded-xl p-5 border border-slate-700 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-900/20 transition-colors relative"
           >
 
             {/* Circuit Breaker Status Indicator */}
