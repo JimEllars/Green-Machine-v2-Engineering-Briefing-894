@@ -2818,9 +2818,27 @@ export default {
             );
 
             // Async logging to api_usage_logs
-
-            // Async logging removed/fixed to avoid compilation errors
-            // The original code was throwing errors because 'ctx', 'prompt', 'parsed', 'duration' and 'response.usage' were not defined in scope.
+            ctx.waitUntil((async () => {
+              try {
+                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                    apikey: env.SUPABASE_SERVICE_KEY,
+                  },
+                  body: JSON.stringify({
+                    endpoint: "/api/strategy-consult",
+                    status_code: 200,
+                    execution_time_ms: duration,
+                    model_used: aiModel,
+                    token_count: 250 // Static default for now
+                  }),
+                });
+              } catch (err) {
+                console.error("Telemetry insert failed:", err);
+              }
+            })());
 
 
             return new Response(
