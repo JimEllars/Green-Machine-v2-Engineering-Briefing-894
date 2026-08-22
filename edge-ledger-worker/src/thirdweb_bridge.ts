@@ -486,7 +486,12 @@ async function trackEdgeRequest(
   env: any,
   isError: boolean,
   isRateLimit: boolean = false,
+  requestDetails: any = null
 ) {
+  if (requestDetails) {
+    // Utilize Cloudflare native logging infrastructure
+    console.log(JSON.stringify({ ...requestDetails, isError, isRateLimit, timestamp: new Date().toISOString() }));
+  }
   if (!env || !env.GREEN_STATE) return;
   try {
     const rawTelemetry = await env.GREEN_STATE.get("edge_error_telemetry");
@@ -4176,7 +4181,14 @@ export default {
         }
       );
     } finally {
-      ctx.waitUntil(trackEdgeRequest(env, isError, isRateLimit));
+      const durationMs = Math.round(performance.now() - startTime);
+      ctx.waitUntil(trackEdgeRequest(env, isError, isRateLimit, {
+        url: request.url,
+        method: request.method,
+        colo: request.cf?.colo || 'UNKNOWN',
+        durationMs,
+        userAgent: request.headers.get("User-Agent") || "Unknown"
+      }));
     }
   },
 };

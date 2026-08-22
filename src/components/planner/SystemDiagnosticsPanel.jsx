@@ -658,7 +658,6 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                       await supabase.from('blockchain_transactions').select('id').limit(1);
                       dbPing = Math.round(performance.now() - dbStart);
                   } catch (e) { console.error(e); }
-
                   setBenchmarkResults(prev => ({ ...prev, dbPing }));
 
                   setBenchmarking(false);
