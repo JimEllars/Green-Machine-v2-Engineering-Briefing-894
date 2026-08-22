@@ -25,3 +25,9 @@
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: rgba(30,41,59,0.5); }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(51,65,85,0.8); border-radius: 4px; }
+
+@layer components {
+  .glass-panel {
+    @apply bg-slate-900/40 backdrop-blur-md border border-slate-700/50 shadow-xl;
+  }
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useTransition } from 'react';
 import { supabase } from '../supabaseClient';
 import { getWorkerUrl } from '../utils/workerUrl';
 
@@ -9,6 +9,7 @@ export const useSystemDiagnostics = () => {
   const [status, setStatus] = useState('Offline'); // 'Healthy', 'Degraded', 'Offline'
   const [isFetching, setIsFetching] = useState(false);
   const [errorCount, setErrorCount] = useState(0);
+  const [, startTransition] = useTransition();
 
   const fetchDiagnostics = useCallback(async () => {
     setIsFetching(true);
@@ -137,6 +138,37 @@ export const useSystemDiagnostics = () => {
     };
   }, [fetchDiagnostics]);
 
+
+
+  // Setup realtime subscription for external telemetry streams
+  useEffect(() => {
+    let isMounted = true;
+    let lastUpdate = 0;
+
+    const channel = supabase.channel('telemetry_stream')
+      .on(
+        'broadcast',
+        { event: 'telemetry_update' },
+        (payload) => {
+          if (isMounted && payload.payload) {
+            const now = Date.now();
+            if (now - lastUpdate > 1000) { // Throttle to max 1 update per second
+              lastUpdate = now;
+              startTransition(() => {
+                 // Only update if we received valid non-blocking telemetry
+                 setTelemetry(prev => ({ ...prev, ...payload.payload, _source: 'realtime' }));
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics };
 };
