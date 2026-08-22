@@ -54,6 +54,8 @@ function App() {
   const [isPurgingDept, setIsPurgingDept] = useState(null);
 
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [isAuditSummaryModalOpen, setIsAuditSummaryModalOpen] = useState(false);
+  const [auditSummaryText, setAuditSummaryText] = useState("");
   const [isQuarantineModalOpen, setIsQuarantineModalOpen] = useState(false);
   const [quarantineItems, setQuarantineItems] = useState([]);
   const [isLoadingQuarantine, setIsLoadingQuarantine] = useState(false);
@@ -690,12 +692,20 @@ const handleSyncKV = async () => {
 
       if (!response.ok) {
         console.error('Sweep failed:', response.statusText);
+        setToastError(`Sweep failed: ${response.statusText}`);
       } else {
+        const data = await response.json();
         setSweepSuccess(true);
         setTimeout(() => setSweepSuccess(false), 1500);
+
+        if (data.executive_briefing) {
+          setAuditSummaryText(data.executive_briefing);
+          setIsAuditSummaryModalOpen(true);
+        }
       }
     } catch (error) {
        console.error('Sweep error:', error);
+       setToastError(`Sweep error: ${error.message || error}`);
     } finally {
       setIsSweeping(false);
     }
@@ -705,6 +715,39 @@ const handleSyncKV = async () => {
     <div className="min-h-screen bg-zinc-950 text-slate-200 font-sans selection:bg-emerald-500/30">
       
       {/* Overlays */}
+      {/* Audit Summary Modal */}
+      {isAuditSummaryModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-emerald-500/30 rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/50">
+              <h2 className="text-xl font-bold text-emerald-400 flex items-center gap-2">
+                <SafeIcon className="w-5 h-5" />
+                Financial Audit Complete
+              </h2>
+              <button
+                onClick={() => setIsAuditSummaryModalOpen(false)}
+                className="text-zinc-400 hover:text-white transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[70vh]">
+              <p className="text-zinc-300 leading-relaxed whitespace-pre-wrap">{auditSummaryText}</p>
+            </div>
+            <div className="p-4 border-t border-zinc-800 bg-zinc-950/50 flex justify-end">
+              <button
+                onClick={() => setIsAuditSummaryModalOpen(false)}
+                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors font-medium shadow-lg shadow-emerald-900/20"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showBriefingPreview && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-zinc-900 border border-zinc-700 rounded-xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col">
