@@ -74,6 +74,8 @@ export default function AffiliatePayoutGrid() {
                 next.add(payload.new.id);
                 return next;
               });
+              setToastMessage('New settlement recorded');
+              setTimeout(() => setToastMessage(null), 2000);
               setTimeout(() => {
                 setRecentTxIds(prev => {
                   const next = new Set(prev);

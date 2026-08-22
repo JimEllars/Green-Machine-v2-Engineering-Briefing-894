@@ -1,3 +1,4 @@
+import { dispatchExecutiveBriefing, sendEmailItNotification, Env as BriefingEnv } from "./briefing_generator";
 import type { ExecutionContext } from "@cloudflare/workers-types";
 import { jwtVerify } from "jose";
 
@@ -322,140 +323,6 @@ async function fetchWithRetry(
   throw lastError;
 }
 
-async function sendEmailItNotification(
-  params: {
-    to: string;
-    cc?: string[];
-    subject: string;
-    html: string;
-    text?: string;
-    _retryId?: string;
-  },
-  env: Env,
-): Promise<{ success: boolean; error?: string }> {
-  if (!env.EMAILIT_API_KEY) {
-    return { success: false, error: "EMAILIT_API_KEY not configured" };
-  }
-  try {
-    const startFetchTime = performance.now();
-    const response = await fetchWithRetry("https://api.emailit.com/v1/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.EMAILIT_API_KEY}`,
-      },
-      body: JSON.stringify({
-        from: "Green Machine <system@axim.us.com>",
-        to: [params.to],
-        ...(params.cc && { cc: params.cc }),
-        subject: params.subject,
-        html: params.html,
-        text: params.text || "",
-      }),
-    });
-
-    const delivery_ms = Math.round(performance.now() - startFetchTime);
-
-    try {
-      let telemetryStr =
-        (await env.GREEN_STATE.get("emailit_telemetry")) || "{}";
-      let telemetry = JSON.parse(telemetryStr);
-      telemetry.delivery_ms = delivery_ms;
-      if (response.ok) {
-        telemetry.status = "OPERATIONAL";
-        telemetry.last_successful_dispatch = Date.now();
-      } else {
-        telemetry.status = "ERROR";
-      }
-      telemetry.last_attempt = Date.now();
-      await env.GREEN_STATE.put("emailit_telemetry", JSON.stringify(telemetry));
-    } catch (e) {}
-
-    let result: { success: boolean; error?: string };
-    if (!response.ok) {
-      const errText = await response.text();
-      result = {
-        success: false,
-        error: `EmailIt HTTP ${response.status}: ${errText}`,
-      };
-    } else {
-      result = { success: true };
-    }
-
-    const prevTelemetryRaw = await env.GREEN_STATE.get("emailit_telemetry");
-    let prevTelemetry = {};
-    if (prevTelemetryRaw) {
-      try {
-        prevTelemetry = JSON.parse(prevTelemetryRaw);
-      } catch (e) {
-        console.error("Failed to parse prevTelemetryRaw");
-      }
-    }
-    const telemetry: any = {
-      ...prevTelemetry,
-      last_attempt: Date.now(),
-      status: result.success ? "OK" : "ERROR",
-      last_error: result.error || null,
-    };
-    if (result.success) {
-      telemetry.last_successful_dispatch = Date.now();
-      telemetry.recipients =
-        typeof params.to === "string"
-          ? params.to
-          : Array.isArray(params.to)
-            ? (params.to as any[]).map((r: any) => r.email || r).join(", ")
-            : "";
-    }
-    await env.GREEN_STATE.put("emailit_telemetry", JSON.stringify(telemetry));
-
-    if (!result.success && !params._retryId) {
-      await env.GREEN_STATE.put(
-        `email_retry_queue:${Date.now()}`,
-        JSON.stringify(params),
-        { expirationTtl: 86400 },
-      );
-
-            // Async logging to api_usage_logs
-
-            // Async logging removed/fixed to avoid compilation errors
-            // The original code was throwing errors because 'ctx', 'prompt', 'parsed', 'duration' and 'response.usage' were not defined in scope.
-
-
-
-            // Async logging to api_usage_logs
-
-            // Async logging removed/fixed to avoid compilation errors
-            // The original code was throwing errors because 'ctx', 'prompt', 'parsed', 'duration' and 'response.usage' were not defined in scope.
-
-
-    }
-    return result;
-  } catch (err: any) {
-    const errorStr = err.message || "EmailIt dispatch failed";
-    const prevTelemetryRaw = await env.GREEN_STATE.get("emailit_telemetry");
-    let prevTelemetry = {};
-    if (prevTelemetryRaw) {
-      try {
-        prevTelemetry = JSON.parse(prevTelemetryRaw);
-      } catch (e) {}
-    }
-    const telemetry = {
-      ...prevTelemetry,
-      last_attempt: Date.now(),
-      status: "ERROR",
-      last_error: errorStr,
-    };
-    await env.GREEN_STATE.put("emailit_telemetry", JSON.stringify(telemetry));
-    if (!params._retryId) {
-      await env.GREEN_STATE.put(
-        `email_retry_queue:${Date.now()}`,
-        JSON.stringify(params),
-        { expirationTtl: 86400 },
-      );
-    }
-    return { success: false, error: errorStr };
-  }
-}
 
 function assertKvBindings(env: Env): Response | null {
   if (
@@ -769,216 +636,7 @@ export default {
     if (event.cron === "30 10 * * *") {
       ctx.waitUntil(
         (async () => {
-          try {
-            const cacheResult =
-              await env.MARKET_CACHE.getWithMetadata("latest_prices");
-
-            // Fetch live API usage summary
-            let totalTokens = "N/A";
-            try {
-              const summaryResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_summary?select=total_tokens&limit=1`, {
-                headers: {
-                  Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-                  apikey: env.SUPABASE_SERVICE_KEY
-                }
-              });
-              if (summaryResponse.ok) {
-                const summaryData = await summaryResponse.json();
-                if (Array.isArray(summaryData) && summaryData.length > 0) {
-                  totalTokens = summaryData[0].total_tokens ?? "N/A";
-                }
-              }
-            } catch (e) {
-              console.error("Failed to fetch api_usage_summary", e);
-            }
-            let parsedData: any = {};
-            if (cacheResult.value) {
-              try {
-                parsedData = JSON.parse(cacheResult.value as string);
-              } catch (e) {
-                console.error("Parse error", e);
-              }
-            }
-
-            const dlqList = await env.GREEN_STATE.list({ limit: 1000 });
-            let bufferedCount = dlqList.keys.filter(
-              (k: any) => !k.name.startsWith("quarantine:"),
-            ).length;
-            let quarantinedCount = dlqList.keys.filter((k: any) =>
-              k.name.startsWith("quarantine:"),
-            ).length;
-
-            const deptSummaryList = await env.GREEN_STATE.list({
-              prefix: "dept_summary:",
-            });
-            let deptSummariesHtml = "<ul>";
-
-            // Filter 24h window
-            const nowTime = Date.now();
-            const filteredKeys = (deptSummaryList as any).keys.filter(
-              (key: any) => {
-                const parts = key.name.split(":");
-                const tsStr = parts[2];
-                if (tsStr) {
-                  const ts = parseInt(tsStr, 10);
-                  if (!isNaN(ts) && nowTime - ts <= 86400000) {
-                    return true;
-                  }
-                }
-                return false;
-              },
-            );
-
-            for (const key of filteredKeys) {
-              const val = await env.GREEN_STATE.get(key.name);
-              if (val) {
-                try {
-                  const p = JSON.parse(val);
-                  const d =
-                    p.departmentName || p.department || p.name || "Unknown";
-                  const c = p.completedUpdates || p.completed || "N/A";
-                  const a = p.activeWork || p.active || "N/A";
-                  deptSummariesHtml += `<li>Ecosystem Department Progress: ${d} &mdash; ${c} &amp; ${a}</li>`;
-                } catch (e) {
-                  deptSummariesHtml += `<li>Ecosystem Department Progress: ${val}</li>`;
-                }
-              }
-            }
-            deptSummariesHtml += "</ul>";
-
-            const signalListExec = await env.GREEN_STATE.list({
-              prefix: "anny_signal_log:",
-              limit: 1000,
-            });
-            let totalSignals = 0;
-            let buyCount = 0;
-            let tpCount = 0;
-            let slCount = 0;
-            let dcaCount = 0;
-
-            const nowTimeSignal = Date.now();
-            for (const key of (signalListExec as any).keys) {
-              const parts = key.name.split(":");
-              const tsStr = parts[1];
-              if (tsStr) {
-                const ts = parseInt(tsStr, 10);
-                if (!isNaN(ts) && nowTimeSignal - ts <= 86400000) {
-                  const signalRaw = await env.GREEN_STATE.get(key.name);
-                  if (signalRaw) {
-                    try {
-                      const s = JSON.parse(signalRaw);
-                      totalSignals++;
-                      const act = (s.action || "").toLowerCase();
-                      if (act === "buy" || act === "long") buyCount++;
-                      else if (
-                        act === "tp" ||
-                        act === "take_profit" ||
-                        act === "take-profit"
-                      )
-                        tpCount++;
-                      else if (
-                        act === "sl" ||
-                        act === "stop_loss" ||
-                        act === "stop-loss"
-                      )
-                        slCount++;
-                      else if (act === "dca") dcaCount++;
-                    } catch (e) {}
-                  }
-                }
-              }
-            }
-
-            const signalSummaryHtml =
-              totalSignals > 0
-                ? `<div style="border: 1px solid #6366f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #eef2ff;">
-                    <h4 style="color: #4338ca; margin-top: 0;">Anny 24h Signal Executions</h4>
-                    <p style="margin-bottom: 0; font-weight: bold;">${totalSignals} total triggers (${buyCount} buys, ${tpCount} take-profits, ${slCount} stop-losses, ${dcaCount} DCAs)</p>
-                 </div>`
-                : `<div style="border: 1px solid #6366f1; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #eef2ff;">
-                    <h4 style="color: #4338ca; margin-top: 0;">Anny 24h Signal Executions</h4>
-                    <p style="margin-bottom: 0;">0 total triggers</p>
-                 </div>`;
-
-            const btc = parsedData?.crypto?.BTC?.price || "N/A";
-            const eth = parsedData?.crypto?.ETH?.price || "N/A";
-            const sol = parsedData?.crypto?.SOL?.price || "N/A";
-
-            const html = `
-              <html>
-                <head>
-                  <style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #0f172a; color: #e2e8f0; max-width: 600px; margin: 0 auto; padding: 20px; }
-                    table { width: 100%; border-collapse: collapse; }
-                    th, td { padding: 12px; border: 1px solid #334155; text-align: left; }
-                    a { color: #34d399; text-decoration: none; }
-                    a:hover { text-decoration: underline; }
-                  </style>
-                </head>
-                <body>
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; max-width: 600px; margin: 0 auto; background-color: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                    <tr>
-                      <td style="padding: 20px;">
-                  <h2>Executive Daily Briefing</h2>
-                  <h3>App Development Progress Summary</h3>
-                  <p>Sprint 1.8: Dual Executive Recipients, Pre-5am CST CRON, Departmental Aggregation & HITL Action Links is active.</p>
-                  ${signalSummaryHtml}
-                  <h3>Departmental Progress</h3>
-                  ${deptSummariesHtml}
-                  <h3>System Work & Operations Summary</h3>
-                  <ul>
-                    <li>DLQ Buffered Count: ${bufferedCount}</li>
-                    <li>Quarantined Count: ${quarantinedCount}</li>
-                    <li>Market Cache - BTC: ${btc}, ETH: ${eth}, SOL: ${sol}</li>
-                    <li>Total API Tokens Used: ${totalTokens}</li>
-                  </ul>
-
-                  <h3>Executive Inquiry & Action Block</h3>
-                  <p>Please reply directly to this email to provide feedback or inquiries.</p>
-                  <p><b>Administrative Actions:</b></p>
-                  <ul>
-                    <li><a href="https://green-machine-edge-ledger.jules.workers.dev/api/webhooks/emailit-inbound?action=approve_payout&token=${env.AXIM_INTERNAL_KEY}">Approve Pending Payout Batch</a></li>
-                    <li><a href="https://green-machine-edge-ledger.jules.workers.dev/api/webhooks/emailit-inbound?action=acknowledge_plan&token=${env.AXIM_INTERNAL_KEY}">Acknowledge Strategic Plan</a></li>
-                  </ul>
-
-                      </td>
-                    </tr>
-                  </table>
-                </body>
-              </html>
-            `;
-
-            const dispatchResult = await sendEmailItNotification(
-              {
-                to: "james.ellars@axim.us.com",
-                cc: ["jrellars@gmail.com"],
-                subject:
-                  "AXiM Executive Briefing & Departmental Summary — Green Machine v2",
-                html: html,
-              },
-              env,
-            );
-
-            const execFeedbacks = await env.GREEN_STATE.list({
-              prefix: "exec_feedback:",
-            });
-            let prunedCount = 0;
-            const now = Date.now();
-            for (const key of (execFeedbacks as any).keys) {
-              const parts = key.name.split(":");
-              const tsStr = parts[1];
-              if (tsStr) {
-                const ts = parseInt(tsStr, 10);
-                if (now - ts > 604800000) {
-                  await env.GREEN_STATE.delete(key.name);
-                  prunedCount++;
-                }
-              }
-            }
-            console.log(`Pruned ${prunedCount} stale executive feedbacks.`);
-          } catch (err) {
-            console.error("Scheduled briefing error", err);
-          }
+          await dispatchExecutiveBriefing(env, ctx);
         })(),
       );
     } else {
@@ -2330,7 +1988,7 @@ export default {
                 <li>DLQ Buffered Count: ${bufferedCount}</li>
                 <li>Quarantined Count: ${quarantinedCount}</li>
                 <li>Market Cache - BTC: ${btc}, ETH: ${eth}, SOL: ${sol}</li>
-                <li>Total API Tokens Used: ${totalTokens}</li>
+                <li>Total API Tokens Used: N/A</li>
               </ul>
               <h3>Executive Inquiry Block</h3>
               <p>Please reply directly to this email to provide feedback or inquiries.</p>
@@ -3384,7 +3042,7 @@ export default {
                 }
               );
               if (logsResponse.ok) {
-                usageSummaryData = await logsResponse.json();
+                usageSummaryData = (await logsResponse.json()) as any[];
               }
             } catch (e) {
               console.error("Failed to fetch 3-day api usage logs", e);
@@ -4116,7 +3774,7 @@ export default {
         newHeaders.set('X-Execution-Time-Ms', latencyMs.toString());
 
         // ENFORCE UNIFORM JSON STRUCTURE
-        let newBody = response.body;
+        let newBody: any = response.body;
         const contentType = newHeaders.get('Content-Type') || '';
         if (contentType.includes('application/json')) {
            try {
@@ -4156,7 +3814,7 @@ export default {
            }
         }
 
-        response = new Response(newBody, {
+        response = new Response(newBody as BodyInit, {
           status: response.status,
           statusText: response.statusText,
           headers: newHeaders
