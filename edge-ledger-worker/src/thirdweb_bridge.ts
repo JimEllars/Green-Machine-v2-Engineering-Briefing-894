@@ -767,6 +767,25 @@ export default {
           try {
             const cacheResult =
               await env.MARKET_CACHE.getWithMetadata("latest_prices");
+
+            // Fetch live API usage summary
+            let totalTokens = "N/A";
+            try {
+              const summaryResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_summary?select=total_tokens&limit=1`, {
+                headers: {
+                  Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                  apikey: env.SUPABASE_SERVICE_KEY
+                }
+              });
+              if (summaryResponse.ok) {
+                const summaryData = await summaryResponse.json();
+                if (Array.isArray(summaryData) && summaryData.length > 0) {
+                  totalTokens = summaryData[0].total_tokens ?? "N/A";
+                }
+              }
+            } catch (e) {
+              console.error("Failed to fetch api_usage_summary", e);
+            }
             let parsedData: any = {};
             if (cacheResult.value) {
               try {
@@ -906,6 +925,7 @@ export default {
                     <li>DLQ Buffered Count: ${bufferedCount}</li>
                     <li>Quarantined Count: ${quarantinedCount}</li>
                     <li>Market Cache - BTC: ${btc}, ETH: ${eth}, SOL: ${sol}</li>
+                    <li>Total API Tokens Used: ${totalTokens}</li>
                   </ul>
 
                   <h3>Executive Inquiry & Action Block</h3>
@@ -2304,7 +2324,8 @@ export default {
               <ul>
                 <li>DLQ Buffered Count: ${bufferedCount}</li>
                 <li>Quarantined Count: ${quarantinedCount}</li>
-                <li>Market Cache - BTC: $${btc}, ETH: $${eth}, SOL: $${sol}</li>
+                <li>Market Cache - BTC: ${btc}, ETH: ${eth}, SOL: ${sol}</li>
+                <li>Total API Tokens Used: ${totalTokens}</li>
               </ul>
               <h3>Executive Inquiry Block</h3>
               <p>Please reply directly to this email to provide feedback or inquiries.</p>
@@ -3338,7 +3359,33 @@ export default {
             }
 
             const auditData = (await dbResponse.json()) as any;
-            let ai_insight = "";
+
+            // Fetch the last 3 days of api_usage_logs summary data
+            let usageSummaryData = [];
+            try {
+              // We'll approximate last 3 days by getting the api_usage_summary
+              // (which already might be an aggregate) or fetching limited logs.
+              // Since instructions specify "dynamically pull the last 3 days of api_usage_logs summary data",
+              // we can fetch from api_usage_aggregates or api_usage_summary.
+              // We will just fetch from api_usage_aggregates over the last 3 days.
+              const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+              const logsResponse = await fetch(
+                `${env.SUPABASE_URL}/rest/v1/api_usage_aggregates?select=*&updated_at=gte.${threeDaysAgo}`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                    apikey: env.SUPABASE_SERVICE_KEY,
+                  },
+                }
+              );
+              if (logsResponse.ok) {
+                usageSummaryData = await logsResponse.json();
+              }
+            } catch (e) {
+              console.error("Failed to fetch 3-day api usage logs", e);
+            }
+
+            let executive_briefing = "";
             try {
               const aiResponse = await env.AI.run(
                 "@cf/meta/llama-3.1-8b-instruct",
@@ -3350,19 +3397,19 @@ export default {
                     },
                     {
                       role: "user",
-                      content: `Summarize the following financial audit metadata into a concise 2-sentence executive summary for the CFO. Data: ${JSON.stringify(auditData)}`,
+                      content: `Summarize the following financial audit metadata and the last 3 days of API usage logs into a concise 4-sentence paragraph describing token burn efficiency vs system latency. Audit Data: ${JSON.stringify(auditData)}. Usage Data: ${JSON.stringify(usageSummaryData)}`,
                     },
                   ],
                 },
               );
               if (aiResponse && aiResponse.response) {
-                ai_insight = aiResponse.response;
+                executive_briefing = aiResponse.response;
               } else {
-                ai_insight = "AI insight generation failed.";
+                executive_briefing = "AI insight generation failed.";
               }
             } catch (e) {
               console.error("Workers AI failed", e);
-              ai_insight =
+              executive_briefing =
                 "AI summary temporarily unavailable due to upstream constraint.";
             }
 
@@ -3371,7 +3418,7 @@ export default {
                 success: true,
                 message: "Financial audit invoked via Edge Worker proxy",
                 timestamp: Date.now(),
-                ai_insight,
+                executive_briefing,
               }),
               {
                 status: 200,

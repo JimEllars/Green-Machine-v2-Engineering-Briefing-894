@@ -274,7 +274,13 @@ export default function AffiliatePayoutGrid() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/50">
-            {isLoading ? (
+            {!isLoading && transactions.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="px-6 py-8 text-center text-slate-500 italic">
+                  No recent settlements located
+                </td>
+              </tr>
+            ) : isLoading ? (
               Array.from({ length: 5 }).map((_, idx) => (
                 <tr key={idx} className="animate-pulse">
                   <td className="px-6 py-4"><div className="h-4 bg-slate-700/50 rounded w-16"></div></td>
