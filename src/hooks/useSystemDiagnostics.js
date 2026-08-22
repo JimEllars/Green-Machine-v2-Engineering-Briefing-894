@@ -30,8 +30,15 @@ export const useSystemDiagnostics = () => {
       });
       if (edgeRes.ok) {
         const data = await edgeRes.json().catch(() => ({}));
-        localTelemetry = data;
-        setTelemetry(data);
+        // Check if the response follows the standardized { status, data, ... } wrapper
+        if (data && data.status && Array.isArray(data.data) && data.data.length > 0) {
+          localTelemetry = data.data[0];
+          setTelemetry(data.data[0]);
+        } else {
+          // Fallback for non-standardized or legacy payload
+          localTelemetry = data;
+          setTelemetry(data);
+        }
         edgeSuccess = true;
       }
     } catch (e) {
