@@ -537,7 +537,7 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
 
         {/* Investing Brain Decision Card */}
         {!isTyping && parsedStrategyData && (parsedStrategyData.riskViolation !== undefined || parsedStrategyData.actionItems) && (
-           <div className="mb-6 mt-4 p-4 rounded-lg bg-slate-900/60 border border-slate-700/50 shadow-lg backdrop-blur-md relative overflow-hidden flex flex-col gap-3">
+           <div className="mb-6 mt-4 p-4 rounded-lg bg-slate-900/80 border border-slate-700 shadow-xl backdrop-blur-xl relative overflow-hidden flex flex-col gap-3">
              <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
 
              <div className="flex items-center justify-between z-10 border-b border-slate-700/50 pb-2 mb-1">
@@ -639,7 +639,7 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
 
 
       {/* Input Area */}
-      <form onSubmit={handleConsultSubmit} className="flex gap-2 p-4 bg-slate-900 border-t border-slate-800">
+      <form onSubmit={handleConsultSubmit} className="flex gap-2 p-4 bg-slate-900/90 border-t border-slate-700/50 p-5 rounded-b-xl">
         <input
           type="text"
           value={promptInput}
