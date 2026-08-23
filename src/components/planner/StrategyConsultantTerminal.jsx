@@ -494,7 +494,7 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
       <div
         ref={terminalRef}
         onScroll={handleScroll}
-        className="p-6 flex-1 overflow-y-auto font-mono text-sm leading-relaxed relative custom-scrollbar"
+        className="p-6 flex-1 overflow-y-auto font-mono text-sm leading-relaxed relative custom-scrollbar bg-slate-900/50 backdrop-blur-sm"
       >
         <div className="text-emerald-500/50 mb-4 select-none">
           {'>'} Initializing weekly financial audit cron...<br/>
