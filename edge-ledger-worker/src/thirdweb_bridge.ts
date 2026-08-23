@@ -1269,8 +1269,61 @@ export default {
             const reqClone = request.clone();
             try {
               const payload = (await request.json()) as any;
-              const { symbol, action, price, bot_id, signal_id, timestamp } =
+              const { symbol, action, price, bot_id, signal_id, timestamp, cfo_state } =
                 payload;
+
+              // Task 1: Fetch latest_prices from MARKET_CACHE
+              const marketCacheRaw = (await env.MARKET_CACHE.get(
+                "latest_prices",
+                { type: "json" },
+              )) as any;
+
+              const currentPriceInfo = marketCacheRaw?.[symbol] || "Unknown";
+              const cfoTrend = marketCacheRaw?.cfo_trend_state?.[symbol] || "Unknown";
+
+              // Task 1: Construct AI prompt
+              const aiPrompt = `You are a ruthless risk manager. Analyze this trade signal against current market trends. Return a JSON object with 'probability_of_profit' (0-100), 'risk_level' (Low/Medium/High), and 'approved' (boolean). Only approve if probability of profit is > 85% and risk is Low or Medium.
+
+Trade Signal:
+- Asset: ${symbol}
+- Action: ${action}
+- Price: ${price}
+- CFO State: ${cfo_state || 'Unknown'}
+
+Market Context:
+- Cached Price: ${currentPriceInfo}
+- 24h Trend CFO State: ${cfoTrend}`;
+
+              let aiResult = {
+                probability_of_profit: 0,
+                risk_level: "High",
+                approved: false
+              };
+
+              if (env.AI) {
+                try {
+                  const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+                    messages: [
+                      { role: "system", content: "You are a ruthless risk manager that only outputs valid JSON." },
+                      { role: "user", content: aiPrompt }
+                    ]
+                  });
+                  // Clean up potential markdown formatting from AI response
+                  let responseText = aiResponse.response || "";
+                  responseText = responseText.replace(/\s*```json/g, "").replace(/```/g, "").trim();
+
+                  try {
+                    const parsedAi = JSON.parse(responseText);
+                    if (typeof parsedAi.probability_of_profit === 'number' && parsedAi.risk_level && typeof parsedAi.approved === 'boolean') {
+                        aiResult = parsedAi;
+                    }
+                  } catch (e) {
+                      console.error("Failed to parse AI JSON response:", responseText);
+                  }
+                } catch (e) {
+                   console.error("AI Evaluation failed:", e);
+                }
+              }
 
               const keyName = `anny_signal_log:${Date.now()}`;
               const logData = {
@@ -1281,7 +1334,18 @@ export default {
                 signal_id: signal_id || "N/A",
                 timestamp: timestamp || Date.now(),
                 received_at: Date.now(),
+                probability_of_profit: aiResult.probability_of_profit,
+                risk_level: aiResult.risk_level,
+                approved: aiResult.approved
               };
+
+              // Task 2: Quarantine if rejected
+              if (!aiResult.approved) {
+                 const quarantineKeyName = `quarantine_trade:${Date.now()}`;
+                 await env.GREEN_STATE.put(quarantineKeyName, JSON.stringify(logData), {
+                    expirationTtl: 604800,
+                 });
+              }
 
               await env.GREEN_STATE.put(keyName, JSON.stringify(logData), {
                 expirationTtl: 604800,
@@ -1308,11 +1372,34 @@ export default {
                 JSON.stringify(ingressTelemetry),
               );
 
+              if (!aiResult.approved) {
+                return new Response(
+                  JSON.stringify({
+                    success: false,
+                    status: "signal_rejected",
+                    reason: "Failed AI Profitability & Risk Check",
+                    probability_of_profit: aiResult.probability_of_profit,
+                    risk_level: aiResult.risk_level,
+                    log_id: keyName,
+                  }),
+                  {
+                    status: 200, // Returning 200 so webhook sender doesn't retry rejected signals
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...corsHeaders,
+                    },
+                  },
+                );
+              }
+
               return new Response(
                 JSON.stringify({
                   success: true,
                   status: "signal_logged",
                   log_id: keyName,
+                  probability_of_profit: aiResult.probability_of_profit,
+                  risk_level: aiResult.risk_level,
+                  approved: aiResult.approved
                 }),
                 {
                   status: 200,
