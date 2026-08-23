@@ -60,6 +60,7 @@ function App() {
   const [quarantineItems, setQuarantineItems] = useState([]);
   const [isLoadingQuarantine, setIsLoadingQuarantine] = useState(false);
   const [deletingQuarantineItem, setDeletingQuarantineItem] = useState(null);
+  const [executingTradeItem, setExecutingTradeItem] = useState(null);
   const [auditLogs, setAuditLogs] = useState([]);
   const [isLoadingAuditLogs, setIsLoadingAuditLogs] = useState(false);
   const [actionTypeFilter, setActionTypeFilter] = useState('All Actions');
@@ -244,7 +245,43 @@ function App() {
     }
   };
 
-  const deleteQuarantineItem = async (keyName) => {
+
+  const executeQuarantineTrade = async (key_name) => {
+    try {
+      setExecutingTradeItem(key_name);
+
+      const sessionString = localStorage.getItem('sb-pvbcdndqjguzqeafhwhw-auth-token');
+      let token = "";
+      if (sessionString) {
+        const session = JSON.parse(sessionString);
+        token = session.access_token;
+      }
+
+      const response = await fetch(`${getWorkerUrl()}/api/admin/execute-trade`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ key_name })
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to execute trade");
+      }
+
+      setToastSuccess("Trade Force Executed successfully!");
+      await fetchQuarantineItems();
+    } catch (error) {
+      console.error("Execute trade error:", error);
+      setToastError(`Failed to execute trade: ${error.message}`);
+    } finally {
+      setExecutingTradeItem(null);
+    }
+  };
+
+const deleteQuarantineItem = async (keyName) => {
     setDeletingQuarantineItem(keyName);
     try {
       const workerUrl = getWorkerUrl();
@@ -1307,22 +1344,61 @@ const handleSyncKV = async () => {
                     ) : quarantineItems.length > 0 ? (
                         <div className="space-y-3">
                             {quarantineItems.map((item, idx) => (
-                                <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 flex justify-between items-start gap-4">
+                                <div key={idx} className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 flex flex-col sm:flex-row justify-between items-start gap-4">
                                     <div className="flex-1 min-w-0">
-                                        <div className="text-amber-400 font-mono text-xs font-bold mb-1 truncate">
+                                        <div className="text-amber-400 font-mono text-xs font-bold mb-1 truncate flex items-center gap-2">
                                             {item.key_name}
+                                            {(item.payload?.symbol || (item.payload?.parsed_payload?.symbol)) && (
+                                              <span className="bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded text-[10px]">Trade Signal</span>
+                                            )}
                                         </div>
+
+                                        {/* Show special UI if it's a trade */}
+                                        {(item.payload?.symbol || (item.payload?.parsed_payload?.symbol)) ? (
+                                            <div className="flex items-center gap-3 mb-2 bg-slate-900/50 p-2 rounded border border-slate-800">
+                                                <div className="text-xs">
+                                                    <span className="text-slate-400">Profit Prob: </span>
+                                                    <span className={item.payload?.probability_of_profit > 50 ? "text-emerald-400" : "text-amber-400"}>
+                                                        {item.payload?.probability_of_profit || item.payload?.parsed_payload?.probability_of_profit || 'N/A'}%
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs">
+                                                    <span className="text-slate-400">Risk: </span>
+                                                    <span className={item.payload?.risk_level === 'HIGH' ? "text-rose-400" : "text-emerald-400"}>
+                                                        {item.payload?.risk_level || item.payload?.parsed_payload?.risk_level || 'N/A'}
+                                                    </span>
+                                                </div>
+                                                <div className="text-xs">
+                                                    <span className="text-slate-400">Symbol: </span>
+                                                    <span className="text-white font-bold">{item.payload?.symbol || item.payload?.parsed_payload?.symbol}</span>
+                                                </div>
+                                            </div>
+                                        ) : null}
+
                                         <pre className="text-slate-300 text-[10px] font-mono whitespace-pre-wrap break-all bg-slate-900/50 p-2 rounded border border-slate-800">
                                             {item.error ? item.error : JSON.stringify(item.payload, null, 2).substring(0, 100) + (JSON.stringify(item.payload, null, 2).length > 100 ? '...' : '')}
                                         </pre>
                                     </div>
-                                    <button
-                                        onClick={() => deleteQuarantineItem(item.key_name)}
-                                        disabled={deletingQuarantineItem === item.key_name}
-                                        className="px-3 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/50 hover:bg-rose-500/40 rounded text-xs font-bold transition-colors shrink-0 disabled:opacity-50"
-                                    >
-                                        {deletingQuarantineItem === item.key_name ? 'Deleting...' : 'Delete Item'}
-                                    </button>
+                                    <div className="flex flex-col gap-2 shrink-0 w-full sm:w-auto mt-3 sm:mt-0">
+                                        {(item.payload?.symbol || (item.payload?.parsed_payload?.symbol)) && (
+                                            <button
+                                                onClick={() => executeQuarantineTrade(item.key_name)}
+                                                disabled={executingTradeItem === item.key_name || deletingQuarantineItem === item.key_name}
+                                                className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 hover:bg-emerald-500/40 rounded text-xs font-bold transition-colors w-full sm:w-auto disabled:opacity-50 flex items-center justify-center gap-1"
+                                            >
+                                                {executingTradeItem === item.key_name ? (
+                                                  <><SafeIcon name="Loader" className="w-3 h-3 animate-spin" /> Executing...</>
+                                                ) : 'Force Execute Trade'}
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => deleteQuarantineItem(item.key_name)}
+                                            disabled={deletingQuarantineItem === item.key_name || executingTradeItem === item.key_name}
+                                            className="px-3 py-1 bg-rose-500/20 text-rose-400 border border-rose-500/50 hover:bg-rose-500/40 rounded text-xs font-bold transition-colors w-full sm:w-auto disabled:opacity-50"
+                                        >
+                                            {deletingQuarantineItem === item.key_name ? 'Deleting...' : 'Delete Item'}
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </div>

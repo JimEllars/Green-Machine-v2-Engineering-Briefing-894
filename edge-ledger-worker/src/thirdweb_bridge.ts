@@ -1341,7 +1341,7 @@ Market Context:
 
               // Task 2: Quarantine if rejected
               if (!aiResult.approved) {
-                 const quarantineKeyName = `quarantine_trade:${Date.now()}`;
+                 const quarantineKeyName = `quarantine:trade:${Date.now()}`;
                  await env.GREEN_STATE.put(quarantineKeyName, JSON.stringify(logData), {
                     expirationTtl: 604800,
                  });
@@ -3588,6 +3588,101 @@ Market Context:
           }
         }
 
+
+      // TRADE EXECUTION OVERRIDE ENDPOINT
+      if (
+        request.method === "POST" &&
+        url.pathname === "/api/admin/execute-trade"
+      ) {
+        try {
+          const authHeader = request.headers.get("Authorization") || "";
+          const token = authHeader.replace("Bearer ", "").trim();
+
+          if (!token) {
+            return new Response(JSON.stringify({ error: "Missing token" }), {
+              status: 401,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+
+          try {
+            const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
+            await jwtVerify(token, secret);
+          } catch (e) {
+            return new Response(JSON.stringify({ error: "Invalid token" }), {
+              status: 403,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+
+          const { key_name } = await request.json();
+          if (!key_name) {
+            return new Response(JSON.stringify({ error: "key_name is required" }), {
+              status: 400,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+
+          const quarantineItem = await env.GREEN_STATE.get(key_name);
+          if (!quarantineItem) {
+            return new Response(JSON.stringify({ error: "Trade not found in quarantine" }), {
+              status: 404,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+
+          const parsedItem = JSON.parse(quarantineItem);
+          const payload = parsedItem.payload || parsedItem;
+
+          // Build a simulated executed trade payload
+          const ledgerEntry = {
+            partner_id: "anny_system",
+            wallet_address: "anny_system",
+            smart_contract_address: "override_execution",
+            amount: payload.investment || payload.amount || 0,
+            currency: payload.symbol || "USD",
+            status: "minted", // "minted" represents executed/settled here
+            transaction_hash: `override_${Date.now()}`,
+            metadata: {
+                ...payload,
+                forced_execution: true,
+                executed_at: new Date().toISOString()
+            }
+          };
+
+          // Upsert to Supabase
+          const dbResponse = await fetch(
+            `${env.SUPABASE_URL}/rest/v1/blockchain_transactions?on_conflict=transaction_hash`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                apikey: env.SUPABASE_SERVICE_KEY,
+                Prefer: "resolution=merge-duplicates",
+              },
+              body: JSON.stringify([ledgerEntry]),
+            },
+          );
+
+          if (!dbResponse.ok) {
+            throw new Error(`Supabase insert failed: ${await dbResponse.text()}`);
+          }
+
+          await env.GREEN_STATE.delete(key_name);
+
+          return new Response(JSON.stringify({ success: true, message: "Trade executed successfully" }), {
+            status: 200,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        } catch (error: any) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          });
+        }
+      }
+
         if (
           request.method === "DELETE" &&
           url.pathname === "/api/admin/quarantine/all"
@@ -3721,6 +3816,7 @@ Market Context:
           url.pathname !== "/api/quarantine-purge" &&
           url.pathname !== "/api/admin/quarantine" &&
           url.pathname !== "/api/admin/quarantine/all" &&
+          url.pathname !== "/api/admin/execute-trade" &&
           url.pathname !== "/api/health" &&
           url.pathname !== "/api/telemetry" &&
           url.pathname !== "/api/admin/renew-anny-session" &&
