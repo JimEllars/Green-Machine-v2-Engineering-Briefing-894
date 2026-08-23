@@ -1198,6 +1198,42 @@ export default {
           }
         }
 
+
+        if (request.method === "GET" && url.pathname === "/api/anny/active-positions") {
+          const signature = request.headers.get("X-Axim-Signature");
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
+              status: 401,
+              headers: corsHeaders,
+            });
+          }
+
+          try {
+            const cachedPositions = await env.GREEN_STATE.get("anny_active_positions", { type: "json" });
+            if (cachedPositions) {
+              return new Response(JSON.stringify({ success: true, data: cachedPositions }), {
+                status: 200,
+                headers: { "Content-Type": "application/json", ...corsHeaders },
+              });
+            }
+
+            const positionsData = await annyBackendPost("/backend/activepositions", {}, env, ctx);
+            const activePositions = (positionsData as any)?.payload || positionsData || [];
+
+            await env.GREEN_STATE.put("anny_active_positions", JSON.stringify(activePositions), { expirationTtl: 15 });
+
+            return new Response(JSON.stringify({ success: true, data: activePositions }), {
+              status: 200,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          } catch (e) {
+            return new Response(JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to fetch active positions" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+        }
+
         if (request.method === "GET" && url.pathname === "/api/anny-signals") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
@@ -1282,7 +1318,7 @@ export default {
               const cfoTrend = marketCacheRaw?.cfo_trend_state?.[symbol] || "Unknown";
 
               // Task 1: Construct AI prompt
-              const aiPrompt = `You are a ruthless risk manager. Analyze this trade signal against current market trends. Return a JSON object with 'probability_of_profit' (0-100), 'risk_level' (Low/Medium/High), and 'approved' (boolean). Only approve if probability of profit is > 85% and risk is Low or Medium.
+              const aiPrompt = `You are an ultra-conservative, ruthless risk manager for live capital. Analyze this trade signal against current market trends. Return a JSON object with 'probability_of_profit' (0-100), 'risk_level' (Low/Medium/High), and 'approved' (boolean). You must ONLY approve (true) if the probability of profit is strictly > 90%, the risk_level is 'Low', and the 24h Trend CFO State aligns with the requested action. Protect capital at all costs.
 
 Trade Signal:
 - Asset: ${symbol}
@@ -1338,6 +1374,23 @@ Market Context:
                 risk_level: aiResult.risk_level,
                 approved: aiResult.approved
               };
+
+
+              if (aiResult.approved) {
+                try {
+                  await annyBackendPost(
+                    "/backend/signal/invest",
+                    { symbol, action, amount_usdt: 50 },
+                    env,
+                    ctx
+                  );
+                } catch (executionError) {
+                  console.error("AnnyTrade execution failed:", executionError);
+                  aiResult.approved = false;
+                  logData.approved = false;
+                  (logData as any).execution_error = (executionError as Error).message;
+                }
+              }
 
               // Task 2: Quarantine if rejected
               if (!aiResult.approved) {
@@ -3809,6 +3862,7 @@ Market Context:
           url.pathname !== "/api/admin/replay-webhook" &&
           url.pathname !== "/api/webhooks/emailit-inbound" &&
           url.pathname !== "/api/webhooks/anny-signal" &&
+          url.pathname !== "/api/anny/active-positions" &&
           url.pathname !== "/api/anny-signals" &&
           url.pathname !== "/api/dlq-flush" &&
           url.pathname !== "/api/market-cache" &&
