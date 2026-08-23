@@ -370,6 +370,18 @@ export default function MarketFeedMatrix() {
                        <span className="text-slate-400 font-mono text-sm">@ ${(signal.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
                      </div>
                      <div className="flex items-center gap-4 text-xs text-slate-500">
+                        {signal.probability_of_profit !== undefined && (
+                          <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/50 rounded-md border border-zinc-700/50">
+                            <SafeIcon name="Brain" className="w-3 h-3 text-purple-400" />
+                            <span className={`font-mono font-medium ${signal.approved ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {signal.probability_of_profit}% AI Win Prob
+                            </span>
+                            <span className="text-zinc-600">|</span>
+                            <span className={`${signal.risk_level === 'Low' ? 'text-emerald-400' : signal.risk_level === 'Medium' ? 'text-amber-400' : 'text-rose-400'}`}>
+                              {signal.risk_level} Risk
+                            </span>
+                          </div>
+                        )}
                         <span>Bot #{signal.bot_id || 'N/A'}</span>
                         <span className="flex items-center gap-1">
                           <SafeIcon name="Clock" className="w-3 h-3" />
