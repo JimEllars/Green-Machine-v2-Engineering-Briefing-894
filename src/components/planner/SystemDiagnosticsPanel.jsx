@@ -62,60 +62,15 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
     execTime: '0'
   });
 
-  const fetchDeepTelemetry = async () => {
-    try {
-      const workerUrl = getWorkerUrl();
-      // Use the new telemetry endpoint
-      const response = await fetch(`${workerUrl}/api/telemetry`, {
-        headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
-      });
-      if (response) {
-        setEdgeHeaders(prev => ({
-          ...prev,
-          region: response.headers.get('X-Edge-Region') || prev.region,
-          cacheStatus: response.headers.get('X-Cache-Status') || prev.cacheStatus,
-          execTime: response.headers.get('X-Execution-Time-Ms') || prev.execTime
-        }));
-      }
-      if (response.ok) {
-        const data = await response.json();
 
-        // Also fetch original health endpoint for legacy AI telemetry
-        const healthResponse = await fetch(`${workerUrl}/api/health`, {
-          headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
-        });
-        let healthData = {};
-        if (healthResponse.ok) {
-           healthData = await healthResponse.json();
-        }
+  const fetchDeepTelemetry = async () => {};
 
-        const marketResponse = await fetch(`${workerUrl}/api/market-cache`, {
-            headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || '' }
-        });
-        let cbStatus = "CLOSED";
-        if (marketResponse.ok) {
-            const marketData = await marketResponse.json();
-            cbStatus = marketData?.is_circuit_breaker ? "OPEN" : "CLOSED";
-        }
 
-        setDeepTelemetry({
-          investing_brain_telemetry: healthData.investing_brain_telemetry || {},
-          anny_auth_telemetry: healthData.anny_auth_telemetry || {},
-          edge_telemetry: data,
-          circuit_breaker: {
-            status: cbStatus
-          }
-        });
-
-        // Also update edge latency if it's available in the new telemetry response
-        if (data.latencyMs) {
-           console.log(data.latencyMs);
-        }
-      }
-    } catch (e) {
-      console.error(e);
+  useEffect(() => {
+    if (sysTelemetry) {
+      setDeepTelemetry(sysTelemetry);
     }
-  };
+  }, [sysTelemetry]);
 
   useEffect(() => {
     let timeoutId;
@@ -123,7 +78,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
     const tick = async () => {
        if (isDeepTelemetryOpen) {
-          await fetchDeepTelemetry();
+          // await fetchDeepTelemetry();
        }
 
        const isIdle = document.hidden;

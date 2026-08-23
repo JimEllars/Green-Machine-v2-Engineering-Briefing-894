@@ -153,7 +153,7 @@ export async function annyBackendPost(
       ctx.waitUntil(
         (async () => {
           try {
-            await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+            await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -168,7 +168,7 @@ export async function annyBackendPost(
               }),
             });
           } catch (e) {
-            console.error("Failed to log to api_usage_aggregates:", e);
+            console.error("Failed to log to api_usage_logs:", e);
           }
         })(),
       );
@@ -477,7 +477,7 @@ export default {
                       const payload = JSON.parse(payloadRaw);
 
                       const dbRes = await fetch(
-                        `${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`,
+                        `${env.SUPABASE_URL}/rest/v1/api_usage_logs`,
                         {
                           method: "POST",
                           headers: {
@@ -601,7 +601,7 @@ export default {
                     );
 
                     const dbRes = await fetch(
-                      `${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`,
+                      `${env.SUPABASE_URL}/rest/v1/api_usage_logs`,
                       {
                         method: "POST",
                         headers: {
@@ -1585,7 +1585,7 @@ Market Context:
                   };
                   try {
                     const dbRes = await fetch(
-                      `${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`,
+                      `${env.SUPABASE_URL}/rest/v1/api_usage_logs`,
                       {
                         method: "POST",
                         headers: {
@@ -2265,7 +2265,7 @@ Market Context:
           }
           try {
             // Trigger via internal HTTP call due to helper functions structure
-            await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+            await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
               method: "POST",
               headers: {
                 Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
@@ -3134,11 +3134,11 @@ Market Context:
               // We'll approximate last 3 days by getting the api_usage_summary
               // (which already might be an aggregate) or fetching limited logs.
               // Since instructions specify "dynamically pull the last 3 days of api_usage_logs summary data",
-              // we can fetch from api_usage_aggregates or api_usage_summary.
-              // We will just fetch from api_usage_aggregates over the last 3 days.
+              // we can fetch from api_usage_logs or api_usage_summary.
+              // We will just fetch from api_usage_logs over the last 3 days.
               const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
               const logsResponse = await fetch(
-                `${env.SUPABASE_URL}/rest/v1/api_usage_aggregates?select=*&updated_at=gte.${threeDaysAgo}`,
+                `${env.SUPABASE_URL}/rest/v1/api_usage_logs?select=*&updated_at=gte.${threeDaysAgo}`,
                 {
                   headers: {
                     Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
@@ -3820,7 +3820,7 @@ Market Context:
             (async () => {
               try {
                 await fetch(
-                  `${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`,
+                  `${env.SUPABASE_URL}/rest/v1/api_usage_logs`,
                   {
                     method: "POST",
                     headers: {
@@ -3837,7 +3837,7 @@ Market Context:
                   },
                 );
               } catch (e) {
-                console.error("Failed to log to api_usage_aggregates:", e);
+                console.error("Failed to log to api_usage_logs:", e);
               }
             })(),
           );

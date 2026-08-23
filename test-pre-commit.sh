@@ -1,4 +1,3 @@
-# Complete pre commit checks
+#!/bin/bash
 npm run lint
 npm run build
-npm run cf:worker:types

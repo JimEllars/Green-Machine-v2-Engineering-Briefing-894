@@ -265,8 +265,8 @@ export default function AffiliatePayoutGrid() {
       </div>
 
       <div className="overflow-x-auto flex-1">
-        <table className="w-full text-left text-sm whitespace-nowrap">
-          <thead className="bg-slate-800/50 text-slate-400">
+        <table className="w-full text-left text-sm whitespace-nowrap transition-all duration-300">
+          <thead className="bg-slate-800/80 backdrop-blur-sm text-slate-400 shadow-sm">
             <tr>
               <th className="px-6 py-4 font-medium">Partner ID</th>
               <th className="px-6 py-4 font-medium">Wallet Destination</th>
