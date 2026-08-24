@@ -709,6 +709,13 @@ export default {
     try {
       let response = await (async () => {
         const url = new URL(request.url);
+    // Bypassing Supabase internal routes from Edge catch-all
+    if (url.pathname.startsWith('/auth/v1') || url.pathname.startsWith('/rest/v1')) {
+      const targetUrl = new URL(url.pathname + url.search, env.SUPABASE_URL);
+      const newRequest = new Request(targetUrl.toString(), request);
+      return fetch(newRequest);
+    }
+
 
 
         // 0. Uniform CORS Preflight

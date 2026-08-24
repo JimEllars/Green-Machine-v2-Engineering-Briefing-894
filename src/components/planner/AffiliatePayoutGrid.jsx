@@ -204,12 +204,12 @@ export default function AffiliatePayoutGrid() {
             placeholder="Search Tx Hash or Recipient..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="text-sm px-3 py-2 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500 transition-colors placeholder-slate-500 w-64"
+            className="text-sm px-3 py-2 bg-zinc-900/50 backdrop-blur-sm text-zinc-100 rounded-lg border border-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors placeholder-zinc-500 w-64 shadow-inner"
           />
           <select
             value={selectedTokenFilter}
             onChange={(e) => setSelectedTokenFilter(e.target.value)}
-            className="text-sm px-3 py-2 bg-slate-800 text-white rounded-lg border border-slate-700 focus:outline-none focus:border-emerald-500 transition-colors"
+            className="text-sm px-3 py-2 bg-zinc-900/50 backdrop-blur-sm text-zinc-100 rounded-lg border border-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors shadow-inner"
           >
             <option value="All Tokens">All Tokens</option>
             <option value="ETH">ETH</option>
@@ -266,7 +266,7 @@ export default function AffiliatePayoutGrid() {
 
       <div className="overflow-x-auto flex-1">
         <table className="w-full text-left text-sm whitespace-nowrap transition-all duration-300">
-          <thead className="bg-slate-800/80 backdrop-blur-sm text-slate-400 shadow-sm">
+          <thead className="bg-zinc-900/80 backdrop-blur-md text-zinc-400 shadow-sm border-b border-zinc-800">
             <tr>
               <th className="px-6 py-4 font-medium">Partner ID</th>
               <th className="px-6 py-4 font-medium">Wallet Destination</th>

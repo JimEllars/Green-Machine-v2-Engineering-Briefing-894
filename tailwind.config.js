@@ -4,8 +4,24 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  darkMode: 'class', // enterprise dark mode
   theme: {
     extend: {
+      colors: {
+        zinc: {
+          850: '#202024',
+          950: '#0f0f12',
+        },
+        emerald: {
+          450: '#10b981', // custom interactive state accent
+        }
+      },
+      backgroundImage: {
+        'glass-gradient': 'linear-gradient(to bottom right, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01))',
+      },
+      backdropBlur: {
+        xs: '2px',
+      },
       animation: {
         'glow': 'glow 2s ease-in-out infinite alternate',
       },
