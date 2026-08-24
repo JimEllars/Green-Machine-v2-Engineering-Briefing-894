@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useTransition } from 'react';
 import { supabase } from '../supabaseClient';
 import { getWorkerUrl } from '../utils/workerUrl';
 
-export const useSystemDiagnostics = () => {
+import { getSessionState } from '../supabaseClient';
+export const useSystemDiagnostics = (isAuthenticated = true) => {
   const [telemetry, setTelemetry] = useState(null);
   const [telemetryHistory, setTelemetryHistory] = useState([]);
   const [latencyMs, setLatencyMs] = useState(0);
@@ -105,6 +106,8 @@ export const useSystemDiagnostics = () => {
     let timeoutId = null;
 
     const runFetch = async () => {
+      if (!isAuthenticated) return;
+
       if (document.visibilityState === 'hidden') {
          // Backoff when hidden, delay next check significantly
          timeoutId = setTimeout(runFetch, 120000); // 2 minutes
@@ -151,6 +154,8 @@ export const useSystemDiagnostics = () => {
   useEffect(() => {
     let isMounted = true;
     let lastUpdate = 0;
+
+    if (!isAuthenticated) return;
 
     const channel = supabase.channel('telemetry_stream')
       .on(

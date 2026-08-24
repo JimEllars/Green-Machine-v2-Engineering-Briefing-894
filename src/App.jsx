@@ -3,6 +3,7 @@ import { supabase, subscribeToAuth, getSessionState } from './supabaseClient';
 import StrategyConsultantTerminal from './components/planner/StrategyConsultantTerminal.jsx';
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
+import AXiMLoginGate from './components/auth/AXiMLoginGate';
 
 
 import ComponentErrorBoundary from './common/ComponentErrorBoundary';
@@ -13,6 +14,29 @@ import { useSystemDiagnostics } from './hooks/useSystemDiagnostics';
 
 
 function App() {
+  const [userEmail, setUserEmail] = useState('');
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setAuthState('Guest Mode');
+  };
+
+  useEffect(() => {
+    const session = getSessionState();
+    if (session?.user?.email) {
+      setUserEmail(session.user.email);
+    }
+    const unsubscribe = subscribeToAuth((event, session) => {
+      setAuthState(session ? 'Authenticated' : 'Guest Mode');
+      if (session?.user?.email) {
+        setUserEmail(session.user.email);
+      } else {
+        setUserEmail('');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const [selectedTx, setSelectedTx] = useState(null);
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isSweeping, setIsSweeping] = useState(false);
@@ -38,7 +62,7 @@ function App() {
   const [readinessStatus, setReadinessStatus] = useState(null);
   const [edgeVersion, setEdgeVersion] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
-  const { refetch: refetchSystemDiagnostics } = useSystemDiagnostics();
+  const { refetch: refetchSystemDiagnostics } = useSystemDiagnostics(authState === 'Authenticated');
 
   const [showDeptSummaryModal, setShowDeptSummaryModal] = useState(false);
   const [isTestingSignal, setIsTestingSignal] = useState(false);
@@ -748,6 +772,11 @@ const handleSyncKV = async () => {
     }
   };
 
+
+  if (authState !== 'Authenticated') {
+    return <AXiMLoginGate />;
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-slate-200 font-sans selection:bg-emerald-500/30">
       
@@ -860,7 +889,7 @@ const handleSyncKV = async () => {
                 <SafeIcon name="Hexagon" className="text-slate-900 w-5 h-5" />
               </div>
               <div>
-                <h1 className="font-bold tracking-tight text-white leading-none">AXiM Core</h1>
+                <h1 className="font-bold tracking-tight text-white leading-none">AXiM Control Center</h1>
                 <span className="text-[10px] uppercase tracking-widest text-emerald-500 font-semibold">The Green Machine v2</span>
               </div>
             </div>
@@ -880,11 +909,12 @@ const handleSyncKV = async () => {
             <div className="flex items-center gap-4">
                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-800 rounded-md border border-slate-700 text-xs text-slate-300">
                 <SafeIcon name="Lock" className="w-3.5 h-3.5 text-emerald-400" />
-                axim_internal_finance
+                {userEmail || 'axim_internal_finance'}
               </div>
-              <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center cursor-pointer hover:border-emerald-500 transition-colors">
-                <SafeIcon name="User" className="w-4 h-4" />
-              </div>
+              <button onClick={handleLogout} className="px-3 py-1.5 text-xs font-medium text-white bg-red-500/20 border border-red-500/50 rounded hover:bg-red-500/30 transition-colors flex items-center gap-2">
+                <SafeIcon name="LogOut" className="w-3.5 h-3.5" />
+                Logout
+              </button>
             </div>
           </div>
         </div>

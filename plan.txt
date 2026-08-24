@@ -1,0 +1,5 @@
+1. Implement conditional rendering in `src/App.jsx`. If `authState !== 'Authenticated'`, return `AXiMLoginGate`.
+2. Wrap the authenticated content in `src/App.jsx` with an "AXiM Control Center" wrapper/header that includes user info and a Logout button.
+3. Hook up the Logout button to `supabase.auth.signOut()` and update the local `authState`.
+4. Ensure components like `fetchSignals` or `useSystemDiagnostics` pause when unauthenticated.
+5. Create a pre-commit check script.
