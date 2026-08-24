@@ -17,6 +17,7 @@ export default function MarketFeedMatrix() {
 
   const [annySignals, setAnnySignals] = useState([]);
   const [activePositions, setActivePositions] = useState([]);
+  const [exchangeBalance, setExchangeBalance] = useState(null);
   const { isFetching: sysIsFetching, refetch: forceResync } = useSystemDiagnostics();
   const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
 
@@ -24,13 +25,16 @@ export default function MarketFeedMatrix() {
     const fetchSignals = async () => {
       try {
         const workerUrl = getWorkerUrl();
-        const [signalsRes, positionsRes] = await Promise.all([
+        const [signalsRes, positionsRes, balancesRes] = await Promise.all([
           fetch(`${workerUrl}/api/anny-signals`, {
             headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY }
           }),
           fetch(`${workerUrl}/api/anny/active-positions`, {
             headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY }
-          })
+          }),
+          fetch(`${workerUrl}/api/anny/balances`, {
+            headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY }
+          }).catch(e => null)
         ]);
 
         if (signalsRes.ok) {
@@ -45,6 +49,13 @@ export default function MarketFeedMatrix() {
           if (data && data.success && data.data) {
              setActivePositions(data.data);
           }
+        }
+
+        if (balancesRes && balancesRes.ok) {
+           const balData = await balancesRes.json().catch(e => null);
+           if (balData && balData.success) {
+              setExchangeBalance(balData);
+           }
         }
       } catch (error) {
          console.error("Failed to fetch anny data", error);
@@ -410,7 +421,7 @@ export default function MarketFeedMatrix() {
 
       {/* Active Live Positions Panel */}
       <div className="mt-4 border border-zinc-800/50 rounded-xl bg-black/40 backdrop-blur-md overflow-hidden shadow-xl">
-        <div className="p-4 bg-zinc-900/60 border-b border-zinc-800/50">
+        <div className="p-4 bg-zinc-900/60 border-b border-zinc-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
              <div className="p-2 bg-emerald-500/20 rounded-lg border border-emerald-500/30">
                <SafeIcon name="Briefcase" className="w-5 h-5 text-emerald-400" />
@@ -420,6 +431,14 @@ export default function MarketFeedMatrix() {
                <p className="text-xs text-slate-400">Live capital deployed</p>
              </div>
           </div>
+          {exchangeBalance && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-950/50 rounded-full border border-zinc-800/80">
+              <span className="text-xs text-slate-400 font-medium">Available Liquidity:</span>
+              <span className={`font-mono text-sm font-bold ${exchangeBalance.available_usdt < 20 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                ${(exchangeBalance.available_usdt || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          )}
         </div>
         <div className="p-4 space-y-3">
           {activePositions.length === 0 ? (

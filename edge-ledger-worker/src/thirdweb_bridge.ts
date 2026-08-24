@@ -1199,6 +1199,42 @@ export default {
         }
 
 
+        if (request.method === "GET" && url.pathname === "/api/anny/balances") {
+          const signature = request.headers.get("X-Axim-Signature");
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
+              status: 401,
+              headers: corsHeaders,
+            });
+          }
+
+          try {
+            const cachedBalance = await env.GREEN_STATE.get("anny_exchange_balances", { type: "json" }) as any;
+            if (cachedBalance && typeof cachedBalance.available_usdt === 'number') {
+              return new Response(JSON.stringify({ success: true, available_usdt: cachedBalance.available_usdt, total_capital: cachedBalance.total_capital || 0 }), {
+                status: 200,
+                headers: { "Content-Type": "application/json", ...corsHeaders },
+              });
+            }
+
+            const balanceData = await annyBackendPost("/backend/balances", {}, env, ctx) as any;
+            const available_usdt = balanceData?.payload?.available_usdt ?? balanceData?.available_usdt ?? 0;
+            const total_capital = balanceData?.payload?.total_capital ?? balanceData?.total_capital ?? 0;
+
+            await env.GREEN_STATE.put("anny_exchange_balances", JSON.stringify({ available_usdt, total_capital }), { expirationTtl: 30 });
+
+            return new Response(JSON.stringify({ success: true, available_usdt, total_capital }), {
+              status: 200,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          } catch (e) {
+             return new Response(JSON.stringify({ success: false, error: "Failed to fetch balances", detail: (e as Error).message }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+        }
+
         if (request.method === "GET" && url.pathname === "/api/anny/active-positions") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
@@ -1317,8 +1353,34 @@ export default {
               const currentPriceInfo = marketCacheRaw?.[symbol] || "Unknown";
               const cfoTrend = marketCacheRaw?.cfo_trend_state?.[symbol] || "Unknown";
 
+              // Fetch exchange balance dynamically
+              let available_usdt = 0;
+              let total_capital = 0;
+              try {
+                // Try caching to avoid rate limit spam on rapid signals
+                const cachedBalance = await env.GREEN_STATE.get("anny_exchange_balances", { type: "json" }) as any;
+                if (cachedBalance && typeof cachedBalance.available_usdt === 'number') {
+                  available_usdt = cachedBalance.available_usdt;
+                  total_capital = cachedBalance.total_capital || 0;
+                } else {
+                  const balanceData = await annyBackendPost("/backend/balances", {}, env, ctx) as any;
+                  // Handle potential response structures
+                  available_usdt = balanceData?.payload?.available_usdt ?? balanceData?.available_usdt ?? 0;
+                  total_capital = balanceData?.payload?.total_capital ?? balanceData?.total_capital ?? 0;
+
+                  await env.GREEN_STATE.put("anny_exchange_balances", JSON.stringify({ available_usdt, total_capital }), { expirationTtl: 30 });
+                }
+              } catch (e) {
+                console.error("Failed to fetch exchange balance:", e);
+                // Fallback to a safe minimum if we can't fetch but still need to process
+                available_usdt = 0;
+              }
+
               // Task 1: Construct AI prompt
-              const aiPrompt = `You are an ultra-conservative, ruthless risk manager for live capital. Analyze this trade signal against current market trends. Return a JSON object with 'probability_of_profit' (0-100), 'risk_level' (Low/Medium/High), and 'approved' (boolean). You must ONLY approve (true) if the probability of profit is strictly > 90%, the risk_level is 'Low', and the 24h Trend CFO State aligns with the requested action. Protect capital at all costs.
+              const aiPrompt = `You are an ultra-conservative, ruthless risk manager for live capital. Analyze this trade signal against current market trends.
+Return a JSON object with 'probability_of_profit' (0-100), 'risk_level' (Low/Medium/High), 'approved' (boolean), and 'recommended_position_size' (number in USDT).
+You must ONLY approve (true) if the probability of profit is strictly > 90%, the risk_level is 'Low', and the 24h Trend CFO State aligns with the requested action. Protect capital at all costs.
+Calculate 'recommended_position_size' based on a STRICT max 5% portfolio risk of the Available Balance. If balance is 0 or too low, recommend 0 and do not approve.
 
 Trade Signal:
 - Asset: ${symbol}
@@ -1328,12 +1390,14 @@ Trade Signal:
 
 Market Context:
 - Cached Price: ${currentPriceInfo}
-- 24h Trend CFO State: ${cfoTrend}`;
+- 24h Trend CFO State: ${cfoTrend}
+- Available Balance (USDT): ${available_usdt}`;
 
               let aiResult = {
                 probability_of_profit: 0,
                 risk_level: "High",
-                approved: false
+                approved: false,
+                recommended_position_size: 0
               };
 
               if (env.AI) {
@@ -1352,6 +1416,9 @@ Market Context:
                     const parsedAi = JSON.parse(responseText);
                     if (typeof parsedAi.probability_of_profit === 'number' && parsedAi.risk_level && typeof parsedAi.approved === 'boolean') {
                         aiResult = parsedAi;
+                        if (typeof parsedAi.recommended_position_size !== 'number') {
+                          aiResult.recommended_position_size = 0;
+                        }
                     }
                   } catch (e) {
                       console.error("Failed to parse AI JSON response:", responseText);
@@ -1377,18 +1444,38 @@ Market Context:
 
 
               if (aiResult.approved) {
-                try {
-                  await annyBackendPost(
-                    "/backend/signal/invest",
-                    { symbol, action, amount_usdt: 50 },
-                    env,
-                    ctx
-                  );
-                } catch (executionError) {
-                  console.error("AnnyTrade execution failed:", executionError);
+                let execSize = aiResult.recommended_position_size || 0;
+                // Safety check: ensure size is within available balance
+                if (execSize > available_usdt) {
+                  execSize = available_usdt;
+                }
+
+                if (execSize > 0) {
+                  try {
+                    await annyBackendPost(
+                      "/backend/signal/invest",
+                      {
+                        symbol,
+                        action,
+                        amount_usdt: execSize,
+                        stop_loss: 2,
+                        take_profit: 6
+                      },
+                      env,
+                      ctx
+                    );
+                    (logData as any).executed_amount_usdt = execSize;
+                  } catch (executionError) {
+                    console.error("AnnyTrade execution failed:", executionError);
+                    aiResult.approved = false;
+                    logData.approved = false;
+                    (logData as any).execution_error = (executionError as Error).message;
+                  }
+                } else {
+                  console.warn("Trade approved but insufficient balance or recommended size 0");
                   aiResult.approved = false;
                   logData.approved = false;
-                  (logData as any).execution_error = (executionError as Error).message;
+                  (logData as any).execution_error = "Insufficient balance for minimum position";
                 }
               }
 
