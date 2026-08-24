@@ -28,5 +28,8 @@
       "* * * * *",
       "30 10 * * *"
     ]
-  }
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ]
 }
