@@ -17,6 +17,7 @@
     "cf:pages:deploy": "wrangler pages deploy dist"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@questlabs/react-sdk": "^2.2.92",
     "@supabase/supabase-js": "^2.39.0",
     "date-fns": "4.1.0",

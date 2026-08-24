@@ -1472,6 +1472,42 @@ Market Context:
                       ctx
                     );
                     (logData as any).executed_amount_usdt = execSize;
+
+                    // Task 1 & 2: Log to DB & Send Email
+                    ctx.waitUntil((async () => {
+                      try {
+                        const ledgerEntry = {
+                          partner_id: "anny_ai_system",
+                          status: "executed",
+                          amount: execSize,
+                          currency: symbol,
+                          wallet_address: "anny_ai_system",
+                          smart_contract_address: action,
+                          transaction_hash: `anny_ai_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                          metadata: {
+                            probability_of_profit: aiResult.probability_of_profit,
+                            risk_level: aiResult.risk_level
+                          }
+                        };
+
+                        await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                            apikey: env.SUPABASE_SERVICE_KEY
+                          },
+                          body: JSON.stringify([ledgerEntry])
+                        });
+
+                        const subject = `AXiM Alert: Live Capital Deployed (${symbol})`;
+                        const body = `Action: ${action}\nPosition Size: ${execSize} USDT\nStop-Loss Limits: 2\nAI Confidence: ${aiResult.probability_of_profit}%`;
+                        await sendEmailItNotification(env as any, "james.ellars@axim.us.com", subject, body);
+                      } catch (err) {
+                        console.error("Failed to sync ledger or send email alert:", err);
+                      }
+                    })());
+
                   } catch (executionError) {
                     console.error("AnnyTrade execution failed:", executionError);
                     aiResult.approved = false;
