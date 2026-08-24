@@ -15,6 +15,7 @@ import { useSystemDiagnostics } from './hooks/useSystemDiagnostics';
 
 
 function App() {
+  const [isInitializing, setIsInitializing] = useState(true);
   const [userEmail, setUserEmail] = useState('');
 
   const handleLogout = async () => {
@@ -23,10 +24,15 @@ function App() {
   };
 
   useEffect(() => {
-    const session = getSessionState();
-    if (session?.user?.email) {
-      setUserEmail(session.user.email);
-    }
+    const initAuth = async () => {
+      const session = await getSessionState();
+      if (session?.user?.email) {
+        setUserEmail(session.user.email);
+      }
+      setIsInitializing(false);
+    };
+    initAuth();
+
     const unsubscribe = subscribeToAuth((event, session) => {
       setAuthState(session ? 'Authenticated' : 'Guest Mode');
       if (session?.user?.email) {
@@ -773,6 +779,14 @@ const handleSyncKV = async () => {
     }
   };
 
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center">
+        <SafeIcon name="Loader" className="animate-spin text-emerald-500 w-12 h-12" />
+      </div>
+    );
+  }
 
   if (authState !== 'Authenticated') {
     return <AXiMLoginGate />;

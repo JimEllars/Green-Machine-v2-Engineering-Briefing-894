@@ -4032,12 +4032,63 @@ Market Context:
           url.pathname !== "/api/admin/verify-deployment" &&
           url.pathname !== "/api/admin/trigger-financial-audit" &&
           url.pathname !== "/api/admin/force-oracle-ping" &&
-          url.pathname !== "/api/admin/audit-logs"
+          url.pathname !== "/api/admin/audit-logs" &&
+          url.pathname !== "/api/admin/panic-close"
         ) {
           return new Response(JSON.stringify({ success: false, error: "404 Not Found", timestamp: Date.now() }), {
             status: 404,
             headers: corsHeaders,
           });
+        }
+
+
+        if (url.pathname === "/api/admin/panic-close" && request.method === "POST") {
+          try {
+            const authHeader = request.headers.get("Authorization");
+            if (!authHeader || !authHeader.startsWith("Bearer ")) {
+              return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
+            }
+            const token = authHeader.split(" ")[1];
+            const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
+            try {
+              await jwtVerify(token, secret);
+            } catch (err) {
+              return new Response(JSON.stringify({ error: "Invalid admin token" }), { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } });
+            }
+
+            // Fetch active positions
+            const positionsData = await annyBackendPost("/backend/activepositions", {}, env, ctx) as any;
+            let positions = [];
+            if (Array.isArray(positionsData)) {
+              positions = positionsData;
+            } else if (positionsData && Array.isArray(positionsData.positions)) {
+              positions = positionsData.positions;
+            }
+
+            let closedCount = 0;
+            for (const position of positions) {
+              if (position && position.symbol) {
+                await annyBackendPost("/backend/signal/invest", { action: "sell", symbol: position.symbol }, env, ctx);
+                closedCount++;
+              }
+            }
+
+            return new Response(
+              JSON.stringify({ success: true, closedCount, message: `Panic closed ${closedCount} positions.` }),
+              {
+                status: 200,
+                headers: { "Content-Type": "application/json", ...corsHeaders },
+              }
+            );
+          } catch (e: any) {
+            return new Response(
+              JSON.stringify({ success: false, error: e.message || "Failed to execute panic close" }),
+              {
+                status: 500,
+                headers: { "Content-Type": "application/json", ...corsHeaders },
+              }
+            );
+          }
         }
 
         // 1. HMAC Validation (The Ingress Token Isolation Rule)

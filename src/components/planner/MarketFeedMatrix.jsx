@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { supabase } from '../../supabaseClient';
 import SafeIcon from '../../common/SafeIcon';
 import { getWorkerUrl } from '../../utils/workerUrl';
 import { useSystemDiagnostics } from '../../hooks/useSystemDiagnostics';
@@ -17,6 +18,43 @@ export default function MarketFeedMatrix() {
 
   const [annySignals, setAnnySignals] = useState([]);
   const [activePositions, setActivePositions] = useState([]);
+  const [isClosingAll, setIsClosingAll] = useState(false);
+  const [panicResult, setPanicResult] = useState(null);
+
+  const handlePanicCloseAll = async () => {
+    if (!window.confirm("Are you sure you want to FORCE CLOSE ALL active positions? This action cannot be undone.")) return;
+    setIsClosingAll(true);
+    setPanicResult(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("No active admin session found.");
+
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/admin/panic-close`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to panic close.");
+      setPanicResult({ success: true, message: data.message });
+
+      // refresh positions after 3s
+      setTimeout(() => {
+         // Optionally refresh positions here if needed or rely on parent component props
+         window.location.reload();
+      }, 3000);
+    } catch (e) {
+      setPanicResult({ success: false, message: e.message });
+    } finally {
+      setIsClosingAll(false);
+    }
+  };
+
   const [exchangeBalance, setExchangeBalance] = useState(null);
   const { isFetching: sysIsFetching, refetch: forceResync } = useSystemDiagnostics();
   const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
@@ -431,6 +469,18 @@ export default function MarketFeedMatrix() {
                <p className="text-xs text-slate-400">Live capital deployed</p>
              </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePanicCloseAll}
+              disabled={isClosingAll}
+              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-lg font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {isClosingAll ? (
+                <><SafeIcon name="Loader" className="w-4 h-4 animate-spin" /> CLOSING ALL...</>
+              ) : (
+                <><SafeIcon name="AlertTriangle" className="w-4 h-4" /> PANIC CLOSE ALL POSITIONS</>
+              )}
+            </button></div>
           {exchangeBalance && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-950/50 rounded-full border border-zinc-800/80">
               <span className="text-xs text-slate-400 font-medium">Available Liquidity:</span>
@@ -463,6 +513,13 @@ export default function MarketFeedMatrix() {
         </div>
       </div>
 
+
+      {panicResult && (
+        <div className={`fixed bottom-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full shadow-2xl border z-[100] animate-bounce font-bold tracking-wide flex items-center gap-2 ${panicResult.success ? 'bg-emerald-500/90 border-emerald-400 text-white' : 'bg-rose-500/90 border-rose-400 text-white'}`}>
+          <SafeIcon name={panicResult.success ? "CheckCircle" : "AlertTriangle"} className="w-5 h-5" />
+          {panicResult.message}
+        </div>
+      )}
 </div>
     </div>
   );
