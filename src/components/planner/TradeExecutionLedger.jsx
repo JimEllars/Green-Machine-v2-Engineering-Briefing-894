@@ -1,0 +1,170 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../../supabaseClient';
+import { ShieldCheckIcon, BanknotesIcon, ArrowTrendingUpIcon } from '@heroicons/react/24/outline';
+
+const TradeExecutionLedger = () => {
+  const [trades, setTrades] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTrades = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('blockchain_transactions')
+          .select('*')
+          .eq('partner_id', 'anny_ai_system')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (error) throw error;
+        setTrades(data || []);
+      } catch (err) {
+        console.error("Error fetching execution ledger:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTrades();
+
+    // Set up real-time subscription
+    const subscription = supabase
+      .channel('public:blockchain_transactions')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'blockchain_transactions',
+          filter: "partner_id=eq.anny_ai_system"
+        },
+        (payload) => {
+          setTrades((current) => {
+            const exists = current.find(t => t.id === payload.new.id);
+            if (exists) return current;
+            return [payload.new, ...current].slice(0, 20);
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    return d.toLocaleString(undefined, {
+      month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+  };
+
+  return (
+    <div className="bg-zinc-900/60 border border-zinc-800/50 backdrop-blur-xl rounded-2xl p-6 shadow-2xl flex flex-col h-full relative overflow-hidden transition-all hover:border-emerald-500/30">
+
+      {/* Header Section */}
+      <div className="flex items-center justify-between mb-6 z-10 relative">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-500/10 rounded-lg">
+            <BanknotesIcon className="h-6 w-6 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-xl font-semibold text-zinc-100 flex items-center gap-2">
+              AI Execution Ledger
+            </h2>
+            <p className="text-xs text-zinc-400">Live Capital Deployment Records</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono bg-zinc-800/50 px-3 py-1.5 rounded-full border border-zinc-700/50">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          SYNC: LIVE
+        </div>
+      </div>
+
+      {/* Table Section */}
+      <div className="flex-grow overflow-x-auto relative z-10 rounded-xl border border-zinc-800/60 bg-zinc-900/40">
+        <table className="w-full text-left text-sm whitespace-nowrap">
+          <thead className="bg-zinc-800/80 sticky top-0 text-zinc-300 font-medium text-xs uppercase tracking-wider backdrop-blur-md">
+            <tr>
+              <th className="px-4 py-3 border-b border-zinc-700/50">Date</th>
+              <th className="px-4 py-3 border-b border-zinc-700/50">Asset</th>
+              <th className="px-4 py-3 border-b border-zinc-700/50">Action</th>
+              <th className="px-4 py-3 border-b border-zinc-700/50 text-right">Executed ($)</th>
+              <th className="px-4 py-3 border-b border-zinc-700/50 text-right">AI Confidence</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-zinc-800/50 text-zinc-300">
+            {loading ? (
+              [...Array(3)].map((_, i) => (
+                <tr key={i} className="animate-pulse">
+                  <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-24"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-16"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-12"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-16 ml-auto"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-12 ml-auto"></div></td>
+                </tr>
+              ))
+            ) : trades.length === 0 ? (
+              <tr>
+                <td colSpan="5" className="px-4 py-12 text-center text-zinc-500 text-sm">
+                  <div className="flex flex-col items-center justify-center space-y-2">
+                    <ShieldCheckIcon className="h-8 w-8 text-zinc-600 mb-2" />
+                    <p>No recent AI executions found.</p>
+                    <p className="text-xs text-zinc-600">Awaiting optimal market conditions.</p>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              trades.map((trade) => {
+                const isBuy = trade.smart_contract_address?.toLowerCase() === 'buy';
+                const confidence = trade.metadata?.probability_of_profit || 0;
+
+                return (
+                  <tr
+                    key={trade.id || Math.random()}
+                    className="hover:bg-zinc-800/30 transition-colors group"
+                  >
+                    <td className="px-4 py-3 text-zinc-400 font-mono text-xs">
+                      {formatDate(trade.created_at)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-200 font-medium">
+                        {trade.currency || 'UNKNOWN'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        isBuy
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                      }`}>
+                        {isBuy ? <ArrowTrendingUpIcon className="h-3 w-3" /> : null}
+                        {(trade.smart_contract_address || 'UNKNOWN').toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-zinc-200">
+                      ${Number(trade.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className={`inline-flex items-center gap-1 text-xs font-medium ${
+                        confidence >= 90 ? 'text-emerald-400' : 'text-zinc-400'
+                      }`}>
+                        {confidence}%
+                        <ShieldCheckIcon className="h-3.5 w-3.5" />
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+export default TradeExecutionLedger;

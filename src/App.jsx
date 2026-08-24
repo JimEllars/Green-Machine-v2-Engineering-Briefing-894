@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase, subscribeToAuth, getSessionState } from './supabaseClient';
 import StrategyConsultantTerminal from './components/planner/StrategyConsultantTerminal.jsx';
 import MarketFeedMatrix from './components/planner/MarketFeedMatrix';
+import TradeExecutionLedger from './components/planner/TradeExecutionLedger.jsx';
 import AffiliatePayoutGrid from './components/planner/AffiliatePayoutGrid';
 import AXiMLoginGate from './components/auth/AXiMLoginGate';
 
@@ -1032,6 +1033,7 @@ const handleSyncKV = async () => {
           <div className="lg:col-span-5 flex flex-col gap-6">
             <ComponentErrorBoundary>
                     <MarketFeedMatrix />
+                    <TradeExecutionLedger />
                   </ComponentErrorBoundary>
             <AffiliatePayoutGrid onSelectTx={setSelectedTx} />
           </div>
