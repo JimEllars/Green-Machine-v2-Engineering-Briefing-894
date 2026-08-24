@@ -3781,6 +3781,29 @@ Market Context:
           const parsedItem = JSON.parse(quarantineItem);
           const payload = parsedItem.payload || parsedItem;
 
+          const symbol = payload.symbol;
+          const action = payload.action;
+          const amount_usdt = payload.amount_usdt || payload.investment || 25;
+
+          try {
+            await annyBackendPost(
+              "/backend/signal/invest",
+              {
+                symbol,
+                action,
+                amount_usdt,
+                stop_loss: 2
+              },
+              env,
+              ctx
+            );
+          } catch (e: any) {
+            return new Response(JSON.stringify({ error: e.message || "Failed to execute override via AnnyTrade" }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+
           // Build a simulated executed trade payload
           const ledgerEntry = {
             partner_id: "anny_system",
