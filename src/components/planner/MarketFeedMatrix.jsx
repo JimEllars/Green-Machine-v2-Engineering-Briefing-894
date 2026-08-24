@@ -16,6 +16,7 @@ export default function MarketFeedMatrix() {
 
 
   const [annySignals, setAnnySignals] = useState([]);
+  const [activePositions, setActivePositions] = useState([]);
   const { isFetching: sysIsFetching, refetch: forceResync } = useSystemDiagnostics();
   const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
 
@@ -23,19 +24,30 @@ export default function MarketFeedMatrix() {
     const fetchSignals = async () => {
       try {
         const workerUrl = getWorkerUrl();
-        const response = await fetch(`${workerUrl}/api/anny-signals`, {
-          headers: {
-            'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY
-          }
-        });
-        if (response.ok) {
-          const data = await response.json();
+        const [signalsRes, positionsRes] = await Promise.all([
+          fetch(`${workerUrl}/api/anny-signals`, {
+            headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY }
+          }),
+          fetch(`${workerUrl}/api/anny/active-positions`, {
+            headers: { 'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY }
+          })
+        ]);
+
+        if (signalsRes.ok) {
+          const data = await signalsRes.json();
           if (data && data.success && data.data) {
              setAnnySignals(data.data);
           }
         }
+
+        if (positionsRes.ok) {
+          const data = await positionsRes.json();
+          if (data && data.success && data.data) {
+             setActivePositions(data.data);
+          }
+        }
       } catch (error) {
-         console.error("Failed to fetch anny signals", error);
+         console.error("Failed to fetch anny data", error);
       }
     };
     fetchSignals();
@@ -394,6 +406,42 @@ export default function MarketFeedMatrix() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Active Live Positions Panel */}
+      <div className="mt-4 border border-zinc-800/50 rounded-xl bg-black/40 backdrop-blur-md overflow-hidden shadow-xl">
+        <div className="p-4 bg-zinc-900/60 border-b border-zinc-800/50">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-emerald-500/20 rounded-lg border border-emerald-500/30">
+               <SafeIcon name="Briefcase" className="w-5 h-5 text-emerald-400" />
+             </div>
+             <div>
+               <h3 className="text-white font-semibold flex items-center gap-2">Active Live Positions</h3>
+               <p className="text-xs text-slate-400">Live capital deployed</p>
+             </div>
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          {activePositions.length === 0 ? (
+             <div className="text-center py-6 text-slate-500 text-sm">No live capital currently deployed.</div>
+          ) : (
+             activePositions.map((pos, idx) => (
+               <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 hover:border-zinc-600/50 transition-colors">
+                 <div className="flex items-center gap-4 mb-2 sm:mb-0">
+                   <span className="text-white font-semibold">{pos.symbol || pos.coin || 'N/A'}</span>
+                 </div>
+                 <div className="flex items-center gap-4 text-xs">
+                    <span className="text-slate-400">
+                      Invested: <span className="font-mono text-white">${(pos.investedAmount || pos.amount || pos.invested || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </span>
+                    <span className={`font-mono font-bold ${(pos.pnl || pos.roi || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      PNL: {(pos.pnl || pos.roi || 0) >= 0 ? '+' : ''}{(pos.pnl || pos.roi || 0).toFixed(2)}%
+                    </span>
+                 </div>
+               </div>
+             ))
+          )}
+        </div>
       </div>
 
 </div>
