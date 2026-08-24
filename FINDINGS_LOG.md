@@ -75,3 +75,9 @@
 ### Task 4: Zero-Downtime Verification (Phase 3)
 - Confirmed that `App.jsx`, `main.jsx`, and `supabaseClient.js` remain fully operational and authentication mechanisms were not altered or disrupted.
 - Checked `npm run lint` and `npm run build` to ensure the build completes with zero errors.
+
+### Sprint 908: Control Center Shell & Session Resilience
+- **Control Center Shell (Task 1):** Created `ControlCenterLayout.jsx` providing a persistent, responsive Top Navigation Bar using glassmorphism (zinc/slate styling). Incorporates the "AXiM Green Machine" internal branding, the authenticated user's email, and a "Secure Logout" button.
+- **Dashboard Integration (Task 2):** Updated `App.jsx` to wrap `MarketFeedMatrix`, `SystemDiagnosticsPanel`, and `StrategyConsultantTerminal` inside the new `ControlCenterLayout`. Moved existing layout headers and the logout logic into the layout wrapper, passing down `userEmail` and `handleLogout`.
+- **Session Resilience & Graceful Degradation (Task 3):** Modified `App.jsx` hooks to strictly bind polling loops (e.g., `checkDlq` interval) to `authState`. If `authState` falls back to 'Guest Mode' upon session expiration, polling is instantly halted. Enhanced the auth state subscriber to listen for 'SIGNED_OUT' and missing sessions, falling back gracefully and firing a clean toast notification ("Session expired. Please log in again.").
+- **Testing & Verification:** Visual testing confirmed layout elements rendered as intended and degradation to the login gate occurred upon simulated session expiration. Standard linting (`npm run lint`) and builds (`npm run build`) complete cleanly with zero errors. All edge background endpoints and worker scripts remain unimpacted.
