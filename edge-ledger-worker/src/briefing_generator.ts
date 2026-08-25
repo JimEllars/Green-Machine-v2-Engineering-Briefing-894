@@ -63,7 +63,7 @@ export async function sendEmailItNotification(
   throw lastError;
 }
 
-export async function dispatchExecutiveBriefing(env: Env, ctx: any) {
+export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummaryText: string = "AI Financial Audit unavailable.") {
   try {
     const cacheResult =
       await env.MARKET_CACHE.getWithMetadata("latest_prices");
@@ -213,6 +213,8 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any) {
           <td style="padding: 20px;">
       <h2>Executive Daily Briefing</h2>
       ${portfolioSummaryHtml}
+      <h3>AI Financial Audit & Token Efficiency</h3>
+      <p>${auditSummaryText}</p>
       <h3>App Development Progress Summary</h3>
       <p>Sprint 1.8: Dual Executive Recipients, Pre-5am CST CRON, Departmental Aggregation & HITL Action Links is active.</p>
           ${signalSummaryHtml}

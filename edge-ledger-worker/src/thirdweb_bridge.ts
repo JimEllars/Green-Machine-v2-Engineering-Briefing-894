@@ -453,6 +453,82 @@ async function recordKvMetric(env: Env, hit: boolean): Promise<void> {
   await env.GREEN_STATE.put(key, (count + 1).toString());
 }
 
+
+export async function generateAIFinancialAudit(env: Env, ctx: ExecutionContext): Promise<string> {
+  try {
+    const dbResponse = await fetch(
+      `${env.SUPABASE_URL}/functions/v1/financial-audit`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+        },
+        body: JSON.stringify({ trigger_source: "cron", timestamp: Date.now() }),
+      },
+    );
+
+    if (!dbResponse.ok) {
+      throw new Error(
+        `Financial Audit failed: ${dbResponse.statusText}`,
+      );
+    }
+
+    const auditData = (await dbResponse.json()) as any;
+
+    let usageSummaryData = [];
+    try {
+      const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const logsResponse = await fetch(
+        `${env.SUPABASE_URL}/rest/v1/api_usage_logs?select=*&updated_at=gte.${threeDaysAgo}`,
+        {
+          headers: {
+            Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+            apikey: env.SUPABASE_SERVICE_KEY,
+          },
+        }
+      );
+      if (logsResponse.ok) {
+        usageSummaryData = (await logsResponse.json()) as any[];
+      }
+    } catch (e) {
+      console.error("Failed to fetch 3-day api usage logs", e);
+    }
+
+    let executive_briefing = "";
+    try {
+      const aiResponse = await env.AI.run(
+        "@cf/meta/llama-3.1-8b-instruct",
+        {
+          messages: [
+            {
+              role: "system",
+              content: "You are a financial analyst AI.",
+            },
+            {
+              role: "user",
+              content: `Summarize the following financial audit metadata and the last 3 days of API usage logs into a concise 4-sentence paragraph describing token burn efficiency vs system latency. Audit Data: ${JSON.stringify(auditData)}. Usage Data: ${JSON.stringify(usageSummaryData)}`,
+            },
+          ],
+        },
+      );
+      if (aiResponse && aiResponse.response) {
+        executive_briefing = aiResponse.response;
+      } else {
+        executive_briefing = "AI insight generation failed.";
+      }
+    } catch (e) {
+      console.error("Workers AI failed", e);
+      executive_briefing = "AI summary temporarily unavailable due to upstream constraint.";
+    }
+
+    return executive_briefing;
+  } catch (error) {
+    console.error("Failed to generate AI financial audit:", error);
+    return "AI Financial Audit currently unavailable.";
+  }
+}
+
 export default {
   async scheduled(event: any, env: any, ctx: any): Promise<void> {
     if (event.cron === "* * * * *") {
@@ -636,7 +712,8 @@ export default {
     if (event.cron === "30 10 * * *") {
       ctx.waitUntil(
         (async () => {
-          await dispatchExecutiveBriefing(env, ctx);
+          const auditSummaryText = await generateAIFinancialAudit(env, ctx);
+          await dispatchExecutiveBriefing(env, ctx, auditSummaryText);
         })(),
       );
     } else {
@@ -3348,78 +3425,7 @@ Market Context:
             await logAdminAction(env, "trigger-financial-audit", {
               trigger_source,
             });
-            const dbResponse = await fetch(
-              `${env.SUPABASE_URL}/functions/v1/financial-audit`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-                },
-                body: JSON.stringify({ trigger_source, timestamp }),
-              },
-            );
-
-            if (!dbResponse.ok) {
-              throw new Error(
-                `Financial Audit failed: ${dbResponse.statusText}`,
-              );
-            }
-
-            const auditData = (await dbResponse.json()) as any;
-
-            // Fetch the last 3 days of api_usage_logs summary data
-            let usageSummaryData = [];
-            try {
-              // We'll approximate last 3 days by getting the api_usage_summary
-              // (which already might be an aggregate) or fetching limited logs.
-              // Since instructions specify "dynamically pull the last 3 days of api_usage_logs summary data",
-              // we can fetch from api_usage_logs or api_usage_summary.
-              // We will just fetch from api_usage_logs over the last 3 days.
-              const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-              const logsResponse = await fetch(
-                `${env.SUPABASE_URL}/rest/v1/api_usage_logs?select=*&updated_at=gte.${threeDaysAgo}`,
-                {
-                  headers: {
-                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-                    apikey: env.SUPABASE_SERVICE_KEY,
-                  },
-                }
-              );
-              if (logsResponse.ok) {
-                usageSummaryData = (await logsResponse.json()) as any[];
-              }
-            } catch (e) {
-              console.error("Failed to fetch 3-day api usage logs", e);
-            }
-
-            let executive_briefing = "";
-            try {
-              const aiResponse = await env.AI.run(
-                "@cf/meta/llama-3.1-8b-instruct",
-                {
-                  messages: [
-                    {
-                      role: "system",
-                      content: "You are a financial analyst AI.",
-                    },
-                    {
-                      role: "user",
-                      content: `Summarize the following financial audit metadata and the last 3 days of API usage logs into a concise 4-sentence paragraph describing token burn efficiency vs system latency. Audit Data: ${JSON.stringify(auditData)}. Usage Data: ${JSON.stringify(usageSummaryData)}`,
-                    },
-                  ],
-                },
-              );
-              if (aiResponse && aiResponse.response) {
-                executive_briefing = aiResponse.response;
-              } else {
-                executive_briefing = "AI insight generation failed.";
-              }
-            } catch (e) {
-              console.error("Workers AI failed", e);
-              executive_briefing =
-                "AI summary temporarily unavailable due to upstream constraint.";
-            }
+            let executive_briefing = await generateAIFinancialAudit(env, ctx);
 
             return new Response(
               JSON.stringify({
