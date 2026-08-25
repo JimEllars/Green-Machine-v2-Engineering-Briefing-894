@@ -317,7 +317,7 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
       setIsMarkdownCopied(true);
       setTimeout(() => setIsMarkdownCopied(false), 2000);
     } catch (err) {
-      console.warn('Failed to copy markdown', err);
+      /* ignore */
     }
   };
 
@@ -336,7 +336,7 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
-      console.warn('Failed to copy plan: Clipboard access denied or unavailable', err);
+
       setIsCopyUnavailable(true);
       setTimeout(() => setIsCopyUnavailable(false), 3000);
     }

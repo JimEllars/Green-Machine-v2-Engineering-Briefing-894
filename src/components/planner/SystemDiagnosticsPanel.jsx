@@ -190,8 +190,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
       // Smoothing latency data with a rolling average
       setLatencyHistory(prev => {
         const newHistory = [...prev, currentLatency].slice(-5); // Keep last 5
-        const avg = Math.round(newHistory.reduce((a, b) => a + b, 0) / newHistory.length);
-        console.log(avg);
+
+
         return newHistory;
       });
 
@@ -209,7 +209,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
     } catch (e) {
       setEdgeCacheAvailable(false);
-      console.log(0); // Optional: could show something else for 'down'
+
       if (onDiagnosticsUpdate) onDiagnosticsUpdate({ edgeCacheAvailable: false });
       // Increase backoff on network error
       backoffRef.current = Math.min(backoffRef.current * 1.5, 60000);
@@ -599,7 +599,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                           jitterVariance = sumDiff / (edgePings.length - 1);
                       }
 
-                      console.log(Math.round(meanRtt));
+
                       setEdgeJitter(Math.round(jitterVariance));
                       setBenchmarkResults({ edgePing: Math.round(meanRtt), dbPing: -1 }); // Keeping UI roughly same but using mean
                   } else {
