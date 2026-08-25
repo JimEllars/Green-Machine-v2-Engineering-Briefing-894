@@ -1049,7 +1049,9 @@ const handleSyncKV = async () => {
           <div className="lg:col-span-5 flex flex-col gap-6">
             <ComponentErrorBoundary>
                     <MarketFeedMatrix />
-                    <TradeExecutionLedger />
+                    <div className="min-h-[600px] flex flex-col">
+                      <TradeExecutionLedger />
+                    </div>
                   </ComponentErrorBoundary>
             <AffiliatePayoutGrid onSelectTx={setSelectedTx} />
           </div>
