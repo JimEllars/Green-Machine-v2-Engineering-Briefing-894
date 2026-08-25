@@ -6,6 +6,7 @@ const AXiMLoginGate = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSSOLoading, setIsSSOLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleLogin = async (e) => {
@@ -24,6 +25,23 @@ const AXiMLoginGate = () => {
       setErrorMsg(error.message || 'Authentication failed');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSSOLogin = async (e) => {
+    e.preventDefault();
+    setIsSSOLoading(true);
+    setErrorMsg('');
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'azure'
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      setErrorMsg(error.message || 'SSO Authentication failed');
+      setIsSSOLoading(false);
     }
   };
 
@@ -77,7 +95,7 @@ const AXiMLoginGate = () => {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isSSOLoading}
               className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isLoading ? (
@@ -96,11 +114,22 @@ const AXiMLoginGate = () => {
 
           <div className="mt-6 pt-6 border-t border-zinc-800">
             <button
-              disabled
-              className="w-full bg-zinc-800/50 border border-zinc-700/50 text-zinc-500 font-medium py-3 px-4 rounded-lg cursor-not-allowed flex items-center justify-center gap-2"
+              type="button"
+              onClick={handleSSOLogin}
+              disabled={isSSOLoading || isLoading}
+              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 px-4 rounded-lg shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              <SafeIcon name="Shield" className="w-5 h-5" />
-              Login via AXiM SSO (Coming Soon)
+              {isSSOLoading ? (
+                <>
+                  <SafeIcon name="Loader" className="w-5 h-5 animate-spin" />
+                  Authenticating...
+                </>
+              ) : (
+                <>
+                  <SafeIcon name="Shield" className="w-5 h-5" />
+                  AXiM Enterprise SSO
+                </>
+              )}
             </button>
           </div>
         </div>
