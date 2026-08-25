@@ -7,7 +7,7 @@ import { getWorkerUrl } from '../../utils/workerUrl';
 
 
 
-export default function StrategyConsultantTerminal() {
+export default function StrategyConsultantTerminal({ latestAuditContext }) {
   const [displayText, setDisplayText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [strategy, setStrategy] = useState('');
@@ -210,7 +210,7 @@ export default function StrategyConsultantTerminal() {
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         },
         body: JSON.stringify({
-          prompt: promptInput,
+          prompt: latestAuditContext ? `[AUDIT CONTEXT]\n${latestAuditContext}\n\n[PROMPT]\n${promptInput}` : promptInput,
           session_id: sessionId,
           model_preference: modelPreference
         })
@@ -251,29 +251,38 @@ export default function StrategyConsultantTerminal() {
   // Supports switching between Markdown and JSON formats with defensive fallbacks
 
   const handleDownloadTranscript = () => {
-    let transcriptText = "";
-    if (parsedStrategyData) {
-        const riskLevel = parsedStrategyData?.riskLevel || 'UNKNOWN';
-        const analysis = parsedStrategyData?.analysis || 'No analysis available.';
-        const actionItems = parsedStrategyData?.actionItems || [];
+    let fileContent = "";
+    let fileExtension = exportFormat === 'JSON' ? 'json' : 'md';
+    let mimeType = exportFormat === 'JSON' ? 'application/json' : 'text/markdown';
 
-        transcriptText = `====================================================\n`;
-        transcriptText += `AXiM Green Machine Strategy Evaluation Transcript\n`;
-        transcriptText += `Date: ${new Date().toLocaleString()}\n`;
-        transcriptText += `Risk Level: ${riskLevel}\n`;
-        transcriptText += `====================================================\n\n`;
-        transcriptText += `ANALYSIS:\n${analysis}\n\n`;
-        transcriptText += `ACTION ITEMS:\n`;
-        actionItems.forEach(item => transcriptText += `- ${item}\n`);
+    if (exportFormat === 'JSON') {
+      if (parsedStrategyData) {
+        fileContent = JSON.stringify(parsedStrategyData, null, 2);
+      } else {
+        fileContent = JSON.stringify({ error: "No active strategy generated." }, null, 2);
+      }
     } else {
-        transcriptText = "No active strategy generated.";
+      if (parsedStrategyData) {
+        fileContent = `# AXiM Green Machine Strategy Evaluation\n\n`;
+        fileContent += `**Date:** ${new Date().toLocaleString()}\n`;
+        fileContent += `**Risk Level:** ${parsedStrategyData?.riskLevel || 'UNKNOWN'}\n\n`;
+        fileContent += `## Analysis\n${parsedStrategyData?.analysis || 'No analysis available.'}\n\n`;
+        fileContent += `## Action Items\n`;
+        const actionItems = parsedStrategyData?.actionItems || [];
+        actionItems.forEach(item => fileContent += `- ${item}\n`);
+      } else if (strategy) {
+        fileContent = strategy;
+      } else {
+        fileContent = "No active strategy generated.";
+      }
     }
 
-    const blob = new Blob([transcriptText], { type: 'text/plain;charset=utf-8' });
+    const blob = new Blob([fileContent], { type: mimeType + ';charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `strategy-consult-transcript-${Date.now()}.txt`;
+    const timestamp = Math.floor(Date.now() / 1000);
+    a.download = `axim_strategy_briefing_${timestamp}.${fileExtension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -367,6 +376,15 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
       {/* Terminal Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-3">
+          {latestAuditContext ? (
+            <span className="text-[10px] font-mono px-2 py-1 bg-emerald-500/10 rounded text-emerald-500 border border-emerald-500/30">
+              [Audit Context: Synced]
+            </span>
+          ) : (
+            <span className="text-[10px] font-mono px-2 py-1 bg-amber-500/10 rounded text-amber-500 border border-amber-500/30">
+              [Audit Context: Pending]
+            </span>
+          )}
           {parsedStrategyData && parsedStrategyData.ai_inference_ms !== undefined && (
             <span className="text-[10px] font-mono px-2 py-1 bg-slate-800/50 rounded text-slate-400 border border-slate-700">
               Inference: {parsedStrategyData.ai_inference_ms}ms

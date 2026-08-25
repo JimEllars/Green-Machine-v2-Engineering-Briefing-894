@@ -87,6 +87,7 @@ function App() {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isAuditSummaryModalOpen, setIsAuditSummaryModalOpen] = useState(false);
   const [auditSummaryText, setAuditSummaryText] = useState("");
+  const [latestAuditContext, setLatestAuditContext] = useState("");
   const [isQuarantineModalOpen, setIsQuarantineModalOpen] = useState(false);
   const [quarantineItems, setQuarantineItems] = useState([]);
   const [isLoadingQuarantine, setIsLoadingQuarantine] = useState(false);
@@ -768,6 +769,7 @@ const handleSyncKV = async () => {
 
         if (data.executive_briefing) {
           setAuditSummaryText(data.executive_briefing);
+          setLatestAuditContext(data.executive_briefing);
           setIsAuditSummaryModalOpen(true);
         }
       }
@@ -1054,7 +1056,7 @@ const handleSyncKV = async () => {
 
           {/* Right Column: AI Strategy Terminal */}
           <div className="lg:col-span-3 flex flex-col min-h-[600px] sticky top-24">
-            <StrategyConsultantTerminal />
+            <StrategyConsultantTerminal latestAuditContext={latestAuditContext} />
 
             
             <div className="mt-6 bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 rounded-xl p-6 shadow-2xl">
