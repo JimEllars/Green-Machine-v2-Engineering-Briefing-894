@@ -55,6 +55,7 @@ export default function MarketFeedMatrix() {
     }
   };
 
+  const [marketHistory, setMarketHistory] = useState({});
   const [exchangeBalance, setExchangeBalance] = useState(null);
   const { isFetching: sysIsFetching, refetch: forceResync } = useSystemDiagnostics();
   const [isSignalsExpanded, setIsSignalsExpanded] = useState(false);
@@ -95,6 +96,19 @@ export default function MarketFeedMatrix() {
               setExchangeBalance(balData);
            }
         }
+
+        // Fetch historical data asynchronously, non-blocking
+        fetch(`${workerUrl}/api/market/history`, {
+          headers: {
+            'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY
+          }
+        }).then(res => res.json()).then(histData => {
+          if (histData && histData.success && histData.data) {
+            setMarketHistory(histData.data);
+          }
+        }).catch(err => {
+          console.error("Failed to fetch market history", err);
+        });
       } catch (error) {
          console.error("Failed to fetch anny data", error);
       }
@@ -376,6 +390,25 @@ export default function MarketFeedMatrix() {
               </div>
             )}
 
+
+            {marketHistory[asset.symbol]?.length > 0 && (
+              <div className="mt-3 flex items-end h-8 gap-[2px]">
+                {marketHistory[asset.symbol].map((val, idx, arr) => {
+                  const min = Math.min(...arr);
+                  const max = Math.max(...arr);
+                  const range = max - min || 1;
+                  const heightPct = Math.max(((val - min) / range) * 100, 5); // min 5% height
+                  const isUp = arr[arr.length - 1] >= arr[0];
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex-1 rounded-t-sm transition-all duration-500 ${isUp ? 'bg-gradient-to-t from-emerald-900/40 to-emerald-400/80 shadow-[0_0_5px_rgba(52,211,153,0.3)]' : 'bg-gradient-to-t from-rose-900/40 to-rose-400/80 shadow-[0_0_5px_rgba(244,63,94,0.3)]'}`}
+                      style={{ height: `${heightPct}%` }}
+                    />
+                  );
+                })}
+              </div>
+            )}
             {asset.cfo_state && (
               <div className="mt-3 flex justify-end">
                 <span className={`text-xs font-bold px-2 py-1 rounded-md ${

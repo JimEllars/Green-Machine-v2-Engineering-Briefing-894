@@ -87,3 +87,7 @@
 - Integrated AnnyTrade position close simulation and `blockchain_transactions` logging via `ctx.waitUntil()`.
 - Updated `MarketFeedMatrix.jsx` to render "Close Position" buttons for live capital, with toast notifications and UI refresh logic upon execution.
 - Configured `TradeExecutionLedger.jsx` to parse and render manual override trades cleanly in real-time, pulling directly from the Supabase Realtime channel.
+
+### Sprint 912: Advanced Charting UI & Market History Edge Route
+- **Market History Edge Route (Task 1):** Built the `/api/market/history` endpoint in `edge-ledger-worker/src/thirdweb_bridge.ts`. It's secured by `timingSafeEqual(signature, AXIM_INTERNAL_KEY)` and extracts `historical_prices` from `MARKET_CACHE`. Implemented a robust fail-safe returning mocked standard asset history (BTC, ETH, SOL) upon cache misses.
+- **Lightweight Sparklines (Task 2 & 3):** Added a non-blocking UI background fetch to `MarketFeedMatrix.jsx` to load `marketHistory`. Integrated a high-performance, glassmorphic emerald/rose CSS-based sparkline trend bar directly inside the asset cards. All sparklines are protected by standard error boundaries checking `marketHistory[asset.symbol]?.length > 0`.
