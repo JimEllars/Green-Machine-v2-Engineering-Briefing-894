@@ -26,7 +26,8 @@
   "triggers": {
     "crons": [
       "* * * * *",
-      "30 10 * * *"
+      "30 10 * * *",
+      "0 8 * * *"
     ]
   },
   "compatibility_flags": [
