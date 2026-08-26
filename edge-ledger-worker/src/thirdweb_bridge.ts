@@ -537,7 +537,38 @@ export default {
           const balancesRaw = await env.GREEN_STATE.get("anny_exchange_balances", "json");
           const balances = balancesRaw || { status: "No balance data available." };
 
-          const yesterdayPerformance = "Win Rate: 68% | Total Volume: $124,500";
+          let yesterdayPerformance = "Win Rate: 0% | Total Volume: $0";
+          try {
+            const yesterday = new Date(Date.now() - 86400000).toISOString();
+            const res = await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions?select=amount,status,metadata&created_at=gte.${yesterday}&partner_id=eq.anny_ai_system`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                'apikey': env.SUPABASE_SERVICE_KEY,
+                'Content-Type': 'application/json'
+              }
+            });
+            if (res.ok) {
+              const txs = await res.json();
+              if (Array.isArray(txs) && txs.length > 0) {
+                let totalVolume = 0;
+                let winCount = 0;
+                for (const tx of txs) {
+                  totalVolume += Number(tx.amount) || 0;
+                  if (tx.metadata && tx.metadata.probability_of_profit > 90) {
+                    winCount++;
+                  }
+                }
+                const winRate = Math.round((winCount / txs.length) * 100);
+                yesterdayPerformance = `Win Rate: ${winRate}% | Total Volume: $${totalVolume}`;
+              }
+            } else {
+              console.error('Failed to fetch daily transactions from Supabase:', res.statusText);
+            }
+          } catch (error) {
+            console.error('Network failure fetching daily transactions:', error);
+          }
+
           const futurePlans = "Monitor BTC dominance and execute mean-reversion trades on ETH pairs.";
           const actionRequired = "None at this time.";
 
