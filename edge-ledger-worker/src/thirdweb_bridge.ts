@@ -1,6 +1,6 @@
 import { dispatchExecutiveBriefing, sendEmailItNotification, Env as BriefingEnv } from "./briefing_generator";
 import type { ExecutionContext, ScheduledEvent } from "@cloudflare/workers-types";
-import { jwtVerify } from "jose";
+import { jwtVerify, SignJWT } from "jose";
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -572,6 +572,36 @@ export default {
 
           let futurePlans = "System running autonomously. No immediate human intervention required.";
           let actionRequired = "System running autonomously. No immediate human intervention required.";
+
+          try {
+             const hitlResult = await env.GREEN_STATE.list({ prefix: "hitl_pending_" });
+             if (hitlResult && hitlResult.keys && hitlResult.keys.length > 0) {
+               actionRequired = "<strong>Human Approval Required</strong><br>The following trades require your approval:<br><ul>";
+               for (const key of hitlResult.keys) {
+                 try {
+                   const hitlPayloadRaw = await env.GREEN_STATE.get(key.name);
+                   if (hitlPayloadRaw) {
+                     const hitlPayload = JSON.parse(hitlPayloadRaw);
+                     const token = await new SignJWT({ trade_key: key.name })
+                       .setProtectedHeader({ alg: 'HS256' })
+                       .setExpirationTime('24h')
+                       .sign(new TextEncoder().encode(env.SUPABASE_JWT_SECRET));
+
+                     // Construct the approval URL (fallback domain since this is cron without a specific request)
+                     const workerUrl = 'https://green-machine-edge-ledger.axim-us.workers.dev';
+                     const approvalUrl = `${workerUrl}/api/admin/hitl-approve?token=${token}`;
+
+                     actionRequired += `<li><a href="${approvalUrl}">Approve Trade: ${hitlPayload.symbol} (${hitlPayload.action})</a></li>`;
+                   }
+                 } catch (e) {
+                   console.error("Failed to process HITL pending trade", e);
+                 }
+               }
+               actionRequired += "</ul>";
+             }
+          } catch(e) {
+             console.error("Failed to check HITL trades", e);
+          }
 
           try {
             const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
@@ -1442,6 +1472,86 @@ export default {
           }
         }
 
+        if (request.method === "GET" && url.pathname === "/api/admin/hitl-approve") {
+          const token = url.searchParams.get("token");
+          if (!token) {
+            return new Response("Missing token", { status: 400 });
+          }
+
+          try {
+            const { payload } = await jwtVerify(token, new TextEncoder().encode(env.SUPABASE_JWT_SECRET));
+            const tradeKey = payload.trade_key as string;
+
+            if (!tradeKey) {
+              return new Response("Invalid token payload", { status: 400 });
+            }
+
+            const tradeRaw = await env.GREEN_STATE.get(tradeKey);
+            if (!tradeRaw) {
+              return new Response("Trade expired or already approved.", { status: 404 });
+            }
+
+            const tradeData = JSON.parse(tradeRaw);
+            const execSize = tradeData.recommended_position_size || 0;
+
+            if (execSize > 0) {
+              await annyBackendPost(
+                "/backend/signal/invest",
+                {
+                  symbol: tradeData.symbol,
+                  action: tradeData.action,
+                  amount_usdt: execSize,
+                  stop_loss: 2,
+                  take_profit: 6
+                },
+                env,
+                ctx
+              );
+
+              // Log to DB
+              const ledgerEntry = {
+                partner_id: "anny_ai_system",
+                status: "executed",
+                amount: execSize,
+                currency: tradeData.symbol,
+                wallet_address: "anny_ai_system",
+                smart_contract_address: tradeData.action,
+                transaction_hash: `anny_ai_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                metadata: {
+                  probability_of_profit: tradeData.probability_of_profit,
+                  risk_level: tradeData.risk_level,
+                  hitl_approved: true
+                }
+              };
+
+              await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                  apikey: env.SUPABASE_SERVICE_KEY
+                },
+                body: JSON.stringify([ledgerEntry])
+              });
+
+              await env.GREEN_STATE.delete(tradeKey);
+
+              return new Response("<h1>Trade Approved Successfully</h1>", {
+                status: 200,
+                headers: { "Content-Type": "text/html" }
+              });
+            } else {
+               return new Response("Invalid execution size.", { status: 400 });
+            }
+          } catch (e) {
+            console.error("HITL Approval failed", e);
+            return new Response("<h1>Approval Failed or Token Invalid</h1>", {
+              status: 401,
+              headers: { "Content-Type": "text/html" }
+            });
+          }
+        }
+
         if (request.method === "GET" && url.pathname === "/api/anny-signals") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
@@ -1601,7 +1711,7 @@ Market Context:
               }
 
               const keyName = `anny_signal_log:${Date.now()}`;
-              const logData = {
+              const logData: any = {
                 symbol: symbol || "UNKNOWN",
                 action: action || "UNKNOWN",
                 price: price || 0,
@@ -1613,6 +1723,13 @@ Market Context:
                 risk_level: aiResult.risk_level,
                 approved: aiResult.approved
               };
+
+              let isBorderline = false;
+              if (!aiResult.approved && aiResult.probability_of_profit >= 75 && aiResult.probability_of_profit <= 89) {
+                isBorderline = true;
+                logData.requires_human_approval = true;
+                logData.recommended_position_size = aiResult.recommended_position_size || 0; // ensure size is saved
+              }
 
 
               if (aiResult.approved) {
@@ -1689,10 +1806,17 @@ Market Context:
 
               // Task 2: Quarantine if rejected
               if (!aiResult.approved) {
-                 const quarantineKeyName = `quarantine:trade:${Date.now()}`;
-                 await env.GREEN_STATE.put(quarantineKeyName, JSON.stringify(logData), {
-                    expirationTtl: 604800,
-                 });
+                 if (isBorderline) {
+                   const hitlKeyName = `hitl_pending_${Date.now()}`;
+                   await env.GREEN_STATE.put(hitlKeyName, JSON.stringify(logData), {
+                      expirationTtl: 86400,
+                   });
+                 } else {
+                   const quarantineKeyName = `quarantine:trade:${Date.now()}`;
+                   await env.GREEN_STATE.put(quarantineKeyName, JSON.stringify(logData), {
+                      expirationTtl: 604800,
+                   });
+                 }
               }
 
               await env.GREEN_STATE.put(keyName, JSON.stringify(logData), {
