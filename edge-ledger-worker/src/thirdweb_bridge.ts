@@ -537,6 +537,8 @@ export default {
           const balancesRaw = await env.GREEN_STATE.get("anny_exchange_balances", "json");
           const balances = balancesRaw || { status: "No balance data available." };
 
+          let winRate = 0;
+          let totalVolume = 0;
           let yesterdayPerformance = "Win Rate: 0% | Total Volume: $0";
           try {
             const yesterday = new Date(Date.now() - 86400000).toISOString();
@@ -551,7 +553,6 @@ export default {
             if (res.ok) {
               const txs = await res.json();
               if (Array.isArray(txs) && txs.length > 0) {
-                let totalVolume = 0;
                 let winCount = 0;
                 for (const tx of txs) {
                   totalVolume += Number(tx.amount) || 0;
@@ -559,7 +560,7 @@ export default {
                     winCount++;
                   }
                 }
-                const winRate = Math.round((winCount / txs.length) * 100);
+                winRate = Math.round((winCount / txs.length) * 100);
                 yesterdayPerformance = `Win Rate: ${winRate}% | Total Volume: $${totalVolume}`;
               }
             } else {
@@ -569,8 +570,29 @@ export default {
             console.error('Network failure fetching daily transactions:', error);
           }
 
-          const futurePlans = "Monitor BTC dominance and execute mean-reversion trades on ETH pairs.";
-          const actionRequired = "None at this time.";
+          let futurePlans = "System running autonomously. No immediate human intervention required.";
+          let actionRequired = "System running autonomously. No immediate human intervention required.";
+
+          try {
+            const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+              messages: [
+                {
+                  role: "system",
+                  content: "You are the AXiM Green Machine AI Strategy Consultant. Based on the past 24 hours of trading volume and win rate, generate a brief (max 2 sentences) strategic focus for the upcoming day. Also identify if any human-in-the-loop action is required."
+                },
+                {
+                  role: "user",
+                  content: `Past 24 hours: Win Rate: ${winRate}%, Total Volume: $${totalVolume}`
+                }
+              ]
+            });
+            if (aiResponse && aiResponse.response) {
+              futurePlans = aiResponse.response;
+              actionRequired = "Review AI strategic focus for potential adjustments."; // Provide a general fallback since AI might answer both in one blob
+            }
+          } catch (error) {
+            console.error('Workers AI forecasting failed:', error);
+          }
 
           const html = `
             <h1>AXiM Green Machine: Daily Executive Summary</h1>
