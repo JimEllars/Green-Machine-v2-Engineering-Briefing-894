@@ -34,11 +34,11 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
         // Check if the response follows the standardized { status, data, ... } wrapper
         if (data && data.status && Array.isArray(data.data) && data.data.length > 0) {
           localTelemetry = data.data[0];
-          setTelemetry(data.data[0]);
+          setTelemetry(prev => ({ ...prev, ...data.data[0] }));
         } else {
           // Fallback for non-standardized or legacy payload
           localTelemetry = data;
-          setTelemetry(data);
+          setTelemetry(prev => ({ ...prev, ...data }));
         }
         edgeSuccess = true;
       }
@@ -88,12 +88,13 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
 
        // Fallback mock data when edge is unreachable
        if (!localTelemetry) {
-           setTelemetry({
+           setTelemetry(prev => ({
+               ...prev,
                status: "fallback",
                edge_version: "v2.4.0-mock",
                environment: "local",
                offline: true
-           });
+           }));
        }
     }
 

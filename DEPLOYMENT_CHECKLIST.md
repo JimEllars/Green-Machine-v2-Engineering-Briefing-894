@@ -17,3 +17,8 @@ This document outlines the step-by-step procedure to follow when going live.
 ## 4. Monitor First AI-Executed Trade
 - Monitor the system logs and database entries for the first trade executed by the AI strategy.
 - Verify the trade details (symbol, quantity, price, action) match the AI's intended strategy and that no errors occurred during execution.
+
+## 5. Verify Telemetry and UI Updates
+- Monitor the System Diagnostics Panel to ensure real-time telemetry metrics are streaming successfully from the Cloudflare Edge Worker.
+- Inspect the StrategyConsultantTerminal and AffiliatePayoutGrid to verify the modern enterprise glassmorphic UI updates apply correctly across viewports.
+- Confirm that the AXiMLoginGate and background cron tasks remain functional.

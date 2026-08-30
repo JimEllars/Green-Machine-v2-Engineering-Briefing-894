@@ -145,7 +145,7 @@ export default function AffiliatePayoutGrid() {
   };
 
   return (
-        <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 shadow-2xl rounded-xl overflow-hidden flex flex-col h-full relative">
+        <div className="glass-panel hud-border rounded-xl overflow-hidden flex flex-col h-full relative">
       <AnimatePresence>
         {toastMessage && (
           <motion.div
