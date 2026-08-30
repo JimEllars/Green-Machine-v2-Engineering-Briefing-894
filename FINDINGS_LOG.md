@@ -134,3 +134,6 @@
   - Implements an `AbortController` timeout logic of 3.5s for the EmailIt fetch.
   - Retrieves the `ratelimit-daily-remaining` header from `EmailIt` and writes it to KV using `ctx.waitUntil`.
   - Trips the circuit breaker (by writing to KV with a TTL of 300 seconds) and triggers the Resend failover upon encountering HTTP timeouts, rate limits (429), suspension/blocks (403), or upstream service errors (5xx).
+## Sprint 8 Updates
+- Updated AI system prompt in `edge-ledger-worker/src/thirdweb_bridge.ts` to include dynamic position sizing rules based on `available_usdt`.
+- Implemented a strict math fail-safe ensuring `execSize` never exceeds 5% of `available_usdt` before trade execution to eliminate "insufficient balance" errors.
