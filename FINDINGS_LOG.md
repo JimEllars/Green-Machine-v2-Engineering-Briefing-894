@@ -108,3 +108,9 @@
 - Caches the `computeDebt` results locally in `localStorage` for cross-reload zero-latency UI population.
 - Updated `SystemDiagnosticsPanel.jsx` to render a new "Self-Funding Ratio (Live)" UI panel for each micro-app.
 - The new panel visualizes compute cost to revenue ratio using progress bars colored emerald (healthy), amber (warning), or rose (critical). Applied standard `.bg-slate-800/50` and border classes to align with the enterprise dashboard aesthetic.
+
+### Sprint 5: Passport SSO Centralization
+- **SSO Routing (Task 1):** Updated `AXiMLoginGate.jsx` to immediately redirect unauthenticated sessions to `https://passport.axim.us.com` appending the local origin callback as a dynamic parameter.
+- **Session Hydration (Task 2):** Implemented logic to detect the single-use `?token=` parameter, validate it via `supabase.auth.setSession({ access_token: token, refresh_token: token })`, and seamlessly hydrate the local React/Supabase session.
+- **Security Cleanup (Task 3):** Employed `window.history.replaceState()` to strip the secure token from the browser's history immediately after parsing to prevent token leakage.
+- **Verification:** Completed zero-downtime production deployment tests (lint and build) ensuring that standard platform authentication shifts successfully to the centralized AXiM Passport SSO hub without disrupting active users.
