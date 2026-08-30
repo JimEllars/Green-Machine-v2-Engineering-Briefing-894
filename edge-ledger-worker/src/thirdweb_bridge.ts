@@ -1496,46 +1496,97 @@ export default {
             const execSize = tradeData.recommended_position_size || 0;
 
             if (execSize > 0) {
-              await annyBackendPost(
-                "/backend/signal/invest",
-                {
+              try {
+                await annyBackendPost(
+                  "/backend/signal/invest",
+                  {
+                    symbol: tradeData.symbol,
+                    action: tradeData.action,
+                    amount_usdt: execSize,
+                    stop_loss: 2,
+                    take_profit: 6
+                  },
+                  env,
+                  ctx
+                );
+
+                // Log to DB
+                const ledgerEntry = {
+                  partner_id: "anny_ai_system",
+                  status: "executed",
+                  amount: execSize,
+                  currency: tradeData.symbol,
+                  wallet_address: "anny_ai_system",
+                  smart_contract_address: tradeData.action,
+                  transaction_hash: `anny_ai_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                  metadata: {
+                    probability_of_profit: tradeData.probability_of_profit,
+                    risk_level: tradeData.risk_level,
+                    hitl_approved: true
+                  }
+                };
+
+                await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                    apikey: env.SUPABASE_SERVICE_KEY
+                  },
+                  body: JSON.stringify([ledgerEntry])
+                });
+
+                await env.GREEN_STATE.delete(tradeKey);
+              } catch (executionError) {
+                console.error("AnnyTrade HITL execution failed:", executionError);
+
+                // Sprint 6: DLQ Logic Implementation & Supabase Audit Log
+                const failedTimestamp = Date.now();
+                const failedPayload = {
                   symbol: tradeData.symbol,
+                  amount: execSize,
                   action: tradeData.action,
-                  amount_usdt: execSize,
-                  stop_loss: 2,
-                  take_profit: 6
-                },
-                env,
-                ctx
-              );
+                  error_message: (executionError as Error).message,
+                  timestamp: failedTimestamp,
+                  source: "hitl_trade"
+                };
 
-              // Log to DB
-              const ledgerEntry = {
-                partner_id: "anny_ai_system",
-                status: "executed",
-                amount: execSize,
-                currency: tradeData.symbol,
-                wallet_address: "anny_ai_system",
-                smart_contract_address: tradeData.action,
-                transaction_hash: `anny_ai_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-                metadata: {
-                  probability_of_profit: tradeData.probability_of_profit,
-                  risk_level: tradeData.risk_level,
-                  hitl_approved: true
-                }
-              };
+                // Secure Write to KV Buffer Fallback
+                await env.GREEN_STATE.put('dlq:trade:' + failedTimestamp, JSON.stringify(failedPayload));
 
-              await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-                  apikey: env.SUPABASE_SERVICE_KEY
-                },
-                body: JSON.stringify([ledgerEntry])
-              });
+                // Supabase Audit Log
+                const failedLedgerEntry = {
+                  partner_id: "anny_ai_system",
+                  status: "failed",
+                  amount: execSize,
+                  currency: tradeData.symbol,
+                  wallet_address: "anny_ai_system",
+                  smart_contract_address: tradeData.action,
+                  transaction_hash: `anny_ai_failed_${failedTimestamp}_${Math.random().toString(36).substring(7)}`,
+                  metadata: {
+                    error: (executionError as Error).message,
+                    probability_of_profit: tradeData.probability_of_profit,
+                    risk_level: tradeData.risk_level,
+                    hitl_approved: true,
+                    dlq_buffered: true
+                  }
+                };
 
-              await env.GREEN_STATE.delete(tradeKey);
+                await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                    apikey: env.SUPABASE_SERVICE_KEY
+                  },
+                  body: JSON.stringify([failedLedgerEntry])
+                });
+
+                return new Response(`<h1>Trade Execution Failed</h1><p>The trade was approved but execution failed. Details have been logged to the DLQ. Error: ${(executionError as Error).message}</p>`, {
+                  status: 500,
+                  headers: { "Content-Type": "text/html", ...corsHeaders }
+                });
+              }
 
               return new Response("<h1>Trade Approved Successfully</h1>", {
                 status: 200,
@@ -1796,6 +1847,53 @@ Market Context:
                     aiResult.approved = false;
                     logData.approved = false;
                     (logData as any).execution_error = (executionError as Error).message;
+
+                    // Sprint 6: DLQ Logic Implementation & Supabase Audit Log
+                    const failedTimestamp = Date.now();
+                    const failedPayload = {
+                      symbol,
+                      amount: execSize,
+                      action,
+                      error_message: (executionError as Error).message,
+                      timestamp: failedTimestamp,
+                      source: "ai_trade"
+                    };
+
+                    ctx.waitUntil((async () => {
+                      try {
+                        // Secure Write to KV Buffer Fallback
+                        await env.GREEN_STATE.put('dlq:trade:' + failedTimestamp, JSON.stringify(failedPayload));
+
+                        // Supabase Audit Log
+                        const failedLedgerEntry = {
+                          partner_id: "anny_ai_system",
+                          status: "failed",
+                          amount: execSize,
+                          currency: symbol,
+                          wallet_address: "anny_ai_system",
+                          smart_contract_address: action,
+                          transaction_hash: `anny_ai_failed_${failedTimestamp}_${Math.random().toString(36).substring(7)}`,
+                          metadata: {
+                            error: (executionError as Error).message,
+                            probability_of_profit: aiResult.probability_of_profit,
+                            risk_level: aiResult.risk_level,
+                            dlq_buffered: true
+                          }
+                        };
+
+                        await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                            apikey: env.SUPABASE_SERVICE_KEY
+                          },
+                          body: JSON.stringify([failedLedgerEntry])
+                        });
+                      } catch (dlqErr) {
+                        console.error("Failed to write to DLQ or Audit Log:", dlqErr);
+                      }
+                    })());
                   }
                 } else {
                   console.warn("Trade approved but insufficient balance or recommended size 0");
