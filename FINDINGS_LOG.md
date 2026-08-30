@@ -114,3 +114,9 @@
 - **Session Hydration (Task 2):** Implemented logic to detect the single-use `?token=` parameter, validate it via `supabase.auth.setSession({ access_token: token, refresh_token: token })`, and seamlessly hydrate the local React/Supabase session.
 - **Security Cleanup (Task 3):** Employed `window.history.replaceState()` to strip the secure token from the browser's history immediately after parsing to prevent token leakage.
 - **Verification:** Completed zero-downtime production deployment tests (lint and build) ensuring that standard platform authentication shifts successfully to the centralized AXiM Passport SSO hub without disrupting active users.
+
+### Sprint 6: DLQ Resilience & On-Chain Failure Buffering
+- **DLQ Fallback on AnnyTrade Execution:** Hardened `edge-ledger-worker/src/thirdweb_bridge.ts` by wrapping primary `annyBackendPost` execution blocks (for both fully autonomous AI trades and HITL approved manual trades) in robust `try/catch` statements.
+- **KV Buffer Payload Generation:** Upon catching execution faults, the code now dynamically constructs a strictly structured JSON fallback payload containing the `symbol`, `amount`, `action`, `error_message`, `timestamp`, and the originating `source` (AI or HITL).
+- **Secure Buffer Write:** Executed a fail-open write to the Cloudflare KV namespace using `await env.GREEN_STATE.put('dlq:trade:' + Date.now(), JSON.stringify(failedPayload))` ensuring no volatile transaction data is dropped on Arbitrum/AnnyTrade timeout.
+- **Supabase Fault Auditing:** Supplemented the KV buffering sequence with a synchronous REST upsert (`fetch` to `public.blockchain_transactions`) appending the generated error strings into the metadata structure, and marking the official ledger `status` column as 'failed'.
