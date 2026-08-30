@@ -7,6 +7,7 @@ export interface Env {
   ANNY_EMAIL?: string;
   ANNY_PASSWORD?: string;
   EMAILIT_API_KEY?: string;
+  RESEND_API_KEY?: string;
   ORACLE_API_KEY: string;
   AXIM_INTERNAL_KEY: string;
   SUPABASE_URL: string;
@@ -18,6 +19,59 @@ export interface Env {
   AI: any;
 }
 
+
+export async function sendViaResend(
+  params: {
+    to: string | string[];
+    cc?: string | string[];
+    subject: string;
+    html: string;
+    meta?: Record<string, string>;
+    _retryId?: string;
+  },
+  env: Env,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  const RESEND_API_KEY = env.RESEND_API_KEY || "TEST_RESEND_KEY";
+  const endpoint = "https://api.resend.com/emails";
+
+  console.log(`Failing over to Resend. Reason: ${reason}`);
+
+  const payload: any = {
+    from: "noreply@axim.us.com",
+    to: Array.isArray(params.to) ? params.to : [params.to],
+    subject: params.subject,
+    html: params.html,
+  };
+
+  if (params.cc) {
+    payload.cc = Array.isArray(params.cc) ? params.cc : [params.cc];
+  }
+
+  if (params.meta) {
+    payload.tags = Object.entries(params.meta).map(([name, value]) => ({ name, value }));
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (response.ok) {
+      return { success: true, error: undefined };
+    }
+    const errorBody = await response.text();
+    return { success: false, error: `Resend returned ${response.status} ${response.statusText}: ${errorBody}` };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 export async function sendEmailItNotification(
   params: {
     to: string;
@@ -27,13 +81,32 @@ export async function sendEmailItNotification(
     _retryId?: string;
   },
   env: Env,
+  ctx?: any
 ): Promise<{ success: boolean; error?: string }> {
+  // Check circuit breaker and daily limits in KV
+  try {
+    const circuitBreakerStr = await env.GREEN_STATE.get("emailit_circuit_breaker");
+    if (circuitBreakerStr) {
+      return await sendViaResend(params, env, "Circuit breaker active for EmailIt");
+    }
+
+    const dailyRemainingStr = await env.GREEN_STATE.get("emailit_daily_remaining");
+    if (dailyRemainingStr !== null && parseInt(dailyRemainingStr, 10) <= 0) {
+      return await sendViaResend(params, env, "EmailIt daily sending quota exhausted");
+    }
+  } catch (e) {
+    console.error("Failed to read circuit breaker state from KV", e);
+  }
+
   const EMAILIT_API_KEY = env.EMAILIT_API_KEY || "TEST_KEY";
-  const endpoint = "https://api.emailit.com/v1/emails";
+  const endpoint = "https://api.emailit.com/v2/emails";
   let lastError;
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3500);
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -47,20 +120,55 @@ export async function sendEmailItNotification(
           html: params.html,
           from: "noreply@axim.us.com",
         }),
+        signal: controller.signal as any,
       });
+
+      clearTimeout(timeout);
+
+      // Inspect response headers
+      const remaining = response.headers.get("ratelimit-daily-remaining");
+      if (remaining !== null) {
+        const putPromise = env.GREEN_STATE.put("emailit_daily_remaining", remaining);
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(putPromise);
+        } else {
+          await putPromise;
+        }
+      }
 
       if (response.ok) {
         return { success: true, error: undefined };
       }
+
+      // Failover triggers
+      if (response.status === 429 || response.status === 403 || response.status >= 500) {
+        const putCircuit = env.GREEN_STATE.put("emailit_circuit_breaker", "open", { expirationTtl: 300 });
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(putCircuit);
+        } else {
+          await putCircuit;
+        }
+        return await sendViaResend(params, env, `EmailIt returned HTTP ${response.status}`);
+      }
+
       lastError = new Error(
         `EmailIt returned ${response.status} ${response.statusText}`,
       );
-    } catch (e) {
+    } catch (e: any) {
+      if (e.name === 'AbortError' || e.message.includes('timeout') || e.message.includes('network')) {
+        const putCircuit = env.GREEN_STATE.put("emailit_circuit_breaker", "open", { expirationTtl: 300 });
+        if (ctx && ctx.waitUntil) {
+          ctx.waitUntil(putCircuit);
+        } else {
+          await putCircuit;
+        }
+        return await sendViaResend(params, env, "EmailIt connection timeout");
+      }
       lastError = e;
       await new Promise((resolve) => setTimeout(resolve, attempt * 500));
     }
   }
-  throw lastError;
+  return { success: false, error: lastError?.message || "Unknown error" };
 }
 
 export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummaryText: string = "AI Financial Audit unavailable.") {
@@ -245,6 +353,7 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
         html: html,
       },
       env,
+      ctx
     );
 
     if (dispatchResult.success) {

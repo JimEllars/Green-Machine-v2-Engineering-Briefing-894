@@ -120,3 +120,17 @@
 - **KV Buffer Payload Generation:** Upon catching execution faults, the code now dynamically constructs a strictly structured JSON fallback payload containing the `symbol`, `amount`, `action`, `error_message`, `timestamp`, and the originating `source` (AI or HITL).
 - **Secure Buffer Write:** Executed a fail-open write to the Cloudflare KV namespace using `await env.GREEN_STATE.put('dlq:trade:' + Date.now(), JSON.stringify(failedPayload))` ensuring no volatile transaction data is dropped on Arbitrum/AnnyTrade timeout.
 - **Supabase Fault Auditing:** Supplemented the KV buffering sequence with a synchronous REST upsert (`fetch` to `public.blockchain_transactions`) appending the generated error strings into the metadata structure, and marking the official ledger `status` column as 'failed'.
+
+### Sprint 7: EmailIt Automated Fallback Architecture
+
+**Goal**: Implement an automated failover strategy within the executive briefing generator for robust transactional email delivery.
+
+**Implementation**:
+- Updated the `Env` interface in `edge-ledger-worker/src/briefing_generator.ts` to include `RESEND_API_KEY`.
+- Implemented `sendViaResend`, which maps the `EmailIt` payload structure (including converting the `meta` key-value object to Resend's `tags` array of `{name, value}` objects) to the `Resend API v1` structure.
+- Updated `sendEmailItNotification` with the following mechanisms:
+  - Fetches the `emailit_daily_remaining` count and `emailit_circuit_breaker` state from the `GREEN_STATE` KV namespace.
+  - Automatically divers to Resend if `emailit_daily_remaining` is <= 0 or the circuit breaker is open.
+  - Implements an `AbortController` timeout logic of 3.5s for the EmailIt fetch.
+  - Retrieves the `ratelimit-daily-remaining` header from `EmailIt` and writes it to KV using `ctx.waitUntil`.
+  - Trips the circuit breaker (by writing to KV with a TTL of 300 seconds) and triggers the Resend failover upon encountering HTTP timeouts, rate limits (429), suspension/blocks (403), or upstream service errors (5xx).
