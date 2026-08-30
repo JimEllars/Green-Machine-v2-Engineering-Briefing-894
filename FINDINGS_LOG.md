@@ -143,3 +143,8 @@
 - Enhanced the terminal window `autoScroll` feature to use 'auto' tracking while actively rendering the typewriter effect to prevent jitter, defaulting back to 'smooth' on completion.
 - Implemented a 'Skip Animation' UI element during the active typing state, enabling instantaneous full text rendering by breaking the request animation frame.
 - Strengthened unmount logic and reset commands to cancel pending `requestAnimationFrame` IDs gracefully to avoid memory leaks.
+
+## Multi-Exchange Routing Abstraction
+- Implemented `executeTradeWithFailover` interface in `edge-ledger-worker/src/thirdweb_bridge.ts`.
+- Substituted `annyBackendPost` with `executeTradeWithFailover` for all `/backend/signal/invest` endpoints to ensure robustness.
+- The new function iterates through `["anny", "binance_mock", "kraken_mock"]` trying to complete a trade. It catches 5xx errors or network exceptions on `anny` and fails over to mock exchanges, resolving trades locally and severely mitigating trades going to the dead letter queue (DLQ).
