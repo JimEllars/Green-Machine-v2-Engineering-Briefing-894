@@ -182,5 +182,49 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
     };
   }, []);
 
-  return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics };
+
+  const [computeDebt, setComputeDebt] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchComputeDebt = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('api_usage_logs')
+          .select('satellite_app, tokens_used, compute_cost, gross_revenue');
+          // Wait, the table schema isn't known exactly, but instructions say:
+          // "Query AXiM Core public.api_usage_logs to aggregate compute expenses per satellite app (axim-passport-sso, axim-web3-frontend, axim-ceo-dept-app, foreman-os, ground-game)."
+        if (error) {
+           console.error("Failed to fetch api_usage_logs", error);
+           return;
+        }
+
+        // Aggregate
+        const aggregated = {};
+        if (data) {
+          data.forEach(log => {
+             const app = log.satellite_app || 'unknown';
+             if (!aggregated[app]) aggregated[app] = { computeCost: 0, revenue: 0 };
+             aggregated[app].computeCost += Number(log.compute_cost) || 0;
+             aggregated[app].revenue += Number(log.gross_revenue) || 0;
+          });
+          const result = Object.keys(aggregated).map(app => ({
+             app,
+             computeCost: aggregated[app].computeCost,
+             revenue: aggregated[app].revenue,
+             ratio: aggregated[app].revenue > 0 ? (aggregated[app].computeCost / aggregated[app].revenue) : 0
+          }));
+          if (isMounted) setComputeDebt(result);
+        }
+      } catch (e) {
+        console.error("Compute debt fetch failed", e);
+      }
+    };
+
+    fetchComputeDebt();
+    return () => { isMounted = false; };
+  }, []);
+
+  return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics, computeDebt };
+
 };

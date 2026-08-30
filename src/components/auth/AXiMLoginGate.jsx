@@ -3,6 +3,23 @@ import { supabase } from '../../supabaseClient';
 import SafeIcon from '../../common/SafeIcon';
 
 const AXiMLoginGate = () => {
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+
+    if (token) {
+      // Simulate session hydration
+      window.localStorage.setItem('sb-token', token);
+
+      // Strip token from history
+      const newUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+
+      // Force reload or state update to reflect authenticated state
+      window.location.reload();
+    }
+  }, []);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -28,22 +45,14 @@ const AXiMLoginGate = () => {
     }
   };
 
-  const handleSSOLogin = async (e) => {
+
+  const handleSSOLogin = (e) => {
     e.preventDefault();
     setIsSSOLoading(true);
-    setErrorMsg('');
-
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'azure'
-      });
-
-      if (error) throw error;
-    } catch (error) {
-      setErrorMsg(error.message || 'SSO Authentication failed');
-      setIsSSOLoading(false);
-    }
+    const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
+    window.location.href = `https://passport.axim.us.com?redirect=${redirectUrl}`;
   };
+
 
   return (
     <div className="min-h-screen bg-black text-emerald-400 flex items-center justify-center p-4">

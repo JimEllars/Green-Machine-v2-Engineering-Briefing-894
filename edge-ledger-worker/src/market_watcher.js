@@ -92,6 +92,29 @@ export async function syncMarketCache(env) {
     }
 }
 export async function fetchHealth(env, request, ctx) {
+    ctx.waitUntil((async () => {
+        try {
+            if (env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY) {
+                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                        apikey: env.SUPABASE_SERVICE_KEY,
+                    },
+                    body: JSON.stringify({
+                        endpoint: "/api/health",
+                        status_code: 200,
+                        error_message: null,
+                        count: 1,
+                    }),
+                });
+            }
+        }
+        catch (e) {
+            console.error("Failed to log to api_usage_logs from health check:", e);
+        }
+    })());
     const corsHeaders = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Axim-Signature",
