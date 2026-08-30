@@ -129,6 +129,33 @@ serve(async (req: Request) => {
       created_at: new Date().toISOString()
     });
 
+
+    // 5. Dispatch Real-Time CFO Department Ledger Feed
+    try {
+      const cfoAppUrl = Deno.env.get('CFO_APP_URL');
+      if (cfoAppUrl) {
+        await fetch(`${cfoAppUrl}/api/v1/cfo/ledger-feed`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Axim-Signature': Deno.env.get('VITE_AXIM_INTERNAL_KEY') || ''
+          },
+          body: JSON.stringify({
+            tx_hash: "audit_" + new Date().getTime(), // Audit runs don't have a specific tx_hash, use pseudo
+            network: "Arbitrum",
+            asset: "USDC/AXIM",
+            amount: 0,
+            gas_cost_usd: 0,
+            status: "CONFIRMED",
+            event: "daily_audit",
+            node_health_index: nodeHealthIndex
+          })
+        });
+      }
+    } catch (e) {
+      console.error("Failed to notify CFO App", e);
+    }
+
     return new Response(JSON.stringify({ success: true, routed_to: provider }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } });
 
   } catch (error: any) {

@@ -208,16 +208,18 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     try {
-      const response = await fetch(`${getWorkerUrl()}/api/v1/strategy/consult`, {
+      const systemPrompt = "You are the AXiM Green Machine Financial Consultant. Analyze financial plans, tokenomics, yield models, and risk parameters. Return structured JSON with { projected_roi, break_even_months, risk_score, recommendations, capital_efficiency_score }.";
+
+      const response = await fetch(`${import.meta.env.VITE_AXIM_CORE_API_URL || getWorkerUrl()}/llm-proxy`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
         },
         body: JSON.stringify({
-          prompt: latestAuditContext ? `[AUDIT CONTEXT]\n${latestAuditContext}\n\n[PROMPT]\n${promptInput}` : promptInput,
-          session_id: sessionId,
-          model_preference: modelPreference
+          provider: modelPreference === "precise" ? "claude" : "deepseek",
+          prompt: `${systemPrompt}\n\n${latestAuditContext ? `[AUDIT CONTEXT]\n${latestAuditContext}\n\n` : ''}[PROMPT]\n${promptInput}`,
+          session_id: sessionId
         }),
         signal: controller.signal
       }).catch(err => {
@@ -635,6 +637,43 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
                   </div>
                 )}
              </div>
+           </div>
+        )}
+
+
+        {/* Financial Metric Cards for new LLM schema */}
+        {!isTyping && parsedStrategyData && parsedStrategyData.projected_roi !== undefined && (
+           <div className="mb-6 mt-4 grid grid-cols-2 gap-4">
+              <div className="bg-slate-900/80 border border-emerald-500/30 rounded-lg p-4 flex flex-col backdrop-blur-sm shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+                <span className="text-[10px] uppercase text-slate-400 tracking-wider font-bold mb-1">Projected ROI</span>
+                <span className="text-xl font-bold text-emerald-400">{parsedStrategyData.projected_roi}</span>
+              </div>
+              <div className="bg-slate-900/80 border border-blue-500/30 rounded-lg p-4 flex flex-col backdrop-blur-sm shadow-[0_0_15px_rgba(59,130,246,0.1)]">
+                <span className="text-[10px] uppercase text-slate-400 tracking-wider font-bold mb-1">Break Even</span>
+                <span className="text-xl font-bold text-blue-400">{parsedStrategyData.break_even_months} Months</span>
+              </div>
+              <div className="bg-slate-900/80 border border-amber-500/30 rounded-lg p-4 flex flex-col backdrop-blur-sm shadow-[0_0_15px_rgba(245,158,11,0.1)]">
+                <span className="text-[10px] uppercase text-slate-400 tracking-wider font-bold mb-1">Risk Score</span>
+                <span className="text-xl font-bold text-amber-400">{parsedStrategyData.risk_score}/10</span>
+              </div>
+              <div className="bg-slate-900/80 border border-purple-500/30 rounded-lg p-4 flex flex-col backdrop-blur-sm shadow-[0_0_15px_rgba(168,85,247,0.1)]">
+                <span className="text-[10px] uppercase text-slate-400 tracking-wider font-bold mb-1">Cap Efficiency</span>
+                <span className="text-xl font-bold text-purple-400">{parsedStrategyData.capital_efficiency_score}/100</span>
+              </div>
+
+              {parsedStrategyData.recommendations && Array.isArray(parsedStrategyData.recommendations) && (
+                <div className="col-span-2 bg-slate-900/80 border border-slate-700 shadow-xl backdrop-blur-xl rounded-lg p-4">
+                  <span className="text-slate-400 uppercase text-[10px] tracking-wide font-bold block mb-2">Strategic Recommendations</span>
+                  <ul className="space-y-2">
+                    {parsedStrategyData.recommendations.map((rec, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-slate-300">
+                        <span className="text-emerald-500/70 mt-0.5">▹</span>
+                        <span>{rec}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
            </div>
         )}
 

@@ -179,11 +179,12 @@ const TradeExecutionLedger = () => {
                   <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-12"></div></td>
                   <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-16 ml-auto"></div></td>
                   <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-12 ml-auto"></div></td>
+                  <td className="px-4 py-4"><div className="h-4 bg-zinc-800 rounded w-16 ml-auto"></div></td>
                 </tr>
               ))
             ) : trades.length === 0 ? (
               <tr>
-                <td colSpan="5" className="px-4 py-12 text-center text-zinc-500 text-sm">
+                <td colSpan="6" className="px-4 py-12 text-center text-zinc-500 text-sm">
                   <div className="flex flex-col items-center justify-center space-y-2">
                     <ShieldCheckIcon className="h-8 w-8 text-zinc-600 mb-2" />
                     <p>No recent AI executions found.</p>
@@ -229,6 +230,20 @@ const TradeExecutionLedger = () => {
                         {confidence}%
                         <ShieldCheckIcon className="h-3.5 w-3.5" />
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {trade.transaction_hash ? (
+                        <a
+                          href={`https://arbiscan.io/tx/${trade.transaction_hash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 font-mono text-xs underline"
+                        >
+                          {trade.transaction_hash.substring(0, 6)}...{trade.transaction_hash.substring(trade.transaction_hash.length - 4)}
+                        </a>
+                      ) : (
+                        <span className="text-zinc-600 font-mono text-xs">Pending</span>
+                      )}
                     </td>
                   </tr>
                 );
