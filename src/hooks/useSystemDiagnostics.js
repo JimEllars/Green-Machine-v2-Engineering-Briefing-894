@@ -3,6 +3,37 @@ import { supabase } from '../supabaseClient';
 import { getWorkerUrl } from '../utils/workerUrl';
 
 import { getSessionState } from '../supabaseClient';
+
+export const dispatchTelemetry = async (eventType, payload) => {
+  try {
+    const apiUrl = import.meta.env.VITE_AXIM_CORE_API_URL;
+    if (!apiUrl) return;
+
+    // Sanitize transaction payloads
+    const sanitizedPayload = {
+      tx_hash: payload.tx_hash,
+      asset_pair: payload.asset_pair,
+      volume: payload.volume,
+      ...payload
+    };
+
+    await fetch(`${apiUrl}/api/v1/telemetry/micro-app`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || ''
+      },
+      body: JSON.stringify({
+        app_id: "green-machine",
+        event_type: eventType,
+        data: sanitizedPayload
+      })
+    });
+  } catch (error) {
+    console.error("Telemetry dispatch failed:", error);
+  }
+};
+
 export const useSystemDiagnostics = (isAuthenticated = true) => {
   const [telemetry, setTelemetry] = useState(null);
   const [telemetryHistory, setTelemetryHistory] = useState([]);
@@ -60,8 +91,14 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
       console.error('DB health check failed', e);
     }
 
+
     currentLatency = Math.round(performance.now() - start);
     setLatencyMs(currentLatency);
+
+    if (edgeSuccess || dbSuccess) {
+      dispatchTelemetry("market.polled", { edgeLatencyMs: localTelemetry?.latencyMs || currentLatency, dbLatencyMs, timestamp: new Date().toISOString() });
+    }
+
 
     const newTelemetryEvent = {
        timestamp: new Date().toISOString(),

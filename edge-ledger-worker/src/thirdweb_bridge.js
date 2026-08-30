@@ -16,6 +16,35 @@ export function annyAuthHeaders(auth) {
         ? { "session-token": auth.token }
         : { Authorization: `Bearer ${auth.token}` };
 }
+export async function dispatchTelemetry(env, eventType, payload) {
+    try {
+        const apiUrl = env.VITE_AXIM_CORE_API_URL || "https://green-machine.axim.com"; // Fallback if env var is missing in worker
+        if (!apiUrl)
+            return;
+        // Sanitize transaction payloads
+        const sanitizedPayload = {
+            tx_hash: payload.tx_hash,
+            asset_pair: payload.asset_pair,
+            volume: payload.volume,
+            ...payload
+        };
+        await fetch(`${apiUrl}/api/v1/telemetry/micro-app`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Axim-Signature': env.AXIM_INTERNAL_KEY || ''
+            },
+            body: JSON.stringify({
+                app_id: "green-machine",
+                event_type: eventType,
+                data: sanitizedPayload
+            })
+        });
+    }
+    catch (error) {
+        console.error("Telemetry dispatch failed:", error);
+    }
+}
 export async function getOrRefreshAnnySessionToken(env, ctx) {
     if (env.ANNY_AUTH_TOKEN)
         return env.ANNY_AUTH_TOKEN;
@@ -1222,6 +1251,7 @@ export default {
                                     },
                                     body: JSON.stringify([ledgerEntry])
                                 });
+                                await dispatchTelemetry(env, "trade.executed", { tx_hash: ledgerEntry.transaction_hash, asset_pair: ledgerEntry.token_symbol || ledgerEntry.asset || ledgerEntry.currency || "UNKNOWN", volume: ledgerEntry.amount });
                                 await env.GREEN_STATE.delete(tradeKey);
                             }
                             catch (executionError) {
@@ -1374,7 +1404,7 @@ export default {
                             const aiPrompt = `You are an ultra-conservative, ruthless risk manager for live capital. Analyze this trade signal against current market trends.
 Return a JSON object with 'probability_of_profit' (0-100), 'risk_level' (Low/Medium/High), 'approved' (boolean), and 'recommended_position_size' (number in USDT).
 You must ONLY approve (true) if the probability of profit is strictly > 90%, the risk_level is 'Low', and the 24h Trend CFO State aligns with the requested action. Protect capital at all costs.
-Calculate 'recommended_position_size' based on a STRICT max 5% portfolio risk of the Available Balance. If balance is 0 or too low, recommend 0 and do not approve.
+Calculate a recommended_position_size dynamically based on market risk. If confidence is >90% and risk is Low, deploy up to a strict maximum of 5% of the ${available_usdt}. If confidence is lower or risk is Medium/High, reduce the size to 1-2%. If ${available_usdt} is under $10, recommend 0.
 
 Trade Signal:
 - Asset: ${symbol}
@@ -1442,8 +1472,8 @@ Market Context:
                             if (aiResult.approved) {
                                 let execSize = aiResult.recommended_position_size || 0;
                                 // Safety check: ensure size is within available balance
-                                if (execSize > available_usdt) {
-                                    execSize = available_usdt;
+                                if (execSize > (available_usdt * 0.05)) {
+                                    execSize = available_usdt * 0.05;
                                 }
                                 if (execSize > 0) {
                                     try {
@@ -1480,6 +1510,7 @@ Market Context:
                                                     },
                                                     body: JSON.stringify([ledgerEntry])
                                                 });
+                                                await dispatchTelemetry(env, "trade.executed", { tx_hash: ledgerEntry.transaction_hash, asset_pair: ledgerEntry.token_symbol || ledgerEntry.asset || ledgerEntry.currency || "UNKNOWN", volume: ledgerEntry.amount });
                                                 const subject = `AXiM Alert: Live Capital Deployed (${symbol})`;
                                                 const body = `Action: ${action}\nPosition Size: ${execSize} USDT\nStop-Loss Limits: 2\nAI Confidence: ${aiResult.probability_of_profit}%`;
                                                 await sendEmailItNotification({ to: "james.ellars@axim.us.com", subject, html: body }, env);

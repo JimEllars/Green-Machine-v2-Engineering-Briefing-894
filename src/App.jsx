@@ -790,9 +790,13 @@ const handleSyncKV = async () => {
     );
   }
 
-  if (authState !== 'Authenticated') {
+
+  const isAuthorized = userEmail && ["jrellars@gmail.com", "authorized@axim.us.com"].includes(userEmail);
+
+  if (authState !== 'Authenticated' || !isAuthorized) {
     return <AXiMLoginGate />;
   }
+
 
   return (
     <div className="min-h-screen bg-zinc-950 text-slate-200 font-sans selection:bg-emerald-500/30">

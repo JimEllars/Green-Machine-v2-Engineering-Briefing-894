@@ -15,9 +15,22 @@ const AXiMLoginGate = () => {
           refresh_token: token,
         });
 
+
         if (error) {
            console.error("Session hydration failed:", error);
+        } else {
+           // Validate email against whitelist
+           const { data: sessionData } = await supabase.auth.getSession();
+           const email = sessionData?.session?.user?.email;
+           const whitelist = ["jrellars@gmail.com", "authorized@axim.us.com"];
+           if (email && !whitelist.includes(email)) {
+             await supabase.auth.signOut();
+             alert("Unauthorized email address. Only internal treasury managers are allowed.");
+             window.location.href = `https://passport.axim.us.com?redirect=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
+             return;
+           }
         }
+
 
         // Strip token from history to prevent token leakage
         const newUrl = window.location.origin + window.location.pathname;

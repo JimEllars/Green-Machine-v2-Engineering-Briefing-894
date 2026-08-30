@@ -13,6 +13,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 import { syncMarketCache } from "./market_watcher";
 
 export interface Env {
+  VITE_AXIM_CORE_API_URL?: string;
   SUPABASE_READ_URL?: string;
   ANNY_AUTH_MODE?: "session-token" | "bearer-pat";
   ANNY_AUTH_TOKEN?: string;
@@ -44,6 +45,37 @@ export function annyAuthHeaders(auth: AnnyAuthConfig): Record<string, string> {
   return auth.mode === "session-token"
     ? { "session-token": auth.token }
     : { Authorization: `Bearer ${auth.token}` };
+}
+
+
+export async function dispatchTelemetry(env: Env, eventType: string, payload: any) {
+  try {
+    const apiUrl = env.VITE_AXIM_CORE_API_URL || "https://green-machine.axim.com"; // Fallback if env var is missing in worker
+    if (!apiUrl) return;
+
+    // Sanitize transaction payloads
+    const sanitizedPayload = {
+      tx_hash: payload.tx_hash,
+      asset_pair: payload.asset_pair,
+      volume: payload.volume,
+      ...payload
+    };
+
+    await fetch(`${apiUrl}/api/v1/telemetry/micro-app`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Axim-Signature': env.AXIM_INTERNAL_KEY || ''
+      },
+      body: JSON.stringify({
+        app_id: "green-machine",
+        event_type: eventType,
+        data: sanitizedPayload
+      })
+    });
+  } catch (error) {
+    console.error("Telemetry dispatch failed:", error);
+  }
 }
 
 export async function getOrRefreshAnnySessionToken(
@@ -1535,6 +1567,7 @@ export default {
                   },
                   body: JSON.stringify([ledgerEntry])
                 });
+                  await dispatchTelemetry(env, "trade.executed", { tx_hash: ledgerEntry.transaction_hash, asset_pair: (ledgerEntry as any).token_symbol || (ledgerEntry as any).asset || (ledgerEntry as any).currency || "UNKNOWN", volume: ledgerEntry.amount });
 
                 await env.GREEN_STATE.delete(tradeKey);
               } catch (executionError) {
@@ -1833,6 +1866,7 @@ Market Context:
                           },
                           body: JSON.stringify([ledgerEntry])
                         });
+                          await dispatchTelemetry(env, "trade.executed", { tx_hash: ledgerEntry.transaction_hash, asset_pair: (ledgerEntry as any).token_symbol || (ledgerEntry as any).asset || (ledgerEntry as any).currency || "UNKNOWN", volume: ledgerEntry.amount });
 
                         const subject = `AXiM Alert: Live Capital Deployed (${symbol})`;
                         const body = `Action: ${action}\nPosition Size: ${execSize} USDT\nStop-Loss Limits: 2\nAI Confidence: ${aiResult.probability_of_profit}%`;
