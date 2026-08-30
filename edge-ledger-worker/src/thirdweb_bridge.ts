@@ -23,6 +23,7 @@ export interface Env {
   AXIM_INTERNAL_KEY: string;
   SUPABASE_URL: string;
   SUPABASE_SERVICE_KEY: string;
+  SUPABASE_SERVICE_ROLE_KEY: string;
   SUPABASE_JWT_SECRET: string;
   GREEN_STATE: any; // DLQ Namespace
   MARKET_CACHE: any;
@@ -1784,7 +1785,7 @@ Market Context:
 
                         const subject = `AXiM Alert: Live Capital Deployed (${symbol})`;
                         const body = `Action: ${action}\nPosition Size: ${execSize} USDT\nStop-Loss Limits: 2\nAI Confidence: ${aiResult.probability_of_profit}%`;
-                        await sendEmailItNotification(env as any, "james.ellars@axim.us.com", subject, body);
+                        await sendEmailItNotification({to: "james.ellars@axim.us.com", subject, html: body}, env as any);
                       } catch (err) {
                         console.error("Failed to sync ledger or send email alert:", err);
                       }

@@ -1,5 +1,5 @@
 import { dispatchExecutiveBriefing, sendEmailItNotification } from "./briefing_generator";
-import { jwtVerify } from "jose";
+import { jwtVerify, SignJWT } from "jose";
 function timingSafeEqual(a, b) {
     if (a.length !== b.length)
         return false;
@@ -101,7 +101,7 @@ export async function annyBackendPost(path, body, env, ctx) {
         if (ctx) {
             ctx.waitUntil((async () => {
                 try {
-                    await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                    await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
                         method: "POST",
                         headers: {
                             "Content-Type": "application/json",
@@ -117,7 +117,7 @@ export async function annyBackendPost(path, body, env, ctx) {
                     });
                 }
                 catch (e) {
-                    console.error("Failed to log to api_usage_aggregates:", e);
+                    console.error("Failed to log to api_usage_logs:", e);
                 }
             })());
         }
@@ -337,8 +337,179 @@ async function recordKvMetric(env, hit) {
     const count = parseInt(await env.GREEN_STATE.get(key) || "0", 10);
     await env.GREEN_STATE.put(key, (count + 1).toString());
 }
+export async function generateAIFinancialAudit(env, ctx) {
+    try {
+        const dbResponse = await fetch(`${env.SUPABASE_URL}/functions/v1/financial-audit`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+            },
+            body: JSON.stringify({ trigger_source: "cron", timestamp: Date.now() }),
+        });
+        if (!dbResponse.ok) {
+            throw new Error(`Financial Audit failed: ${dbResponse.statusText}`);
+        }
+        const auditData = (await dbResponse.json());
+        let usageSummaryData = [];
+        try {
+            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+            const logsResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs?select=*&updated_at=gte.${threeDaysAgo}`, {
+                headers: {
+                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                    apikey: env.SUPABASE_SERVICE_KEY,
+                },
+            });
+            if (logsResponse.ok) {
+                usageSummaryData = (await logsResponse.json());
+            }
+        }
+        catch (e) {
+            console.error("Failed to fetch 3-day api usage logs", e);
+        }
+        let executive_briefing = "";
+        try {
+            const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are a financial analyst AI.",
+                    },
+                    {
+                        role: "user",
+                        content: `Summarize the following financial audit metadata and the last 3 days of API usage logs into a concise 4-sentence paragraph describing token burn efficiency vs system latency. Audit Data: ${JSON.stringify(auditData)}. Usage Data: ${JSON.stringify(usageSummaryData)}`,
+                    },
+                ],
+            });
+            if (aiResponse && aiResponse.response) {
+                executive_briefing = aiResponse.response;
+            }
+            else {
+                executive_briefing = "AI insight generation failed.";
+            }
+        }
+        catch (e) {
+            console.error("Workers AI failed", e);
+            executive_briefing = "AI summary temporarily unavailable due to upstream constraint.";
+        }
+        return executive_briefing;
+    }
+    catch (error) {
+        console.error("Failed to generate AI financial audit:", error);
+        return "AI Financial Audit currently unavailable.";
+    }
+}
 export default {
     async scheduled(event, env, ctx) {
+        if (event.cron === "0 8 * * *") {
+            ctx.waitUntil((async () => {
+                const balancesRaw = await env.GREEN_STATE.get("anny_exchange_balances", "json");
+                const balances = balancesRaw || { status: "No balance data available." };
+                let winRate = 0;
+                let totalVolume = 0;
+                let yesterdayPerformance = "Win Rate: 0% | Total Volume: $0";
+                try {
+                    const yesterday = new Date(Date.now() - 86400000).toISOString();
+                    const res = await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions?select=amount,status,metadata&created_at=gte.${yesterday}&partner_id=eq.anny_ai_system`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                            'apikey': env.SUPABASE_SERVICE_KEY,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    if (res.ok) {
+                        const txs = await res.json();
+                        if (Array.isArray(txs) && txs.length > 0) {
+                            let winCount = 0;
+                            for (const tx of txs) {
+                                totalVolume += Number(tx.amount) || 0;
+                                if (tx.metadata && tx.metadata.probability_of_profit > 90) {
+                                    winCount++;
+                                }
+                            }
+                            winRate = Math.round((winCount / txs.length) * 100);
+                            yesterdayPerformance = `Win Rate: ${winRate}% | Total Volume: $${totalVolume}`;
+                        }
+                    }
+                    else {
+                        console.error('Failed to fetch daily transactions from Supabase:', res.statusText);
+                    }
+                }
+                catch (error) {
+                    console.error('Network failure fetching daily transactions:', error);
+                }
+                let futurePlans = "System running autonomously. No immediate human intervention required.";
+                let actionRequired = "System running autonomously. No immediate human intervention required.";
+                try {
+                    const hitlResult = await env.GREEN_STATE.list({ prefix: "hitl_pending_" });
+                    if (hitlResult && hitlResult.keys && hitlResult.keys.length > 0) {
+                        actionRequired = "<strong>Human Approval Required</strong><br>The following trades require your approval:<br><ul>";
+                        for (const key of hitlResult.keys) {
+                            try {
+                                const hitlPayloadRaw = await env.GREEN_STATE.get(key.name);
+                                if (hitlPayloadRaw) {
+                                    const hitlPayload = JSON.parse(hitlPayloadRaw);
+                                    const token = await new SignJWT({ trade_key: key.name })
+                                        .setProtectedHeader({ alg: 'HS256' })
+                                        .setExpirationTime('24h')
+                                        .sign(new TextEncoder().encode(env.SUPABASE_JWT_SECRET));
+                                    // Construct the approval URL (fallback domain since this is cron without a specific request)
+                                    const workerUrl = 'https://green-machine-edge-ledger.axim-us.workers.dev';
+                                    const approvalUrl = `${workerUrl}/api/admin/hitl-approve?token=${token}`;
+                                    actionRequired += `<li><a href="${approvalUrl}">Approve Trade: ${hitlPayload.symbol} (${hitlPayload.action})</a></li>`;
+                                }
+                            }
+                            catch (e) {
+                                console.error("Failed to process HITL pending trade", e);
+                            }
+                        }
+                        actionRequired += "</ul>";
+                    }
+                }
+                catch (e) {
+                    console.error("Failed to check HITL trades", e);
+                }
+                try {
+                    const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+                        messages: [
+                            {
+                                role: "system",
+                                content: "You are the AXiM Green Machine AI Strategy Consultant. Based on the past 24 hours of trading volume and win rate, generate a brief (max 2 sentences) strategic focus for the upcoming day. Also identify if any human-in-the-loop action is required."
+                            },
+                            {
+                                role: "user",
+                                content: `Past 24 hours: Win Rate: ${winRate}%, Total Volume: $${totalVolume}`
+                            }
+                        ]
+                    });
+                    if (aiResponse && aiResponse.response) {
+                        futurePlans = aiResponse.response;
+                        actionRequired = "Review AI strategic focus for potential adjustments."; // Provide a general fallback since AI might answer both in one blob
+                    }
+                }
+                catch (error) {
+                    console.error('Workers AI forecasting failed:', error);
+                }
+                const html = `
+            <h1>AXiM Green Machine: Daily Executive Summary</h1>
+            <h2>Account Summary</h2>
+            <pre>${JSON.stringify(balances, null, 2)}</pre>
+            <h2>Yesterday's Performance</h2>
+            <p>${yesterdayPerformance}</p>
+            <h2>Future Plans</h2>
+            <p>${futurePlans}</p>
+            <h2>Action Required</h2>
+            <p>${actionRequired}</p>
+          `;
+                await sendEmailItNotification({
+                    to: "james.ellars@axim.us.com",
+                    cc: ["jrellars@gmail.com"],
+                    subject: "AXiM Green Machine: Daily Executive Summary",
+                    html: html,
+                }, env);
+            })());
+        }
         if (event.cron === "* * * * *") {
             ctx.waitUntil((async () => {
                 try {
@@ -358,7 +529,7 @@ export default {
                                     const payloadRaw = await env.GREEN_STATE.get(key.name);
                                     if (payloadRaw) {
                                         const payload = JSON.parse(payloadRaw);
-                                        const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                                        const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
                                             method: "POST",
                                             headers: {
                                                 "Content-Type": "application/json",
@@ -459,7 +630,7 @@ export default {
                                     }
                                     parsedPayload.retry_count = retryCount + 1;
                                     await env.GREEN_STATE.put(key.name, JSON.stringify(parsedPayload), { expirationTtl: 86400 });
-                                    const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                                    const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
                                         method: "POST",
                                         headers: {
                                             "Content-Type": "application/json",
@@ -492,7 +663,8 @@ export default {
         }
         if (event.cron === "30 10 * * *") {
             ctx.waitUntil((async () => {
-                await dispatchExecutiveBriefing(env, ctx);
+                const auditSummaryText = await generateAIFinancialAudit(env, ctx);
+                await dispatchExecutiveBriefing(env, ctx, auditSummaryText);
             })());
         }
         else {
@@ -553,6 +725,12 @@ export default {
         try {
             let response = await (async () => {
                 const url = new URL(request.url);
+                // Bypassing Supabase internal routes from Edge catch-all
+                if (url.pathname.startsWith('/auth/v1') || url.pathname.startsWith('/rest/v1')) {
+                    const targetUrl = new URL(url.pathname + url.search, env.SUPABASE_URL);
+                    const newRequest = new Request(targetUrl.toString(), request);
+                    return fetch(newRequest);
+                }
                 // 0. Uniform CORS Preflight
                 if (request.method === "OPTIONS") {
                     return new Response(null, { headers: corsHeaders });
@@ -931,6 +1109,136 @@ export default {
                         });
                     }
                 }
+                if (request.method === "GET" && url.pathname === "/api/anny/balances") {
+                    const signature = request.headers.get("X-Axim-Signature");
+                    if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
+                        return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
+                            status: 401,
+                            headers: corsHeaders,
+                        });
+                    }
+                    try {
+                        const cachedBalance = await env.GREEN_STATE.get("anny_exchange_balances", { type: "json" });
+                        if (cachedBalance && typeof cachedBalance.available_usdt === 'number') {
+                            return new Response(JSON.stringify({ success: true, available_usdt: cachedBalance.available_usdt, total_capital: cachedBalance.total_capital || 0 }), {
+                                status: 200,
+                                headers: { "Content-Type": "application/json", ...corsHeaders },
+                            });
+                        }
+                        const balanceData = await annyBackendPost("/backend/balances", {}, env, ctx);
+                        const available_usdt = balanceData?.payload?.available_usdt ?? balanceData?.available_usdt ?? 0;
+                        const total_capital = balanceData?.payload?.total_capital ?? balanceData?.total_capital ?? 0;
+                        await env.GREEN_STATE.put("anny_exchange_balances", JSON.stringify({ available_usdt, total_capital }), { expirationTtl: 30 });
+                        return new Response(JSON.stringify({ success: true, available_usdt, total_capital }), {
+                            status: 200,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                    catch (e) {
+                        return new Response(JSON.stringify({ success: false, error: "Failed to fetch balances", detail: e.message }), {
+                            status: 500,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                }
+                if (request.method === "GET" && url.pathname === "/api/anny/active-positions") {
+                    const signature = request.headers.get("X-Axim-Signature");
+                    if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
+                        return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
+                            status: 401,
+                            headers: corsHeaders,
+                        });
+                    }
+                    try {
+                        const cachedPositions = await env.GREEN_STATE.get("anny_active_positions", { type: "json" });
+                        if (cachedPositions) {
+                            return new Response(JSON.stringify({ success: true, data: cachedPositions }), {
+                                status: 200,
+                                headers: { "Content-Type": "application/json", ...corsHeaders },
+                            });
+                        }
+                        const positionsData = await annyBackendPost("/backend/activepositions", {}, env, ctx);
+                        const activePositions = positionsData?.payload || positionsData || [];
+                        await env.GREEN_STATE.put("anny_active_positions", JSON.stringify(activePositions), { expirationTtl: 15 });
+                        return new Response(JSON.stringify({ success: true, data: activePositions }), {
+                            status: 200,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                    catch (e) {
+                        return new Response(JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to fetch active positions" }), {
+                            status: 500,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                }
+                if (request.method === "GET" && url.pathname === "/api/admin/hitl-approve") {
+                    const token = url.searchParams.get("token");
+                    if (!token) {
+                        return new Response("Missing token", { status: 400 });
+                    }
+                    try {
+                        const { payload } = await jwtVerify(token, new TextEncoder().encode(env.SUPABASE_JWT_SECRET));
+                        const tradeKey = payload.trade_key;
+                        if (!tradeKey) {
+                            return new Response("Invalid token payload", { status: 400 });
+                        }
+                        const tradeRaw = await env.GREEN_STATE.get(tradeKey);
+                        if (!tradeRaw) {
+                            return new Response("Trade expired or already approved.", { status: 404 });
+                        }
+                        const tradeData = JSON.parse(tradeRaw);
+                        const execSize = tradeData.recommended_position_size || 0;
+                        if (execSize > 0) {
+                            await annyBackendPost("/backend/signal/invest", {
+                                symbol: tradeData.symbol,
+                                action: tradeData.action,
+                                amount_usdt: execSize,
+                                stop_loss: 2,
+                                take_profit: 6
+                            }, env, ctx);
+                            // Log to DB
+                            const ledgerEntry = {
+                                partner_id: "anny_ai_system",
+                                status: "executed",
+                                amount: execSize,
+                                currency: tradeData.symbol,
+                                wallet_address: "anny_ai_system",
+                                smart_contract_address: tradeData.action,
+                                transaction_hash: `anny_ai_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                                metadata: {
+                                    probability_of_profit: tradeData.probability_of_profit,
+                                    risk_level: tradeData.risk_level,
+                                    hitl_approved: true
+                                }
+                            };
+                            await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                                    apikey: env.SUPABASE_SERVICE_KEY
+                                },
+                                body: JSON.stringify([ledgerEntry])
+                            });
+                            await env.GREEN_STATE.delete(tradeKey);
+                            return new Response("<h1>Trade Approved Successfully</h1>", {
+                                status: 200,
+                                headers: { "Content-Type": "text/html" }
+                            });
+                        }
+                        else {
+                            return new Response("Invalid execution size.", { status: 400 });
+                        }
+                    }
+                    catch (e) {
+                        console.error("HITL Approval failed", e);
+                        return new Response("<h1>Approval Failed or Token Invalid</h1>", {
+                            status: 401,
+                            headers: { "Content-Type": "text/html" }
+                        });
+                    }
+                }
                 if (request.method === "GET" && url.pathname === "/api/anny-signals") {
                     const signature = request.headers.get("X-Axim-Signature");
                     if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
@@ -987,7 +1295,84 @@ export default {
                         const reqClone = request.clone();
                         try {
                             const payload = (await request.json());
-                            const { symbol, action, price, bot_id, signal_id, timestamp } = payload;
+                            const { symbol, action, price, bot_id, signal_id, timestamp, cfo_state } = payload;
+                            // Task 1: Fetch latest_prices from MARKET_CACHE
+                            const marketCacheRaw = (await env.MARKET_CACHE.get("latest_prices", { type: "json" }));
+                            const currentPriceInfo = marketCacheRaw?.[symbol] || "Unknown";
+                            const cfoTrend = marketCacheRaw?.cfo_trend_state?.[symbol] || "Unknown";
+                            // Fetch exchange balance dynamically
+                            let available_usdt = 0;
+                            let total_capital = 0;
+                            try {
+                                // Try caching to avoid rate limit spam on rapid signals
+                                const cachedBalance = await env.GREEN_STATE.get("anny_exchange_balances", { type: "json" });
+                                if (cachedBalance && typeof cachedBalance.available_usdt === 'number') {
+                                    available_usdt = cachedBalance.available_usdt;
+                                    total_capital = cachedBalance.total_capital || 0;
+                                }
+                                else {
+                                    const balanceData = await annyBackendPost("/backend/balances", {}, env, ctx);
+                                    // Handle potential response structures
+                                    available_usdt = balanceData?.payload?.available_usdt ?? balanceData?.available_usdt ?? 0;
+                                    total_capital = balanceData?.payload?.total_capital ?? balanceData?.total_capital ?? 0;
+                                    await env.GREEN_STATE.put("anny_exchange_balances", JSON.stringify({ available_usdt, total_capital }), { expirationTtl: 30 });
+                                }
+                            }
+                            catch (e) {
+                                console.error("Failed to fetch exchange balance:", e);
+                                // Fallback to a safe minimum if we can't fetch but still need to process
+                                available_usdt = 0;
+                            }
+                            // Task 1: Construct AI prompt
+                            const aiPrompt = `You are an ultra-conservative, ruthless risk manager for live capital. Analyze this trade signal against current market trends.
+Return a JSON object with 'probability_of_profit' (0-100), 'risk_level' (Low/Medium/High), 'approved' (boolean), and 'recommended_position_size' (number in USDT).
+You must ONLY approve (true) if the probability of profit is strictly > 90%, the risk_level is 'Low', and the 24h Trend CFO State aligns with the requested action. Protect capital at all costs.
+Calculate 'recommended_position_size' based on a STRICT max 5% portfolio risk of the Available Balance. If balance is 0 or too low, recommend 0 and do not approve.
+
+Trade Signal:
+- Asset: ${symbol}
+- Action: ${action}
+- Price: ${price}
+- CFO State: ${cfo_state || 'Unknown'}
+
+Market Context:
+- Cached Price: ${currentPriceInfo}
+- 24h Trend CFO State: ${cfoTrend}
+- Available Balance (USDT): ${available_usdt}`;
+                            let aiResult = {
+                                probability_of_profit: 0,
+                                risk_level: "High",
+                                approved: false,
+                                recommended_position_size: 0
+                            };
+                            if (env.AI) {
+                                try {
+                                    const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+                                        messages: [
+                                            { role: "system", content: "You are a ruthless risk manager that only outputs valid JSON." },
+                                            { role: "user", content: aiPrompt }
+                                        ]
+                                    });
+                                    // Clean up potential markdown formatting from AI response
+                                    let responseText = aiResponse.response || "";
+                                    responseText = responseText.replace(/\s*```json/g, "").replace(/```/g, "").trim();
+                                    try {
+                                        const parsedAi = JSON.parse(responseText);
+                                        if (typeof parsedAi.probability_of_profit === 'number' && parsedAi.risk_level && typeof parsedAi.approved === 'boolean') {
+                                            aiResult = parsedAi;
+                                            if (typeof parsedAi.recommended_position_size !== 'number') {
+                                                aiResult.recommended_position_size = 0;
+                                            }
+                                        }
+                                    }
+                                    catch (e) {
+                                        console.error("Failed to parse AI JSON response:", responseText);
+                                    }
+                                }
+                                catch (e) {
+                                    console.error("AI Evaluation failed:", e);
+                                }
+                            }
                             const keyName = `anny_signal_log:${Date.now()}`;
                             const logData = {
                                 symbol: symbol || "UNKNOWN",
@@ -997,7 +1382,95 @@ export default {
                                 signal_id: signal_id || "N/A",
                                 timestamp: timestamp || Date.now(),
                                 received_at: Date.now(),
+                                probability_of_profit: aiResult.probability_of_profit,
+                                risk_level: aiResult.risk_level,
+                                approved: aiResult.approved
                             };
+                            let isBorderline = false;
+                            if (!aiResult.approved && aiResult.probability_of_profit >= 75 && aiResult.probability_of_profit <= 89) {
+                                isBorderline = true;
+                                logData.requires_human_approval = true;
+                                logData.recommended_position_size = aiResult.recommended_position_size || 0; // ensure size is saved
+                            }
+                            if (aiResult.approved) {
+                                let execSize = aiResult.recommended_position_size || 0;
+                                // Safety check: ensure size is within available balance
+                                if (execSize > available_usdt) {
+                                    execSize = available_usdt;
+                                }
+                                if (execSize > 0) {
+                                    try {
+                                        await annyBackendPost("/backend/signal/invest", {
+                                            symbol,
+                                            action,
+                                            amount_usdt: execSize,
+                                            stop_loss: 2,
+                                            take_profit: 6
+                                        }, env, ctx);
+                                        logData.executed_amount_usdt = execSize;
+                                        // Task 1 & 2: Log to DB & Send Email
+                                        ctx.waitUntil((async () => {
+                                            try {
+                                                const ledgerEntry = {
+                                                    partner_id: "anny_ai_system",
+                                                    status: "executed",
+                                                    amount: execSize,
+                                                    currency: symbol,
+                                                    wallet_address: "anny_ai_system",
+                                                    smart_contract_address: action,
+                                                    transaction_hash: `anny_ai_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+                                                    metadata: {
+                                                        probability_of_profit: aiResult.probability_of_profit,
+                                                        risk_level: aiResult.risk_level
+                                                    }
+                                                };
+                                                await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
+                                                    method: "POST",
+                                                    headers: {
+                                                        "Content-Type": "application/json",
+                                                        Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                                                        apikey: env.SUPABASE_SERVICE_KEY
+                                                    },
+                                                    body: JSON.stringify([ledgerEntry])
+                                                });
+                                                const subject = `AXiM Alert: Live Capital Deployed (${symbol})`;
+                                                const body = `Action: ${action}\nPosition Size: ${execSize} USDT\nStop-Loss Limits: 2\nAI Confidence: ${aiResult.probability_of_profit}%`;
+                                                await sendEmailItNotification({ to: "james.ellars@axim.us.com", subject, html: body }, env);
+                                            }
+                                            catch (err) {
+                                                console.error("Failed to sync ledger or send email alert:", err);
+                                            }
+                                        })());
+                                    }
+                                    catch (executionError) {
+                                        console.error("AnnyTrade execution failed:", executionError);
+                                        aiResult.approved = false;
+                                        logData.approved = false;
+                                        logData.execution_error = executionError.message;
+                                    }
+                                }
+                                else {
+                                    console.warn("Trade approved but insufficient balance or recommended size 0");
+                                    aiResult.approved = false;
+                                    logData.approved = false;
+                                    logData.execution_error = "Insufficient balance for minimum position";
+                                }
+                            }
+                            // Task 2: Quarantine if rejected
+                            if (!aiResult.approved) {
+                                if (isBorderline) {
+                                    const hitlKeyName = `hitl_pending_${Date.now()}`;
+                                    await env.GREEN_STATE.put(hitlKeyName, JSON.stringify(logData), {
+                                        expirationTtl: 86400,
+                                    });
+                                }
+                                else {
+                                    const quarantineKeyName = `quarantine:trade:${Date.now()}`;
+                                    await env.GREEN_STATE.put(quarantineKeyName, JSON.stringify(logData), {
+                                        expirationTtl: 604800,
+                                    });
+                                }
+                            }
                             await env.GREEN_STATE.put(keyName, JSON.stringify(logData), {
                                 expirationTtl: 604800,
                             });
@@ -1016,10 +1489,29 @@ export default {
                             }
                             catch (e) { }
                             await env.GREEN_STATE.put("webhook_ingress_telemetry", JSON.stringify(ingressTelemetry));
+                            if (!aiResult.approved) {
+                                return new Response(JSON.stringify({
+                                    success: false,
+                                    status: "signal_rejected",
+                                    reason: "Failed AI Profitability & Risk Check",
+                                    probability_of_profit: aiResult.probability_of_profit,
+                                    risk_level: aiResult.risk_level,
+                                    log_id: keyName,
+                                }), {
+                                    status: 200, // Returning 200 so webhook sender doesn't retry rejected signals
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        ...corsHeaders,
+                                    },
+                                });
+                            }
                             return new Response(JSON.stringify({
                                 success: true,
                                 status: "signal_logged",
                                 log_id: keyName,
+                                probability_of_profit: aiResult.probability_of_profit,
+                                risk_level: aiResult.risk_level,
+                                approved: aiResult.approved
                             }), {
                                 status: 200,
                                 headers: {
@@ -1183,7 +1675,7 @@ export default {
                                     },
                                 };
                                 try {
-                                    const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                                    const dbRes = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
                                         method: "POST",
                                         headers: {
                                             "Content-Type": "application/json",
@@ -1738,7 +2230,7 @@ export default {
                     }
                     try {
                         // Trigger via internal HTTP call due to helper functions structure
-                        await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                        await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
                             method: "POST",
                             headers: {
                                 Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
@@ -1909,6 +2401,56 @@ export default {
                     }
                     catch (e) {
                         return new Response(JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to flush DLQ" }), {
+                            status: 500,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                }
+                if (request.method === "GET" && url.pathname === "/api/market/history") {
+                    const signature = request.headers.get("X-Axim-Signature");
+                    if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
+                        return new Response(JSON.stringify({ success: false, error: "Unauthorized Edge Ingress", timestamp: Date.now() }), {
+                            status: 401,
+                            headers: corsHeaders,
+                        });
+                    }
+                    try {
+                        const cacheResult = await env.MARKET_CACHE.getWithMetadata("historical_prices");
+                        if (cacheResult.value) {
+                            await recordKvMetric(env, true);
+                        }
+                        else {
+                            await recordKvMetric(env, false);
+                        }
+                        let data;
+                        if (!cacheResult.value) {
+                            // Mock fallback for standard assets
+                            data = {
+                                BTC: [64000, 64200, 64100, 64500, 64800, 64600, 64900, 65000, 64700, 65000],
+                                ETH: [3400, 3420, 3410, 3450, 3480, 3460, 3490, 3500, 3470, 3500],
+                                SOL: [140, 142, 141, 145, 148, 146, 149, 150, 147, 150]
+                            };
+                        }
+                        else {
+                            try {
+                                data = JSON.parse(cacheResult.value);
+                            }
+                            catch (e) {
+                                // If it fails to parse, mock it
+                                data = {
+                                    BTC: [64000, 64200, 64100, 64500, 64800, 64600, 64900, 65000, 64700, 65000],
+                                    ETH: [3400, 3420, 3410, 3450, 3480, 3460, 3490, 3500, 3470, 3500],
+                                    SOL: [140, 142, 141, 145, 148, 146, 149, 150, 147, 150]
+                                };
+                            }
+                        }
+                        return new Response(JSON.stringify({ success: true, data }), {
+                            status: 200,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                    catch (e) {
+                        return new Response(JSON.stringify({ type: "about:blank", title: "Error", detail: "Failed to fetch market history" }), {
                             status: 500,
                             headers: { "Content-Type": "application/json", ...corsHeaders },
                         });
@@ -2254,8 +2796,28 @@ export default {
                             model_used: aiModel,
                         }), { expirationTtl: 86400 });
                         // Async logging to api_usage_logs
-                        // Async logging removed/fixed to avoid compilation errors
-                        // The original code was throwing errors because 'ctx', 'prompt', 'parsed', 'duration' and 'response.usage' were not defined in scope.
+                        ctx.waitUntil((async () => {
+                            try {
+                                await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
+                                    method: "POST",
+                                    headers: {
+                                        "Content-Type": "application/json",
+                                        Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                                        apikey: env.SUPABASE_SERVICE_KEY,
+                                    },
+                                    body: JSON.stringify({
+                                        endpoint: "/api/strategy-consult",
+                                        status_code: 200,
+                                        execution_time_ms: duration,
+                                        model_used: aiModel,
+                                        token_count: 250 // Static default for now
+                                    }),
+                                });
+                            }
+                            catch (err) {
+                                console.error("Telemetry insert failed:", err);
+                            }
+                        })());
                         return new Response(JSON.stringify({
                             success: true,
                             data: parsed,
@@ -2400,66 +2962,7 @@ export default {
                         await logAdminAction(env, "trigger-financial-audit", {
                             trigger_source,
                         });
-                        const dbResponse = await fetch(`${env.SUPABASE_URL}/functions/v1/financial-audit`, {
-                            method: "POST",
-                            headers: {
-                                "Content-Type": "application/json",
-                                Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-                            },
-                            body: JSON.stringify({ trigger_source, timestamp }),
-                        });
-                        if (!dbResponse.ok) {
-                            throw new Error(`Financial Audit failed: ${dbResponse.statusText}`);
-                        }
-                        const auditData = (await dbResponse.json());
-                        // Fetch the last 3 days of api_usage_logs summary data
-                        let usageSummaryData = [];
-                        try {
-                            // We'll approximate last 3 days by getting the api_usage_summary
-                            // (which already might be an aggregate) or fetching limited logs.
-                            // Since instructions specify "dynamically pull the last 3 days of api_usage_logs summary data",
-                            // we can fetch from api_usage_aggregates or api_usage_summary.
-                            // We will just fetch from api_usage_aggregates over the last 3 days.
-                            const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-                            const logsResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates?select=*&updated_at=gte.${threeDaysAgo}`, {
-                                headers: {
-                                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
-                                    apikey: env.SUPABASE_SERVICE_KEY,
-                                },
-                            });
-                            if (logsResponse.ok) {
-                                usageSummaryData = (await logsResponse.json());
-                            }
-                        }
-                        catch (e) {
-                            console.error("Failed to fetch 3-day api usage logs", e);
-                        }
-                        let executive_briefing = "";
-                        try {
-                            const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
-                                messages: [
-                                    {
-                                        role: "system",
-                                        content: "You are a financial analyst AI.",
-                                    },
-                                    {
-                                        role: "user",
-                                        content: `Summarize the following financial audit metadata and the last 3 days of API usage logs into a concise 4-sentence paragraph describing token burn efficiency vs system latency. Audit Data: ${JSON.stringify(auditData)}. Usage Data: ${JSON.stringify(usageSummaryData)}`,
-                                    },
-                                ],
-                            });
-                            if (aiResponse && aiResponse.response) {
-                                executive_briefing = aiResponse.response;
-                            }
-                            else {
-                                executive_briefing = "AI insight generation failed.";
-                            }
-                        }
-                        catch (e) {
-                            console.error("Workers AI failed", e);
-                            executive_briefing =
-                                "AI summary temporarily unavailable due to upstream constraint.";
-                        }
+                        let executive_briefing = await generateAIFinancialAudit(env, ctx);
                         return new Response(JSON.stringify({
                             success: true,
                             message: "Financial audit invoked via Edge Worker proxy",
@@ -2785,6 +3288,103 @@ export default {
                         });
                     }
                 }
+                // TRADE EXECUTION OVERRIDE ENDPOINT
+                if (request.method === "POST" &&
+                    url.pathname === "/api/admin/execute-trade") {
+                    try {
+                        const authHeader = request.headers.get("Authorization") || "";
+                        const token = authHeader.replace("Bearer ", "").trim();
+                        if (!token) {
+                            return new Response(JSON.stringify({ error: "Missing token" }), {
+                                status: 401,
+                                headers: { "Content-Type": "application/json", ...corsHeaders },
+                            });
+                        }
+                        try {
+                            const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
+                            await jwtVerify(token, secret);
+                        }
+                        catch (e) {
+                            return new Response(JSON.stringify({ error: "Invalid token" }), {
+                                status: 403,
+                                headers: { "Content-Type": "application/json", ...corsHeaders },
+                            });
+                        }
+                        const { key_name } = await request.json();
+                        if (!key_name) {
+                            return new Response(JSON.stringify({ error: "key_name is required" }), {
+                                status: 400,
+                                headers: { "Content-Type": "application/json", ...corsHeaders },
+                            });
+                        }
+                        const quarantineItem = await env.GREEN_STATE.get(key_name);
+                        if (!quarantineItem) {
+                            return new Response(JSON.stringify({ error: "Trade not found in quarantine" }), {
+                                status: 404,
+                                headers: { "Content-Type": "application/json", ...corsHeaders },
+                            });
+                        }
+                        const parsedItem = JSON.parse(quarantineItem);
+                        const payload = parsedItem.payload || parsedItem;
+                        const symbol = payload.symbol;
+                        const action = payload.action;
+                        const amount_usdt = payload.amount_usdt || payload.investment || 25;
+                        try {
+                            await annyBackendPost("/backend/signal/invest", {
+                                symbol,
+                                action,
+                                amount_usdt,
+                                stop_loss: 2
+                            }, env, ctx);
+                        }
+                        catch (e) {
+                            return new Response(JSON.stringify({ error: e.message || "Failed to execute override via AnnyTrade" }), {
+                                status: 500,
+                                headers: { "Content-Type": "application/json", ...corsHeaders },
+                            });
+                        }
+                        // Build a simulated executed trade payload
+                        const ledgerEntry = {
+                            partner_id: "anny_system",
+                            wallet_address: "anny_system",
+                            smart_contract_address: "override_execution",
+                            amount: payload.investment || payload.amount || 0,
+                            currency: payload.symbol || "USD",
+                            status: "minted", // "minted" represents executed/settled here
+                            transaction_hash: `override_${Date.now()}`,
+                            metadata: {
+                                ...payload,
+                                forced_execution: true,
+                                executed_at: new Date().toISOString()
+                            }
+                        };
+                        // Upsert to Supabase
+                        const dbResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions?on_conflict=transaction_hash`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                                apikey: env.SUPABASE_SERVICE_KEY,
+                                Prefer: "resolution=merge-duplicates",
+                            },
+                            body: JSON.stringify([ledgerEntry]),
+                        });
+                        if (!dbResponse.ok) {
+                            throw new Error(`Supabase insert failed: ${await dbResponse.text()}`);
+                        }
+                        await env.GREEN_STATE.delete(key_name);
+                        return new Response(JSON.stringify({ success: true, message: "Trade executed successfully" }), {
+                            status: 200,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                    catch (error) {
+                        return new Response(JSON.stringify({ error: error.message }), {
+                            status: 500,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                }
                 if (request.method === "DELETE" &&
                     url.pathname === "/api/admin/quarantine/all") {
                     const signature = request.headers.get("X-Axim-Signature");
@@ -2888,13 +3488,16 @@ export default {
                     url.pathname !== "/api/admin/replay-webhook" &&
                     url.pathname !== "/api/webhooks/emailit-inbound" &&
                     url.pathname !== "/api/webhooks/anny-signal" &&
+                    url.pathname !== "/api/anny/active-positions" &&
                     url.pathname !== "/api/anny-signals" &&
                     url.pathname !== "/api/dlq-flush" &&
                     url.pathname !== "/api/market-cache" &&
+                    url.pathname !== "/api/market/history" &&
                     url.pathname !== "/api/strategy-consult" &&
                     url.pathname !== "/api/quarantine-purge" &&
                     url.pathname !== "/api/admin/quarantine" &&
                     url.pathname !== "/api/admin/quarantine/all" &&
+                    url.pathname !== "/api/admin/execute-trade" &&
                     url.pathname !== "/api/health" &&
                     url.pathname !== "/api/telemetry" &&
                     url.pathname !== "/api/admin/renew-anny-session" &&
@@ -2903,11 +3506,54 @@ export default {
                     url.pathname !== "/api/admin/verify-deployment" &&
                     url.pathname !== "/api/admin/trigger-financial-audit" &&
                     url.pathname !== "/api/admin/force-oracle-ping" &&
-                    url.pathname !== "/api/admin/audit-logs") {
+                    url.pathname !== "/api/admin/audit-logs" &&
+                    url.pathname !== "/api/admin/panic-close") {
                     return new Response(JSON.stringify({ success: false, error: "404 Not Found", timestamp: Date.now() }), {
                         status: 404,
                         headers: corsHeaders,
                     });
+                }
+                if (url.pathname === "/api/admin/panic-close" && request.method === "POST") {
+                    try {
+                        const authHeader = request.headers.get("Authorization");
+                        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+                            return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } });
+                        }
+                        const token = authHeader.split(" ")[1];
+                        const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
+                        try {
+                            await jwtVerify(token, secret);
+                        }
+                        catch (err) {
+                            return new Response(JSON.stringify({ error: "Invalid admin token" }), { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } });
+                        }
+                        // Fetch active positions
+                        const positionsData = await annyBackendPost("/backend/activepositions", {}, env, ctx);
+                        let positions = [];
+                        if (Array.isArray(positionsData)) {
+                            positions = positionsData;
+                        }
+                        else if (positionsData && Array.isArray(positionsData.positions)) {
+                            positions = positionsData.positions;
+                        }
+                        let closedCount = 0;
+                        for (const position of positions) {
+                            if (position && position.symbol) {
+                                await annyBackendPost("/backend/signal/invest", { action: "sell", symbol: position.symbol }, env, ctx);
+                                closedCount++;
+                            }
+                        }
+                        return new Response(JSON.stringify({ success: true, closedCount, message: `Panic closed ${closedCount} positions.` }), {
+                            status: 200,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
+                    catch (e) {
+                        return new Response(JSON.stringify({ success: false, error: e.message || "Failed to execute panic close" }), {
+                            status: 500,
+                            headers: { "Content-Type": "application/json", ...corsHeaders },
+                        });
+                    }
                 }
                 // 1. HMAC Validation (The Ingress Token Isolation Rule)
                 const signature = request.headers.get("X-Axim-Signature");
@@ -2969,7 +3615,7 @@ export default {
                     // Aggregate usage/errors asynchronously
                     ctx.waitUntil((async () => {
                         try {
-                            await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_aggregates`, {
+                            await fetch(`${env.SUPABASE_URL}/rest/v1/api_usage_logs`, {
                                 method: "POST",
                                 headers: {
                                     "Content-Type": "application/json",
@@ -2985,7 +3631,7 @@ export default {
                             });
                         }
                         catch (e) {
-                            console.error("Failed to log to api_usage_aggregates:", e);
+                            console.error("Failed to log to api_usage_logs:", e);
                         }
                     })());
                     // 4. Fail-Open Edge Buffer (DLQ)

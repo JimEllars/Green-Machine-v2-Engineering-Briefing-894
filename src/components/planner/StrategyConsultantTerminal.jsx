@@ -203,7 +203,7 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
     setDisplayText(initText);
 
     try {
-      const response = await fetch(`${getWorkerUrl()}/api/strategy-consult`, {
+      const response = await fetch(`${getWorkerUrl()}/api/v1/strategy/consult`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
