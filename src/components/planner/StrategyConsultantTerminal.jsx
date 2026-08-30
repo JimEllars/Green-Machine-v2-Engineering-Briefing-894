@@ -202,6 +202,11 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
     const initText = "> Initializing consultant session...\n> Routing prompt to Edge AI (Llama 3.1 8B)...\n> AWAITING RESPONSE\n\n";
     setDisplayText(initText);
 
+
+    // Set a strict timeout for graceful degradation
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
     try {
       const response = await fetch(`${getWorkerUrl()}/api/v1/strategy/consult`, {
         method: 'POST',
@@ -213,10 +218,16 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
           prompt: latestAuditContext ? `[AUDIT CONTEXT]\n${latestAuditContext}\n\n[PROMPT]\n${promptInput}` : promptInput,
           session_id: sessionId,
           model_preference: modelPreference
-        })
+        }),
+        signal: controller.signal
+      }).catch(err => {
+         throw err;
       });
 
-      const data = await response.json();
+      clearTimeout(timeoutId);
+
+      const data = await response.json().catch(() => ({ error: "Invalid JSON response" }));
+
 
       if (data.success && data.data) {
         setIsJsonValid(true);
@@ -239,9 +250,14 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
       }
     } catch (err) {
       setIsTyping(false);
-      setConsultError(err.message || "Unknown error during AI consultation.");
+      if (err.name === 'AbortError') {
+         setDisplayText("Strategy compilation delayed. Monitoring market conditions...");
+      } else {
+         setConsultError(err.message || "Unknown error during AI consultation.");
+      }
       setShowFallbackBanner(true);
     } finally {
+      if (typeof timeoutId !== 'undefined') clearTimeout(timeoutId);
       setIsConsulting(false);
     }
   };

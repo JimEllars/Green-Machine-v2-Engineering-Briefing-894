@@ -22,3 +22,4 @@ This document outlines the step-by-step procedure to follow when going live.
 - Monitor the System Diagnostics Panel to ensure real-time telemetry metrics are streaming successfully from the Cloudflare Edge Worker.
 - Inspect the StrategyConsultantTerminal and AffiliatePayoutGrid to verify the modern enterprise glassmorphic UI updates apply correctly across viewports.
 - Confirm that the AXiMLoginGate and background cron tasks remain functional.
+- Ensure `/api/v1/strategy/consult` routing logic does not conflict with existing paths.

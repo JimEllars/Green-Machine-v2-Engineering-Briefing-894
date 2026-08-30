@@ -99,3 +99,6 @@
 - **Sanity Checks Passed:**
     - Verified `AXiMLoginGate` code structures to ensure no coupling exists with the modified system diagnostics hooks.
     - Verified `thirdweb_bridge.ts` to ensure `financial-audit` paths remain untouched and cron jobs are intact.
+- Implemented Strategy Consultant Terminal graceful degradation with 12s timeout.
+- Wired up the frontend to edge worker `/api/v1/strategy/consult`.
+- Configured Llama-3.1 edge worker fallback to Mistral-7B.

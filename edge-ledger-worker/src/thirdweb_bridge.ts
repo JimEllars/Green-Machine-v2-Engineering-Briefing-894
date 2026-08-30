@@ -3264,7 +3264,7 @@ Market Context:
 
         if (
           request.method === "POST" &&
-          url.pathname === "/api/strategy-consult"
+          (url.pathname === "/api/strategy-consult" || url.pathname === "/api/v1/strategy/consult")
         ) {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
@@ -4296,7 +4296,7 @@ Market Context:
           url.pathname !== "/api/dlq-flush" &&
           url.pathname !== "/api/market-cache" &&
           url.pathname !== "/api/market/history" &&
-          url.pathname !== "/api/strategy-consult" &&
+          url.pathname !== "/api/strategy-consult" && url.pathname !== "/api/v1/strategy/consult" &&
           url.pathname !== "/api/quarantine-purge" &&
           url.pathname !== "/api/admin/quarantine" &&
           url.pathname !== "/api/admin/quarantine/all" &&
