@@ -65,9 +65,13 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
 
   useEffect(() => {
     if (autoScroll && terminalRef.current) {
-      terminalRef.current.scrollTo({ top: terminalRef.current.scrollHeight, behavior: 'smooth' });
+      // Use 'auto' behavior during active typing for immediate tracking, 'smooth' otherwise
+      terminalRef.current.scrollTo({
+        top: terminalRef.current.scrollHeight,
+        behavior: isTyping ? 'auto' : 'smooth'
+      });
     }
-  }, [displayText, autoScroll]);
+  }, [displayText, autoScroll, isTyping]);
 
 
 
@@ -132,8 +136,8 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
              setParsedStrategyData(null);
              newPayload = `# Recommendation Payload (Raw)\n\n` + newPayload;
           }
-          if (typingIntervalRef.current) {
-            clearInterval(typingIntervalRef.current);
+          if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
           }
           typedLengthRef.current = 0;
           setDisplayText('');
@@ -178,7 +182,7 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
   }, []);
 
   const typedLengthRef = useRef(0);
-  const typingIntervalRef = useRef(null);
+
 
   const [isCopyUnavailable, setIsCopyUnavailable] = useState(false);
 
@@ -193,8 +197,8 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
     setConsultError(null);
 
     // Clear typing intervals when starting a new generation
-    if (typingIntervalRef.current) {
-        clearInterval(typingIntervalRef.current);
+    if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
     }
     typedLengthRef.current = 0;
 
@@ -370,6 +374,8 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
   };
 
   // Typewriter effect for the terminal
+  const animationFrameRef = useRef(null);
+
   useEffect(() => {
     if (!strategy || strategy.length <= typedLengthRef.current) {
       setIsTyping(false);
@@ -377,16 +383,31 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
     }
 
     setIsTyping(true);
-    typingIntervalRef.current = setInterval(() => {
-      typedLengthRef.current++;
-      setDisplayText(strategy.slice(0, typedLengthRef.current));
+    let lastTime = performance.now();
+    const charsPerTick = 1;
+    const delayMs = 15;
 
-      if (typedLengthRef.current >= strategy.length) {
-        clearInterval(typingIntervalRef.current);
+    const tick = (currentTime) => {
+      if (currentTime - lastTime >= delayMs) {
+        typedLengthRef.current = Math.min(typedLengthRef.current + charsPerTick, strategy.length);
+        setDisplayText(strategy.slice(0, typedLengthRef.current));
+        lastTime = currentTime;
+      }
+
+      if (typedLengthRef.current < strategy.length) {
+        animationFrameRef.current = requestAnimationFrame(tick);
+      } else {
         setIsTyping(false);
       }
-    }, 15);
-    return () => clearInterval(typingIntervalRef.current);
+    };
+
+    animationFrameRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
   }, [strategy]);
 
   return (
@@ -444,6 +465,23 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
               Mistral 7B Secondary
             </button>
           </div>
+          {isTyping && (
+            <button
+              onClick={() => {
+                if (animationFrameRef.current) {
+                  cancelAnimationFrame(animationFrameRef.current);
+                }
+                typedLengthRef.current = strategy.length;
+                setDisplayText(strategy);
+                setIsTyping(false);
+              }}
+              className="flex items-center gap-1.5 text-xs font-medium px-2 py-1 bg-slate-800 text-amber-400 border border-amber-700/50 hover:bg-slate-700 rounded transition-colors mr-2"
+              title="Skip Animation"
+            >
+              <SafeIcon name="FastForward" className="w-3 h-3" />
+              Skip
+            </button>
+          )}
           <button
             onClick={() => {
               setDisplayText('');
@@ -452,8 +490,8 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
               setPromptInput('');
               setParsedStrategyData(null);
               setIsJsonValid(false);
-              if (typingIntervalRef.current) {
-                clearInterval(typingIntervalRef.current);
+              if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
               }
               typedLengthRef.current = 0;
               setIsTyping(false);
