@@ -32,5 +32,19 @@
   },
   "compatibility_flags": [
     "nodejs_compat"
+  ],
+  "routes": [
+    {
+      "pattern": "green-machine.axim.com/api/*",
+      "zone_name": "axim.com"
+    },
+    {
+      "pattern": "green-machine.axim.com/rest/v1/*",
+      "zone_name": "axim.com"
+    },
+    {
+      "pattern": "green-machine.axim.com/auth/v1/*",
+      "zone_name": "axim.com"
+    }
   ]
 }

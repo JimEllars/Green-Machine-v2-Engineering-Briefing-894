@@ -91,3 +91,11 @@
 ### Sprint 912: Advanced Charting UI & Market History Edge Route
 - **Market History Edge Route (Task 1):** Built the `/api/market/history` endpoint in `edge-ledger-worker/src/thirdweb_bridge.ts`. It's secured by `timingSafeEqual(signature, AXIM_INTERNAL_KEY)` and extracts `historical_prices` from `MARKET_CACHE`. Implemented a robust fail-safe returning mocked standard asset history (BTC, ETH, SOL) upon cache misses.
 - **Lightweight Sparklines (Task 2 & 3):** Added a non-blocking UI background fetch to `MarketFeedMatrix.jsx` to load `marketHistory`. Integrated a high-performance, glassmorphic emerald/rose CSS-based sparkline trend bar directly inside the asset cards. All sparklines are protected by standard error boundaries checking `marketHistory[asset.symbol]?.length > 0`.
+
+### Telemetry & UI Refinements
+- **Telemetry Streaming:** Modified `useSystemDiagnostics.js` to correctly merge deeply nested arrays (`data.data[0]`) preventing legacy payload overwrites of nested keys and allowing real-time fallback telemetry to remain sticky during degraded connectivity.
+- **Glassmorphic UI:** Applied the `glass-panel` and `hud-border` classes across `StrategyConsultantTerminal` and `AffiliatePayoutGrid` to align with the enterprise design standards established in `index.css` and `App.css`.
+- **Cloudflare Routing:** Reconfigured `wrangler.jsonc` to deploy proper path routing matching standard internal backend architectures (via `routes`).
+- **Sanity Checks Passed:**
+    - Verified `AXiMLoginGate` code structures to ensure no coupling exists with the modified system diagnostics hooks.
+    - Verified `thirdweb_bridge.ts` to ensure `financial-audit` paths remain untouched and cron jobs are intact.
