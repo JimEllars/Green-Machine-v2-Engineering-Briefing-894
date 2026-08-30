@@ -102,3 +102,9 @@
 - Implemented Strategy Consultant Terminal graceful degradation with 12s timeout.
 - Wired up the frontend to edge worker `/api/v1/strategy/consult`.
 - Configured Llama-3.1 edge worker fallback to Mistral-7B.
+
+### Sprint 894 Updates
+- Modified `fetchComputeDebt` in `src/hooks/useSystemDiagnostics.js` to implement polling every 60 seconds and pause when the tab is hidden to conserve database requests.
+- Caches the `computeDebt` results locally in `localStorage` for cross-reload zero-latency UI population.
+- Updated `SystemDiagnosticsPanel.jsx` to render a new "Self-Funding Ratio (Live)" UI panel for each micro-app.
+- The new panel visualizes compute cost to revenue ratio using progress bars colored emerald (healthy), amber (warning), or rose (critical). Applied standard `.bg-slate-800/50` and border classes to align with the enterprise dashboard aesthetic.
