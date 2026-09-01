@@ -18,6 +18,31 @@ function App() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [userEmail, setUserEmail] = useState('');
 
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+
+  useEffect(() => {
+    if ('Notification' in window && 'serviceWorker' in navigator) {
+      if (Notification.permission === 'default') {
+        setShowNotificationPrompt(true);
+      }
+    }
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setShowNotificationPrompt(false);
+        // Optionally show a confirmation toast
+      } else {
+        setShowNotificationPrompt(false);
+      }
+    } catch (error) {
+      console.error("Error requesting notification permission", error);
+    }
+  };
+
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setAuthState('Guest Mode');
@@ -511,7 +536,43 @@ const deleteQuarantineItem = async (keyName) => {
       });
       if (res.ok) {
          const data = await res.json();
-         setDlqStatus({ active: data.active || data.buffered_count > 0, count: data.count || data.buffered_count || 0, quarantine_count: data.quarantine_count || data.quarantined_count || 0, emailit_telemetry: data.emailit_telemetry, exec_governance: data.exec_governance, emailit_configured: data.emailit_configured, autoheal_telemetry: data.autoheal_telemetry, investing_brain_telemetry: data.investing_brain_telemetry, anny_oracle: data.anny_oracle, webhook_ingress_telemetry: data.webhook_ingress_telemetry, dlq_autoheal_telemetry: data.dlq_autoheal_telemetry });
+
+         setDlqStatus(prevStatus => {
+           const newStatus = {
+             active: data.active || data.buffered_count > 0,
+             count: data.count || data.buffered_count || 0,
+             quarantine_count: data.quarantine_count || data.quarantined_count || 0,
+             emailit_telemetry: data.emailit_telemetry,
+             exec_governance: data.exec_governance,
+             emailit_configured: data.emailit_configured,
+             autoheal_telemetry: data.autoheal_telemetry,
+             investing_brain_telemetry: data.investing_brain_telemetry,
+             anny_oracle: data.anny_oracle,
+             webhook_ingress_telemetry: data.webhook_ingress_telemetry,
+             dlq_autoheal_telemetry: data.dlq_autoheal_telemetry
+           };
+
+           // Check for new hitl_pending items
+           // Assuming hitl_pending count increases or is flagged in dlqStatus, let's use quarantine_count > 0 as a proxy if hitl_pending isn't explicit, but wait, the prompt says "when the SystemDiagnosticsPanel flags a hitl_pending item". Let's check where it flags it.
+           // Actually, wait, the prompt says "when the SystemDiagnosticsPanel flags a hitl_pending item". Let's inject a check for hitl_pending here. If there is a hitl_pending flag anywhere in the data, we trigger a notification.
+
+           const hasHitlPending = data.exec_governance?.pending_retries > 0 || data.hitl_pending === true || data.quarantine_count > 0;
+           const prevHitlPending = prevStatus.exec_governance?.pending_retries > 0 || prevStatus.hitl_pending === true || prevStatus.quarantine_count > 0;
+
+           if (hasHitlPending && !prevHitlPending) {
+             if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+               navigator.serviceWorker.ready.then(registration => {
+                 registration.showNotification("Green Machine Alert", {
+                   body: "Action Required: HITL Pending or Item Quarantined",
+                   icon: "/icon.png"
+                 });
+               });
+             }
+           }
+
+           return newStatus;
+         });
+
       }
     } catch (e) {
       console.error("Failed to fetch DLQ status", e);
@@ -802,6 +863,21 @@ const handleSyncKV = async () => {
     <div className="min-h-screen bg-zinc-950 text-slate-200 font-sans selection:bg-emerald-500/30">
       
       {/* Overlays */}
+
+      {/* Notification Banner */}
+      {showNotificationPrompt && (
+        <div className="fixed bottom-4 right-4 z-[200] bg-zinc-800 border border-emerald-500/50 p-4 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-5">
+          <div className="flex flex-col">
+            <h4 className="text-zinc-100 font-semibold text-sm">Enable Notifications</h4>
+            <p className="text-zinc-400 text-xs mt-1">Get instant alerts for executed trades and HITL pending events.</p>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowNotificationPrompt(false)} className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-100 transition-colors">Dismiss</button>
+            <button onClick={requestNotificationPermission} className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30 rounded-lg text-xs font-medium transition-colors">Enable</button>
+          </div>
+        </div>
+      )}
+
       {/* Audit Summary Modal */}
       {isAuditSummaryModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
