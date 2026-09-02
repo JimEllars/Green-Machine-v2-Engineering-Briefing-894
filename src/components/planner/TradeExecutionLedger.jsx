@@ -37,11 +37,24 @@ const TradeExecutionLedger = () => {
           schema: 'public',
           table: 'blockchain_transactions',
           filter: "partner_id=eq.anny_ai_system"
-        },
-        (payload) => {
+        },        (payload) => {
           setTrades((current) => {
             const exists = current.find(t => t.id === payload.new.id);
             if (exists) return current;
+
+            // Trigger Service Worker Notification if action is "executed"
+            if (payload.new.status === 'executed' || payload.new.action === 'executed') {
+              if (Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                  const symbol = payload.new.currency || payload.new.smart_contract_address || 'ASSET';
+                  registration.showNotification("Green Machine Alert", {
+                    body: "Trade Executed: " + symbol,
+                    icon: "/icon.png"
+                  });
+                });
+              }
+            }
+
             return [payload.new, ...current].slice(0, 20);
           });
         }

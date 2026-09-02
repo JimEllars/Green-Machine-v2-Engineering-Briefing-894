@@ -148,3 +148,9 @@
 - Implemented `executeTradeWithFailover` interface in `edge-ledger-worker/src/thirdweb_bridge.ts`.
 - Substituted `annyBackendPost` with `executeTradeWithFailover` for all `/backend/signal/invest` endpoints to ensure robustness.
 - The new function iterates through `["anny", "binance_mock", "kraken_mock"]` trying to complete a trade. It catches 5xx errors or network exceptions on `anny` and fails over to mock exchanges, resolving trades locally and severely mitigating trades going to the dead letter queue (DLQ).
+
+### Sprint 9: Service Worker Push Notifications (vite-plugin-pwa)
+- Configured `vite-plugin-pwa` in `vite.config.js` to auto-generate a Service Worker.
+- Added a `Notification.permission` check and a custom banner UI hook in `App.jsx` to prompt users to opt-in to system alerts smoothly.
+- Connected the `TradeExecutionLedger.jsx` Supabase channel subscription to check for `action === 'executed'` or `status === 'executed'`, triggering a native desktop/mobile alert.
+- Hooked the central `setDlqStatus` in `App.jsx` to parse for `hitl_pending` and `quarantine_count` indicators, issuing a native alert when an action is required to resolve a stuck trade.
