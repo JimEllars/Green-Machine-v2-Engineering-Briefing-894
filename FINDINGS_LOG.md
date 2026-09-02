@@ -154,3 +154,6 @@
 - Added a `Notification.permission` check and a custom banner UI hook in `App.jsx` to prompt users to opt-in to system alerts smoothly.
 - Connected the `TradeExecutionLedger.jsx` Supabase channel subscription to check for `action === 'executed'` or `status === 'executed'`, triggering a native desktop/mobile alert.
 - Hooked the central `setDlqStatus` in `App.jsx` to parse for `hitl_pending` and `quarantine_count` indicators, issuing a native alert when an action is required to resolve a stuck trade.
+
+## Code Freeze
+Sprint 11 is now complete and active feature development has concluded. The AXiM Green Machine is ready for pre-production auditing.
