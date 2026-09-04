@@ -1,3 +1,4 @@
+import { getWorkerUrl } from '../../utils/workerUrl';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SafeIcon from '../../common/SafeIcon';
@@ -217,8 +218,75 @@ export default function AffiliatePayoutGrid() {
             <option value="SOL">SOL</option>
             <option value="MATIC">MATIC</option>
           </select>
+
           <button
-            onClick={() => {
+            onClick={async () => {
+              const pendingPayouts = transactions.filter(tx => tx.status === 'pending');
+              if (pendingPayouts.length === 0) {
+                 alert("No pending payouts to settle.");
+                 return;
+              }
+              const totalAmount = pendingPayouts.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0);
+
+              if (window.confirm(`Settle ${pendingPayouts.length} approved payouts totaling $${totalAmount.toLocaleString()}?`)) {
+                 try {
+                   setIsLoading(true);
+                   const workerUrl = 'http://localhost:8787'; // fallback or import.meta.env.VITE_EDGE_WORKER_URL
+                   // Wait, getWorkerUrl() is used below? No, it needs import.
+                   // I will use getWorkerUrl() since it should be available.
+
+                   const payoutsPayload = pendingPayouts.map(tx => ({
+                      recipient_address: tx.wallet,
+                      amount_usdc: tx.amount,
+                      partner_id: tx.partner,
+                      id: tx.id
+                   }));
+
+                   // Assuming getWorkerUrl is imported in this file. Let's check imports.
+                   const res = await fetch(`${getWorkerUrl()}/api/v1/treasury/batch-payout`, {
+                      method: "POST",
+                      headers: {
+                         "Content-Type": "application/json",
+                         "X-Axim-Signature": import.meta.env.VITE_AXIM_INTERNAL_KEY || ""
+                      },
+                      body: JSON.stringify({ payouts: payoutsPayload })
+                   });
+
+                   if (res.status === 202) {
+                      const data = await res.json();
+                      alert(data.message || "Awaiting multi-sig approval");
+                   } else if (!res.ok) {
+                      const err = await res.json();
+                      if (res.status === 429 && err.status === "GAS_SURGE_PAUSED") {
+                         alert(`Gas Surge Detected (${err.current_gas_gwei} Gwei). Pausing execution. Retry in ${err.retry_after_sec}s.`);
+                      } else {
+                         alert(`Failed: ${err.error}`);
+                      }
+                   } else {
+                      const data = await res.json();
+                      alert(`Successfully settled ${data.processed_count} payouts. Tx: ${data.transaction_hash}`);
+                      // Mark locally as settled
+                      setTransactions(prev => prev.map(tx => {
+                         if (pendingPayouts.find(p => p.id === tx.id)) {
+                             return { ...tx, status: 'minted', txHash: data.transaction_hash };
+                         }
+                         return tx;
+                      }));
+                   }
+                 } catch (e) {
+                   alert("Execution failed: " + e.message);
+                 } finally {
+                   setIsLoading(false);
+                 }
+              }
+            }}
+            className="text-sm font-bold uppercase tracking-wider px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-indigo-900/20"
+          >
+            <SafeIcon name="CheckCircle" className="w-4 h-4" />
+            Settle All Approved Payouts
+          </button>
+          <button
+onClick={() => {
               const headers = ['id', 'created_at', 'amount', 'token_type', 'status', 'transaction_hash'];
               const csvRows = [];
               csvRows.push(headers.join(','));

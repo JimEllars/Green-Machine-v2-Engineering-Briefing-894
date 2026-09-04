@@ -251,12 +251,17 @@ const [computeDebt, setComputeDebt] = useState(() => {
         if (error) {
            console.error("Failed to fetch api_usage_logs", error);
         } else if (data) {
+
           const aggregated = {};
+          let totalRevenue = 0;
+          let totalComputeCost = 0;
           data.forEach(log => {
              const app = log.satellite_app || 'unknown';
              if (!aggregated[app]) aggregated[app] = { computeCost: 0, revenue: 0 };
              aggregated[app].computeCost += Number(log.compute_cost) || 0;
              aggregated[app].revenue += Number(log.gross_revenue) || 0;
+             totalRevenue += Number(log.gross_revenue) || 0;
+             totalComputeCost += Number(log.compute_cost) || 0;
           });
           const result = Object.keys(aggregated).map(app => ({
              app,
@@ -264,10 +269,15 @@ const [computeDebt, setComputeDebt] = useState(() => {
              revenue: aggregated[app].revenue,
              ratio: aggregated[app].revenue > 0 ? (aggregated[app].computeCost / aggregated[app].revenue) : 0
           }));
+
+          const globalEfficiencyRatio = totalComputeCost > 0 ? (totalRevenue / totalComputeCost) : 0;
+
+          const finalResult = { apps: result, globalEfficiencyRatio };
           if (isMounted) {
-            setComputeDebt(result);
-            localStorage.setItem('axim_compute_debt_cache', JSON.stringify({ data: result, timestamp: Date.now() }));
+            setComputeDebt(finalResult);
+            localStorage.setItem('axim_compute_debt_cache', JSON.stringify({ data: finalResult, timestamp: Date.now() }));
           }
+
         }
       } catch (e) {
         console.error("Compute debt fetch failed", e);
