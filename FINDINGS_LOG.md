@@ -157,3 +157,12 @@
 
 ## Code Freeze
 Sprint 11 is now complete and active feature development has concluded. The AXiM Green Machine is ready for pre-production auditing.
+
+### Sprint 8: EmailIt Client, Daily Summaries & HITL Approvals
+- Extracted and unified `sendEmailItNotification` and Resend fallback logic into an `EmailDispatchManager` class in `edge-ledger-worker/src/emailit_client.ts`.
+- Integrated `EmailDispatchManager` across `thirdweb_bridge.ts` and `briefing_generator.ts`.
+- Added a "Test Email Gateway" button in `SystemDiagnosticsPanel.jsx` firing to `/api/v1/treasury/test-email`.
+- Added `dispatchDailyExecutiveEmail()` capability and wired it to a scheduled endpoint `/api/v1/treasury/send-daily-briefing`.
+- Built the backend HITL check: transactions > $10,000 generate a high-priority email and are placed in `AWAITING_MULTISIG_APPROVAL`.
+- Added `/api/v1/treasury/hitl-approve` backend route to process execute/reject commands.
+- Designed and built the frontend HITL approval glassmorphic modal and workflow in `TradeExecutionLedger.jsx`.
