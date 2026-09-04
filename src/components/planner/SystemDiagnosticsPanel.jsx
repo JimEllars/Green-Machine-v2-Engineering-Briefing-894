@@ -677,8 +677,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
             <SafeIcon name="Zap" className="w-4 h-4 text-emerald-500" /> Self-Funding Ratio (Live)
           </div>
           <div className="flex flex-col gap-3">
-            {computeDebt && computeDebt.length > 0 ? (
-              computeDebt.map((appData, idx) => {
+            {computeDebt?.apps && computeDebt.apps.length > 0 ? (
+              computeDebt.apps.map((appData, idx) => {
                 const ratioPct = Math.min(Math.max((appData.ratio || 0) * 100, 0), 100);
                 const isHealthy = appData.ratio < 0.2; // arbitrary healthy threshold
                 const isWarning = appData.ratio >= 0.2 && appData.ratio < 0.5;
@@ -857,7 +857,69 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                   )}
                 </div>
 
-                <div className="mb-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+
+                {/* Capital Efficiency Gauge */}
+                <div className="mb-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50 flex flex-col items-center">
+                  <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-3 flex items-center gap-2 w-full">
+                    <SafeIcon name="Activity" className="w-3 h-3" />
+                    Capital Efficiency Ratio
+                  </div>
+
+                  {(() => {
+                    const ratio = computeDebt?.globalEfficiencyRatio || 0;
+                    let colorClass = 'text-rose-500';
+                    let strokeColor = '#f43f5e';
+                    if (ratio > 10) {
+                       colorClass = 'text-emerald-500';
+                       strokeColor = '#10b981';
+                    } else if (ratio >= 3) {
+                       colorClass = 'text-amber-500';
+                       strokeColor = '#f59e0b';
+                    }
+
+                    const maxRatio = 15;
+                    const normalizedRatio = Math.min(ratio, maxRatio);
+                    const percentage = (normalizedRatio / maxRatio) * 100;
+
+                    const radius = 40;
+                    const circumference = 2 * Math.PI * radius;
+                    const strokeDashoffset = circumference - (percentage / 100) * circumference;
+
+                    return (
+                      <div className="relative flex flex-col items-center">
+                        <svg className="w-32 h-32 transform -rotate-90">
+                          <circle
+                            className="text-slate-700/50"
+                            strokeWidth="8"
+                            stroke="currentColor"
+                            fill="transparent"
+                            r="40"
+                            cx="64"
+                            cy="64"
+                          />
+                          <circle
+                            stroke={strokeColor}
+                            strokeWidth="8"
+                            strokeDasharray={circumference}
+                            strokeDashoffset={strokeDashoffset}
+                            strokeLinecap="round"
+                            fill="transparent"
+                            r="40"
+                            cx="64"
+                            cy="64"
+                            className="transition-all duration-1000 ease-in-out"
+                          />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center flex-col">
+                          <span className={`text-xl font-bold ${colorClass}`}>
+                            {ratio.toFixed(2)}x
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+<div className="mb-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
 
                   <div className="text-[10px] text-indigo-400 font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
                     <SafeIcon name="Zap" className="w-3 h-3" />
