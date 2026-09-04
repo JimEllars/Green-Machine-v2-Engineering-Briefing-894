@@ -26,7 +26,7 @@ const AXiMLoginGate = () => {
            if (email && !whitelist.includes(email)) {
              await supabase.auth.signOut();
              alert("Unauthorized email address. Only internal treasury managers are allowed.");
-             window.location.href = `https://passport.axim.us.com?redirect=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
+             window.location.href = `https://passport.axim.us.com/login?redirect=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
              return;
            }
         }
@@ -38,7 +38,7 @@ const AXiMLoginGate = () => {
       } else {
         // Automatically route the user to SSO
         const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
-        window.location.href = `https://passport.axim.us.com?redirect=${redirectUrl}`;
+        window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
       }
     };
 
