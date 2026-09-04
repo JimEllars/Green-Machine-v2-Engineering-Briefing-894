@@ -25,3 +25,7 @@ dist-ssr
 .env
 # Archive scripts
 scripts/archive/*
+
+# Ignore generated worker JS files to prevent duplicates
+edge-ledger-worker/src/*.js
+!edge-ledger-worker/src/eslint.config.js

@@ -1544,6 +1544,44 @@ export default {
             return new Response("Missing token", { status: 400 });
           }
 
+          const html = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+              <title>Confirm Trade Execution</title>
+              <style>
+                body { font-family: -apple-system, system-ui, sans-serif; background: #09090b; color: #f4f4f5; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+                .card { background: #18181b; padding: 32px; border-radius: 12px; border: 1px solid #27272a; max-width: 400px; text-align: center; }
+                .btn { display: inline-block; padding: 12px 24px; font-weight: 600; font-size: 14px; border-radius: 6px; cursor: pointer; border: none; margin: 8px; transition: opacity 0.2s; }
+                .btn:hover { opacity: 0.9; }
+                .btn-approve { background: #10b981; color: #fff; }
+                .btn-reject { background: #ef4444; color: #fff; }
+              </style>
+            </head>
+            <body>
+              <div class="card">
+                <h2 style="margin-top:0;">Confirm Trade</h2>
+                <p style="color: #a1a1aa; margin-bottom: 24px;">Please confirm or reject the pending AI execution.</p>
+                <form method="POST" action="/api/admin/hitl-approve?token=${token}" style="display:inline;">
+                  <button type="submit" class="btn btn-approve">Execute Trade</button>
+                </form>
+                <form method="POST" action="/api/admin/hitl-reject?token=${token}" style="display:inline;">
+                  <button type="submit" class="btn btn-reject">Reject Trade</button>
+                </form>
+              </div>
+            </body>
+            </html>
+          `;
+          return new Response(html, { headers: { "Content-Type": "text/html" } });
+
+        }
+
+        if (request.method === "POST" && url.pathname === "/api/admin/hitl-approve") {
+          const token = url.searchParams.get("token");
+          if (!token) {
+            return new Response("Missing token", { status: 400 });
+          }
+
           try {
             const { payload } = await jwtVerify(token, new TextEncoder().encode(env.SUPABASE_JWT_SECRET));
             const tradeKey = payload.trade_key as string;
@@ -1656,6 +1694,62 @@ export default {
               status: 401,
               headers: { "Content-Type": "text/html" }
             });
+          }
+        }
+
+        if (request.method === "POST" && url.pathname === "/api/admin/hitl-reject") {
+          const token = url.searchParams.get("token");
+          if (!token) {
+            return new Response("Missing token", { status: 400 });
+          }
+
+          try {
+            const { payload } = await jwtVerify(token, new TextEncoder().encode(env.SUPABASE_JWT_SECRET));
+            const tradeKey = payload.trade_key as string;
+
+            if (!tradeKey) {
+              return new Response("Invalid token payload", { status: 400 });
+            }
+
+            const tradeRaw = await env.GREEN_STATE.get(tradeKey);
+            if (!tradeRaw) {
+              return new Response("Trade expired or already processed.", { status: 404 });
+            }
+
+            const tradeData = JSON.parse(tradeRaw);
+            const execSize = tradeData.recommended_position_size || 0;
+
+            await env.GREEN_STATE.delete(tradeKey);
+
+            // Log rejected to DB
+            const ledgerEntry = {
+              partner_id: "anny_ai_system",
+              status: "rejected",
+              amount: execSize,
+              currency: tradeData.symbol,
+              wallet_address: "anny_ai_system",
+              smart_contract_address: tradeData.action,
+              transaction_hash: `anny_ai_${Date.now()}_${Math.random().toString(36).substring(7)}_rejected`,
+              metadata: {
+                probability_of_profit: tradeData.probability_of_profit,
+                risk_level: tradeData.risk_level,
+                hitl_approved: false
+              }
+            };
+
+            await fetch(`${env.SUPABASE_URL}/rest/v1/blockchain_transactions`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                apikey: env.SUPABASE_SERVICE_KEY
+              },
+              body: JSON.stringify([ledgerEntry])
+            });
+
+            return new Response("Trade rejected successfully.", { status: 200 });
+          } catch (err: any) {
+            return new Response("Invalid or expired token: " + err.message, { status: 401 });
           }
         }
 
@@ -4443,7 +4537,10 @@ Market Context:
           url.pathname !== "/api/admin/trigger-financial-audit" &&
           url.pathname !== "/api/admin/force-oracle-ping" &&
           url.pathname !== "/api/admin/audit-logs" &&
-          url.pathname !== "/api/admin/panic-close"
+          url.pathname !== "/api/admin/panic-close" &&
+          url.pathname !== "/api/admin/hitl-approve" &&
+          url.pathname !== "/api/admin/hitl-reject" &&
+          url.pathname !== "/api/v1/dlq/replay"
         ) {
           return new Response(JSON.stringify({ success: false, error: "404 Not Found", timestamp: Date.now() }), {
             status: 404,
