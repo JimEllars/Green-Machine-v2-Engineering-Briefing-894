@@ -7,6 +7,8 @@ import { useSystemDiagnostics } from '../../hooks/useSystemDiagnostics';
 
 
 const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuarantineManager }) => {
+  const [isReplayingDLQ, setIsReplayingDLQ] = useState(false);
+  const [dlqReplayResult, setDlqReplayResult] = useState(null);
   const [benchmarking, setBenchmarking] = useState(false);
   const [benchmarkResults, setBenchmarkResults] = useState(null);
   const [txCount, setTxCount] = useState(0);
@@ -327,6 +329,37 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   }, [tickerStream]);
 
 
+
+  const handleReplayDLQ = async () => {
+    setIsReplayingDLQ(true);
+    setDlqReplayResult(null);
+    try {
+      // Use internal signature or valid session JWT
+      const session = await supabase.auth.getSession();
+      const token = session?.data?.session?.access_token || '';
+      const response = await fetch("https://green-machine.axim.com/api/v1/dlq/replay", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setDlqReplayResult({ success: true, message: `Replayed: ${data.replayedCount}, Failed: ${data.failedCount}` });
+        if (onDiagnosticsUpdate) onDiagnosticsUpdate();
+      } else {
+        setDlqReplayResult({ success: false, message: data.error || 'Failed to replay DLQ' });
+      }
+    } catch (err) {
+      setDlqReplayResult({ success: false, message: err.message });
+    } finally {
+      setIsReplayingDLQ(false);
+      setTimeout(() => setDlqReplayResult(null), 5000);
+    }
+  };
+
+
   const handleReplayWebhook = async () => {
     setIsReplayingWebhook(true);
     setWebhookResult(null);
@@ -358,7 +391,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   };
 
   return (
-    <div className="bg-zinc-900/90 backdrop-blur-xl hud-border shadow-2xl rounded-xl p-6 h-full flex flex-col">
+    <div className="bg-slate-900/80 backdrop-blur-md/90 backdrop-blur-xl hud-border shadow-2xl rounded-xl p-6 h-full flex flex-col">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-4">
           <h3 className="text-white font-bold flex items-center gap-2 text-sm">
@@ -625,7 +658,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
              </button>
           </div>
           {benchmarkResults && (
-             <div className="flex justify-between items-center bg-slate-900/50 p-2 rounded border border-slate-700/50">
+             <div className="flex justify-between items-center bg-slate-900/80 backdrop-blur-md/50 p-2 rounded border border-slate-800">
                <div className="flex flex-col">
                   <span className="text-[10px] text-slate-500 uppercase font-bold">Edge KV RTT</span>
                   <span className={`text-sm font-mono font-bold ${benchmarkResults.edgePing < 100 ? 'text-emerald-400' : benchmarkResults.edgePing < 300 ? 'text-amber-400' : 'text-rose-400'}`}>
@@ -691,7 +724,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                         {ratioPct.toFixed(1)}% Debt Ratio
                       </span>
                     </div>
-                    <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-slate-900/80 backdrop-blur-md rounded-full overflow-hidden">
                       <div
                         className={`h-full transition-all ${isHealthy ? 'bg-emerald-500' : isWarning ? 'bg-amber-500' : 'bg-rose-500'}`}
                         style={{ width: `${ratioPct}%` }}
@@ -743,7 +776,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
           </button>
 
           {isDeepTelemetryOpen && (
-            <div className="mt-4 bg-slate-900/80 backdrop-blur-md rounded-lg p-4 border border-slate-700/50 relative overflow-hidden">
+            <div className="mt-4 bg-slate-900/80 backdrop-blur-md/80 backdrop-blur-md rounded-lg p-4 border border-slate-800 relative overflow-hidden">
               <div className="absolute top-2 right-2 flex gap-2">
                 <button
                   onClick={() => {
@@ -976,7 +1009,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                         {(deepTelemetry?.edge_telemetry || {}).kv_cache_ratio}
                       </div>
                     </div>
-                    <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden">
+                    <div className="w-full h-1.5 bg-slate-900/80 backdrop-blur-md rounded-full overflow-hidden">
                       <div className={`h-full transition-all ${
                         parseFloat((deepTelemetry?.edge_telemetry || {}).kv_cache_ratio) > 90 ? 'bg-emerald-500' :
                         parseFloat((deepTelemetry?.edge_telemetry || {}).kv_cache_ratio) >= 70 ? 'bg-amber-500' :
@@ -1007,7 +1040,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                       </div>
                     </div>
 
-                    <div className="w-full h-1.5 bg-slate-900 rounded-full overflow-hidden mb-4">
+                    <div className="w-full h-1.5 bg-slate-900/80 backdrop-blur-md rounded-full overflow-hidden mb-4">
                       <div className={`h-full transition-all ${
                         ((deepTelemetry?.investing_brain_telemetry || {}).avg_latency_ms || 850) < 500 ? 'bg-emerald-500' :
                         ((deepTelemetry?.investing_brain_telemetry || {}).avg_latency_ms || 850) < 1000 ? 'bg-amber-500' :

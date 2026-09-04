@@ -583,6 +583,20 @@ export async function generateAIFinancialAudit(env: Env, ctx: ExecutionContext):
 
 export default {
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    // Phase B: Daily Treasury Digest Cron & EmailIt Dispatch
+    if (event.cron === "0 13 * * *") {
+        ctx.waitUntil(
+            (async () => {
+                try {
+                    await dispatchExecutiveBriefing(env, ctx, "Daily Treasury & Liquidity Report");
+                } catch (error) {
+                    console.error("Failed to execute Daily Treasury Digest Cron", error);
+                }
+            })()
+        );
+        return;
+    }
+
     if (event.cron === "0 8 * * *") {
       ctx.waitUntil(
         (async () => {
@@ -4645,6 +4659,119 @@ Market Context:
             );
           }
         }
+
+
+        // Phase C: DLQ Replay & Edge Recovery Interface
+        if (request.method === "POST" && url.pathname === "/api/v1/dlq/replay") {
+          try {
+            // 1. Authenticate with X-Axim-Signature or operator JWT
+            const signature = request.headers.get("X-Axim-Signature");
+            const authHeader = request.headers.get("Authorization");
+
+            let isAuthenticated = false;
+
+            if (signature && timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
+              isAuthenticated = true;
+            } else if (authHeader && authHeader.startsWith("Bearer ")) {
+              const token = authHeader.split(" ")[1];
+              const secret = new TextEncoder().encode(env.SUPABASE_JWT_SECRET);
+              try {
+                await jwtVerify(token, secret);
+                isAuthenticated = true;
+              } catch (err) {
+                // Ignore JWT verify errors here, we will block below if not authenticated
+              }
+            }
+
+            if (!isAuthenticated) {
+              return new Response(JSON.stringify({ error: "Unauthorized DLQ Replay Access" }), {
+                status: 401,
+                headers: { "Content-Type": "application/json", ...corsHeaders }
+              });
+            }
+
+            // 2. Read all pending keys from env.GREEN_STATE under prefix dlq:
+            const dlqList = await env.GREEN_STATE.list({ prefix: "dlq_tx_", limit: 1000 });
+
+            let replayedCount = 0;
+            let failedCount = 0;
+            let payloads = [];
+            let keysToDelete = [];
+
+            for (const key of dlqList.keys) {
+              try {
+                const rawPayload = await env.GREEN_STATE.get(key.name);
+                if (rawPayload) {
+                  const payload = JSON.parse(rawPayload);
+
+                  let partner_id = payload.partner_id || payload.metadata?.linked_affiliate_id || payload.metadata?.promo_code || null;
+                  if (typeof partner_id === "string") {
+                    partner_id = partner_id.trim();
+                  }
+
+                  let status = "pending";
+                  if (payload.event_type === "minted" || payload.event_type === "settled") status = "minted";
+                  if (payload.event_type === "failed") status = "failed";
+
+                  const ledgerEntry = {
+                    partner_id,
+                    wallet_address: payload.wallet_address,
+                    smart_contract_address: payload.smart_contract_address,
+                    amount: payload.amount,
+                    currency: payload.currency,
+                    status,
+                    ...(payload.transaction_hash && { transaction_hash: payload.transaction_hash }),
+                  };
+
+                  payloads.push(ledgerEntry);
+                  keysToDelete.push(key.name);
+                }
+              } catch(e) {
+                failedCount++;
+              }
+            }
+
+            if (payloads.length > 0) {
+              // 3. Attempt batch insertion into public.blockchain_transactions in Supabase
+              const dbResponse = await fetch(
+                `${env.SUPABASE_URL}/rest/v1/blockchain_transactions?on_conflict=transaction_hash`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${env.SUPABASE_SERVICE_KEY}`,
+                    apikey: env.SUPABASE_SERVICE_KEY,
+                    Prefer: "resolution=merge-duplicates",
+                  },
+                  body: JSON.stringify(payloads),
+                }
+              );
+
+              if (dbResponse.ok) {
+                // 4. On successful insert, delete the replayed keys from KV
+                for (const key of keysToDelete) {
+                  await env.GREEN_STATE.delete(key);
+                  replayedCount++;
+                }
+              } else {
+                failedCount += payloads.length;
+              }
+            }
+
+            // 5. Return `{ replayedCount: number, failedCount: number }`
+            return new Response(JSON.stringify({ replayedCount, failedCount }), {
+              status: 200,
+              headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+
+          } catch (error: any) {
+            return new Response(JSON.stringify({ error: error.message }), {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+          }
+        }
+
 
         // 1. HMAC Validation (The Ingress Token Isolation Rule)
 

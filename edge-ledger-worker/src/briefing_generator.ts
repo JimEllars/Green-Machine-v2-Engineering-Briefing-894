@@ -442,7 +442,7 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
         to: "james.ellars@axim.us.com",
         cc: ["jrellars@gmail.com"],
         subject:
-          "AXiM Executive Briefing & Departmental Summary — Green Machine v2",
+          `[AXiM Green Machine] Daily Treasury & Liquidity Report - ${new Date().toISOString().split('T')[0]}`,
         html: html,
       },
       env,
@@ -471,7 +471,7 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
         JSON.stringify({
           to: "james.ellars@axim.us.com",
           cc: ["jrellars@gmail.com"],
-          subject: "AXiM Executive Briefing (Delayed)",
+          subject: `[AXiM Green Machine] Daily Treasury & Liquidity Report - ${new Date().toISOString().split('T')[0]}`,
           html: "<p>The automated briefing encountered an error. A retry will be attempted shortly.</p>",
         }),
         { expirationTtl: 86400 },
