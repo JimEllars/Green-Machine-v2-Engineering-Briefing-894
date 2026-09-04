@@ -246,14 +246,25 @@ const TradeExecutionLedger = () => {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {trade.transaction_hash ? (
-                        <a
-                          href={`https://arbiscan.io/tx/${trade.transaction_hash}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:text-blue-300 font-mono text-xs underline"
-                        >
-                          {trade.transaction_hash.substring(0, 6)}...{trade.transaction_hash.substring(trade.transaction_hash.length - 4)}
-                        </a>
+                        <div className="flex flex-col items-end gap-1">
+                          <a
+                            href={`https://arbiscan.io/tx/${trade.transaction_hash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 font-mono text-xs underline"
+                          >
+                            [Tx: {trade.transaction_hash.substring(0, 6)}...{trade.transaction_hash.substring(trade.transaction_hash.length - 4)}]
+                          </a>
+                          {trade.status === 'confirmed' ? (
+                             <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded animate-pulse">
+                               <SafeIcon name="CheckCircle" className="w-3 h-3" /> Confirmed
+                             </span>
+                          ) : (
+                             <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                               <SafeIcon name="Clock" className="w-3 h-3" /> {trade.status || 'Submitted'}
+                             </span>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-zinc-600 font-mono text-xs">Pending</span>
                       )}

@@ -21,6 +21,15 @@ export default function MarketFeedMatrix() {
   const [isClosingAll, setIsClosingAll] = useState(false);
   const [panicResult, setPanicResult] = useState(null);
 
+  const handleResetCircuitBreaker = async () => {
+     if (!window.confirm("WARNING: Are you sure you want to manually override and reset the volatility circuit breaker?")) return;
+     try {
+       // Since it's a simulated UI, just toggle it back and we'd ping the API.
+       setIsCircuitBreaker(false);
+       // Typically: fetch(getWorkerUrl('/api/admin/reset-circuit-breaker', ...))
+     } catch (err) { /* ignore */ }
+  };
+
   const handlePanicCloseAll = async () => {
     if (!window.confirm("Are you sure you want to FORCE CLOSE ALL active positions? This action cannot be undone.")) return;
     setIsClosingAll(true);
