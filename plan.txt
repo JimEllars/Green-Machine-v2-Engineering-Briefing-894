@@ -1,0 +1,13 @@
+1. Modify `src/components/planner/TradeExecutionLedger.jsx`:
+   - Import `ExclamationTriangleIcon` (or similar, like `ExclamationCircleIcon`) from `@heroicons/react/24/outline` or use `SafeIcon`.
+   - Import `SafeIcon` from `../../common/SafeIcon`.
+   - Import `getWorkerUrl` from `../../utils/workerUrl`.
+   - Add state: `selectedTrade`, `isModalOpen`, `isExecuting`.
+   - Implement the "Trigger Button" logic in the table for `AWAITING_MULTISIG_APPROVAL`.
+   - Add the HITL Modal UI at the root of the component return, which appears when `isModalOpen` is true.
+   - Implement functions `handleAuthorize` and `handleReject` that call the backend endpoint `/api/v1/treasury/hitl-approve`.
+
+2. Pre-commit check:
+   - Call the `pre_commit_instructions` tool to run the required tests and linters.
+
+3. Complete the task using `submit` tool.
