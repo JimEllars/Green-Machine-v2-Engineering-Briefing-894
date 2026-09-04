@@ -23,3 +23,7 @@ This document outlines the step-by-step procedure to follow when going live.
 - Inspect the StrategyConsultantTerminal and AffiliatePayoutGrid to verify the modern enterprise glassmorphic UI updates apply correctly across viewports.
 - Confirm that the AXiMLoginGate and background cron tasks remain functional.
 - Ensure `/api/v1/strategy/consult` routing logic does not conflict with existing paths.
+
+### Post-Deploy Operator Verification (Phase 13 HITL Change)
+- [ ] Confirm `GET /api/admin/hitl-approve?token=...` displays the HTML confirmation page and does NOT execute a trade.
+- [ ] Check if `wrangler secret list` holds `SUPABASE_SERVICE_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in production and unify them in `.dev.vars` / script code if necessary.

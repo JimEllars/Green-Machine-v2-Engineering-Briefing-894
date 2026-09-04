@@ -166,3 +166,13 @@ Sprint 11 is now complete and active feature development has concluded. The AXiM
 - Built the backend HITL check: transactions > $10,000 generate a high-priority email and are placed in `AWAITING_MULTISIG_APPROVAL`.
 - Added `/api/v1/treasury/hitl-approve` backend route to process execute/reject commands.
 - Designed and built the frontend HITL approval glassmorphic modal and workflow in `TradeExecutionLedger.jsx`.
+
+### Sep 4, 2026 - Phase 13 HITL Safety Fix & Hygiene
+- **Fixed HITL Security Vulnerability**: Modified `GET /api/admin/hitl-approve` in `edge-ledger-worker/src/thirdweb_bridge.ts` to return an interactive HTML confirmation page instead of immediately executing trades.
+- Added `POST /api/admin/hitl-approve` and `POST /api/admin/hitl-reject` routes to perform actual trade approval/rejection handling.
+- **Implemented HITL Modal UI**: Added an interactive "Review" button in `TradeExecutionLedger.jsx` for trades with the `AWAITING_MULTISIG_APPROVAL` status, displaying trade details and connecting to the new `POST` API routes.
+- **Fixed Imports in UI**: Included the missing `SafeIcon` and `getWorkerUrl` imports in `TradeExecutionLedger.jsx` to stop crashes.
+- **Secret Documentation Cleaned Up**: Updated `.dev.vars.example` to detail `ANNY_EMAIL`, `ANNY_PASSWORD`, `ANNY_AUTH_TOKEN`, `ANNY_AUTH_MODE`, `EMAILIT_API_KEY`, `RESEND_API_KEY`, `SUPABASE_READ_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, and `CFO_APP_URL`.
+- **Flag for James regarding Service Key naming**: `thirdweb_bridge.ts` reads `env.SUPABASE_SERVICE_KEY` while `briefing_generator.ts` reads `env.SUPABASE_SERVICE_ROLE_KEY`. Could not test with `wrangler secret list` due to Cloudflare CLI lacking auth token in dev environment. Did not silently modify these variables in the code. One of these scripts might be silently failing DB writes.
+- **Hygiene completed**: Deleted `plan.txt`, removed duplicate `.js` generated files in `edge-ledger-worker/src/`, and updated `.gitignore` to prevent generated JS files in the worker src from committing.
+- Verified everything with `npm run lint && npm run build` and `tsc`.

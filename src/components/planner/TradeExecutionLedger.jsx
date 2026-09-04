@@ -1,10 +1,56 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../supabaseClient';
 import { ShieldCheckIcon, BanknotesIcon, ArrowTrendingUpIcon } from '@heroicons/react/24/outline';
+import SafeIcon from '../../common/SafeIcon';
+import { getWorkerUrl } from '../../utils/workerUrl';
+
 
 const TradeExecutionLedger = () => {
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedTrade, setSelectedTrade] = useState(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+
+  const handleOpenModal = (trade) => {
+    setSelectedTrade(trade);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setSelectedTrade(null);
+    setIsModalOpen(false);
+  };
+
+  const handleHITLAction = async (actionType) => {
+    if (!selectedTrade) return;
+    setIsExecuting(true);
+    try {
+      const token = selectedTrade.metadata?.approval_token; // Assume token is stored in metadata
+      if (!token) {
+         console.error("Missing HITL approval token in trade metadata");
+         return;
+      }
+
+      const endpoint = actionType === 'approve' ? '/api/admin/hitl-approve' : '/api/admin/hitl-reject';
+      const url = `${getWorkerUrl()}${endpoint}?token=${encodeURIComponent(token)}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to ${actionType} trade`);
+      }
+
+      // Success - close modal (real-time subscription will update the list)
+      handleCloseModal();
+    } catch (err) {
+      console.error(`Error during ${actionType}:`, err);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchTrades = async () => {
@@ -213,7 +259,7 @@ const TradeExecutionLedger = () => {
                 return (
                   <tr
                     key={trade.id || Math.random()}
-                    className="hover:bg-zinc-800/30 transition-colors group"
+                    className={`hover:bg-zinc-800/30 transition-colors group ${trade.status === 'AWAITING_MULTISIG_APPROVAL' ? 'bg-amber-500/5' : ''}`}
                   >
                     <td className="px-4 py-3 text-zinc-400 font-mono text-xs">
                       {formatDate(trade.created_at)}
@@ -245,7 +291,22 @@ const TradeExecutionLedger = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {trade.transaction_hash ? (
+                      {trade.status === 'AWAITING_MULTISIG_APPROVAL' ? (
+                        <div className="flex flex-col items-end gap-1">
+                          <button
+                            onClick={() => handleOpenModal(trade)}
+                            className="flex items-center gap-1 text-[10px] uppercase font-bold text-amber-400 bg-amber-500/20 hover:bg-amber-500/30 px-2 py-1 rounded border border-amber-500/30 transition-colors"
+                          >
+                            <ShieldCheckIcon className="w-3 h-3" /> Review
+                          </button>
+                        </div>
+                      ) : trade.status === 'rejected' ? (
+                        <div className="flex flex-col items-end gap-1">
+                           <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">
+                             <SafeIcon name="XCircle" className="w-3 h-3" /> Rejected
+                           </span>
+                        </div>
+                      ) : trade.transaction_hash ? (
                         <div className="flex flex-col items-end gap-1">
                           <a
                             href={`https://arbiscan.io/tx/${trade.transaction_hash}`}
@@ -276,6 +337,67 @@ const TradeExecutionLedger = () => {
           </tbody>
         </table>
       </div>
+
+      {/* HITL Approval Modal */}
+      {isModalOpen && selectedTrade && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-md w-full shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-zinc-800 flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-zinc-100 flex items-center gap-2">
+                <ShieldCheckIcon className="w-5 h-5 text-amber-400" />
+                Human-in-the-Loop Review
+              </h3>
+              <button onClick={handleCloseModal} className="text-zinc-500 hover:text-zinc-300">
+                &times;
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-zinc-400">
+                The AI system has proposed a trade that requires multi-sig human approval.
+              </p>
+
+              <div className="bg-zinc-800/50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-xs text-zinc-500">Asset</span>
+                  <span className="text-sm font-medium text-zinc-200">{selectedTrade.currency || 'UNKNOWN'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-zinc-500">Action</span>
+                  <span className={`text-sm font-semibold ${selectedTrade.smart_contract_address?.toLowerCase() === 'buy' ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {(selectedTrade.smart_contract_address || 'UNKNOWN').toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-zinc-500">Amount</span>
+                  <span className="text-sm font-mono text-zinc-200">${Number(selectedTrade.amount || 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-zinc-500">AI Confidence</span>
+                  <span className="text-sm font-medium text-zinc-200">{selectedTrade.metadata?.probability_of_profit || 0}%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 bg-zinc-900/80 border-t border-zinc-800 flex gap-3">
+              <button
+                onClick={() => handleHITLAction('reject')}
+                disabled={isExecuting}
+                className="flex-1 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {isExecuting ? 'Processing...' : 'Reject Trade'}
+              </button>
+              <button
+                onClick={() => handleHITLAction('approve')}
+                disabled={isExecuting}
+                className="flex-1 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {isExecuting ? 'Processing...' : 'Approve Execution'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
