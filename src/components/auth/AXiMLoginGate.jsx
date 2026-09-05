@@ -58,9 +58,13 @@ const AXiMLoginGate = () => {
         if (session) {
            setInitialAuthChecked(true);
         } else {
-           // Automatically route the user to SSO
-           const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
-           window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
+           if (isOffline) {
+             setInitialAuthChecked(true);
+           } else {
+             // Automatically route the user to SSO
+             const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
+             window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
+           }
         }
       }
       setIsRefreshingToken(false);

@@ -854,13 +854,21 @@ const handleSyncKV = async () => {
 
   const isAuthorized = userEmail && ["jrellars@gmail.com", "authorized@axim.us.com"].includes(userEmail);
 
-  if (authState !== 'Authenticated' || !isAuthorized) {
-    return <AXiMLoginGate />;
-  }
+  // Instead of early return which unmounts the dashboard, we will render it as an overlay
+  // or handle it gracefully if we have a locally cached session.
+  const isAuthGateActive = authState !== 'Authenticated' || !isAuthorized;
+  const isOfflineMode = !navigator.onLine || readinessStatus === 'Offline';
+  // If we were authenticated but lost connection, we want to hide the gate.
+  const showLoginGate = isAuthGateActive && !(isOfflineMode && localStorage.getItem('axim-green-machine-auth'));
 
 
   return (
     <div className="min-h-screen bg-zinc-950 text-slate-200 font-sans selection:bg-emerald-500/30">
+      {showLoginGate && (
+        <div className="fixed inset-0 z-[9999]">
+          <AXiMLoginGate />
+        </div>
+      )}
       
       {/* Overlays */}
 
