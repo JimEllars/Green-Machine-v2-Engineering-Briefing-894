@@ -492,14 +492,17 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
         </div>
 
         {/* Network Blip Fallback Status */}
-        <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
-            sysStatus === 'Healthy' ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
-            sysStatus === 'Degraded' ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' :
-            'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(243,24,73,0.3)]'
-        }`}>
+        <div
+          className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
+            sysStatus === 'Healthy' && sysLatency <= 400 ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
+            sysStatus === 'Degraded' || sysLatency > 400 ? 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]' :
+            'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(243,24,73,0.3)] group relative'
+          }`}
+          title={sysStatus === 'Offline' ? "Failed to connect to edge or db. Retrying..." : ""}
+        >
           <div className={`w-1.5 h-1.5 rounded-full ${
-            sysStatus === 'Healthy' ? 'bg-emerald-500 animate-pulse' :
-            sysStatus === 'Degraded' ? 'bg-amber-500 animate-pulse' :
+            sysStatus === 'Healthy' && sysLatency <= 400 ? 'bg-emerald-500 animate-pulse' :
+            sysStatus === 'Degraded' || sysLatency > 400 ? 'bg-amber-500 animate-pulse' :
             'bg-rose-500'
           }`} />
           System: {sysStatus}

@@ -1000,6 +1000,31 @@ export default {
         }
 
 
+
+        if (request.method === "GET" && url.pathname === "/api/health") {
+          let kvStatus = "connected";
+          try {
+             // lightweight read/ping to configured KV namespace
+             await env.GREEN_STATE.get("health_ping");
+          } catch(e) {
+             kvStatus = "degraded";
+          }
+          const responsePayload = {
+            status: "ok",
+            timestamp: new Date().toISOString(),
+            kv_status: kvStatus,
+            version: "2.1.0",
+            environment: env.ENVIRONMENT || "production",
+            latencyMs: Math.round(performance.now() - startTime)
+          };
+          return new Response(JSON.stringify(responsePayload), {
+             headers: {
+                 "Content-Type": "application/json",
+                 ...corsHeaders
+             }
+          });
+        }
+
         if (request.method === "GET" && url.pathname === "/api/dlq-status") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {

@@ -146,7 +146,7 @@ const TradeExecutionLedger = () => {
   };
 
   return (
-    <div className="bg-zinc-900/60 border border-zinc-800/50 backdrop-blur-xl rounded-2xl p-6 shadow-2xl flex flex-col h-full relative overflow-hidden transition-all hover:border-emerald-500/30">
+    <div className="border border-slate-800 bg-slate-900/60 backdrop-blur-md rounded-xl p-6 shadow-2xl flex flex-col h-full relative overflow-hidden transition-all hover:border-emerald-500/30">
 
       {/* Header Section */}
       <div className="flex items-center justify-between mb-6 z-10 relative">
@@ -161,7 +161,7 @@ const TradeExecutionLedger = () => {
             <p className="text-xs text-zinc-400">Live Capital Deployment Records</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono bg-zinc-800/50 px-3 py-1.5 rounded-full border border-zinc-700/50">
+        <div className="flex items-center gap-2 text-xs text-zinc-400 tabular-nums font-mono transition-colors duration-300 bg-zinc-800/50 px-3 py-1.5 rounded-full border border-zinc-700/50">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
           SYNC: LIVE
         </div>
@@ -179,7 +179,7 @@ const TradeExecutionLedger = () => {
         </div>
         <div className="bg-zinc-800/40 border border-zinc-700/50 rounded-xl p-4 flex flex-col justify-center items-center backdrop-blur-sm">
           <p className="text-xs text-zinc-400 mb-1 uppercase tracking-wider">Total Volume</p>
-          <p className="text-2xl font-bold text-zinc-100 font-mono">${stats.totalVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+          <p className="text-2xl font-bold text-zinc-100 tabular-nums font-mono transition-colors duration-300">${stats.totalVolume.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
         </div>
       </div>
 
@@ -261,7 +261,7 @@ const TradeExecutionLedger = () => {
                     key={trade.id || Math.random()}
                     className={`hover:bg-zinc-800/30 transition-colors group ${trade.status === 'AWAITING_MULTISIG_APPROVAL' ? 'bg-amber-500/5' : ''}`}
                   >
-                    <td className="px-4 py-3 text-zinc-400 font-mono text-xs">
+                    <td className="px-4 py-3 text-zinc-400 tabular-nums font-mono transition-colors duration-300 text-xs">
                       {formatDate(trade.created_at)}
                     </td>
                     <td className="px-4 py-3">
@@ -279,7 +279,7 @@ const TradeExecutionLedger = () => {
                         {(trade.smart_contract_address || 'UNKNOWN').toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-zinc-200">
+                    <td className="px-4 py-3 text-right tabular-nums font-mono transition-colors duration-300 text-zinc-200">
                       ${Number(trade.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -312,7 +312,7 @@ const TradeExecutionLedger = () => {
                             href={`https://arbiscan.io/tx/${trade.transaction_hash}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 font-mono text-xs underline"
+                            className="text-blue-400 hover:text-blue-300 tabular-nums font-mono transition-colors duration-300 text-xs underline"
                           >
                             [Tx: {trade.transaction_hash.substring(0, 6)}...{trade.transaction_hash.substring(trade.transaction_hash.length - 4)}]
                           </a>
@@ -327,7 +327,7 @@ const TradeExecutionLedger = () => {
                           )}
                         </div>
                       ) : (
-                        <span className="text-zinc-600 font-mono text-xs">Pending</span>
+                        <span className="text-zinc-600 tabular-nums font-mono transition-colors duration-300 text-xs">Pending</span>
                       )}
                     </td>
                   </tr>
@@ -370,7 +370,7 @@ const TradeExecutionLedger = () => {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs text-zinc-500">Amount</span>
-                  <span className="text-sm font-mono text-zinc-200">${Number(selectedTrade.amount || 0).toLocaleString()}</span>
+                  <span className="text-sm tabular-nums font-mono transition-colors duration-300 text-zinc-200">${Number(selectedTrade.amount || 0).toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs text-zinc-500">AI Confidence</span>
