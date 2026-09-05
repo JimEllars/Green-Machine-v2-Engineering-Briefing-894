@@ -57,7 +57,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
       const workerUrl = getWorkerUrl();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const edgeRes = await fetch(`${workerUrl}/api/health`, {
+      const edgeRes = await fetch(`${workerUrl}/api/telemetry`, {
          headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
          },
@@ -67,17 +67,18 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
 
       if (edgeRes.ok) {
         const data = await edgeRes.json().catch(() => ({}));
-        // Check if the response follows the standardized { status, data, ... } wrapper
-        if (data && data.status === "ok" && !Array.isArray(data.data)) {
+        if (data && data.success && data.data) {
+           localTelemetry = { latencyMs: data.latency_ms, colo: data.colo, ...data.data };
+           setTelemetry(prev => ({ ...prev, ...localTelemetry, offline: false, _stale: false }));
+        } else if (data && data.status === "ok" && !Array.isArray(data.data)) {
            localTelemetry = { latencyMs: data.latencyMs, ...data };
-           setTelemetry(prev => ({ ...prev, ...localTelemetry }));
+           setTelemetry(prev => ({ ...prev, ...localTelemetry, offline: false, _stale: false }));
         } else if (data && data.status && Array.isArray(data.data) && data.data.length > 0) {
           localTelemetry = data.data[0];
-          setTelemetry(prev => ({ ...prev, ...data.data[0] }));
+          setTelemetry(prev => ({ ...prev, ...data.data[0], offline: false, _stale: false }));
         } else {
-          // Fallback for non-standardized or legacy payload
           localTelemetry = data;
-          setTelemetry(prev => ({ ...prev, ...data }));
+          setTelemetry(prev => ({ ...prev, ...data, offline: false, _stale: false }));
         }
         edgeSuccess = true;
       }
@@ -133,13 +134,19 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
 
        // Fallback mock data when edge is unreachable
        if (!localTelemetry) {
-           setTelemetry(prev => ({
-               ...prev,
-               status: "fallback",
-               edge_version: "v2.4.0-mock",
-               environment: "local",
-               offline: true
-           }));
+           // Fallback only if we have NO prior cached state, otherwise keep the last known healthy state
+           setTelemetry(prev => {
+               if (prev && Object.keys(prev).length > 0 && !prev.offline) {
+                  return { ...prev, offline: true, _stale: true };
+               }
+               return {
+                   ...prev,
+                   status: "fallback",
+                   edge_version: "v2.4.0-mock",
+                   environment: "local",
+                   offline: true
+               };
+           });
        }
     }
 
@@ -168,7 +175,10 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
         // Exponential backoff logic based on error count
         // Using a function form of state to ensure latest value
         setErrorCount(currentErrorCount => {
-           const intervalTime = currentErrorCount === 0 ? 10000 : Math.min(10000 * Math.pow(2, currentErrorCount), 60000);
+           // Add 0-20% jitter to prevent thundering herd cascades
+           const baseInterval = currentErrorCount === 0 ? 10000 : Math.min(10000 * Math.pow(2, currentErrorCount), 60000);
+           const jitter = baseInterval * 0.2 * Math.random();
+           const intervalTime = baseInterval + jitter;
            timeoutId = setTimeout(runFetch, intervalTime);
            return currentErrorCount;
         });

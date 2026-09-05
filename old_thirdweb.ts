@@ -3964,7 +3964,7 @@ Market Context:
             await env.GREEN_STATE.get("telemetry_ping");
             kvLatency = Math.round(performance.now() - kvStart);
             kvHits++;
-            ctx.waitUntil(env.GREEN_STATE.put("telemetry_kv_hits", kvHits.toString()));
+            await env.GREEN_STATE.put("telemetry_kv_hits", kvHits.toString());
 
             const rpcStart = performance.now();
             const rpcRes = await fetch(`${env.SUPABASE_URL}/rest/v1/`, {
@@ -3974,56 +3974,44 @@ Market Context:
           } catch (e) {
             rpcStatus = "error";
             kvMisses++;
-            ctx.waitUntil(env.GREEN_STATE.put("telemetry_kv_misses", kvMisses.toString()));
+            await env.GREEN_STATE.put("telemetry_kv_misses", kvMisses.toString());
           }
 
           const ratio = kvHits + kvMisses > 0 ? (kvHits / (kvHits + kvMisses)).toFixed(2) : "1.00";
 
-          const clientIp = request.headers.get("cf-connecting-ip") || "unknown";
-          const rateLimitKey = `rl_${clientIp}`;
-          const rateLimitBudgetStr = await env.GREEN_STATE.get(rateLimitKey);
-          let rateLimitBudget = 100;
-          if (rateLimitBudgetStr) {
-             rateLimitBudget = parseInt(rateLimitBudgetStr, 10);
-          }
-
-          const colo = (request as any).cf?.colo || 'DEV';
-          const payload = {
-            success: true,
-            timestamp: new Date().toISOString(),
-            colo: colo,
-            latency_ms: Math.round(performance.now() - startTime),
-            data: sanitizeTelemetry({
-              worker_region: colo,
-              uptimeSeconds: Math.floor((Date.now() - workerStartTime) / 1000),
-              kv_cache_ratio: Math.round(Number(ratio) * 100) + "%",
-              kv_operational: kvLatency < 200,
-              rate_limit_remaining: rateLimitBudget,
-              thirdweb_bridge_health: "nominal",
-              market_watcher_health: "nominal",
-              kv_cache_latency_ms: kvLatency,
-              upstream_rpc_status: rpcStatus,
-              edge_version: "v2.4.0-stable",
-              environment: "production",
-              cloudflareEdge: true,
-              auth_handshake_status: Boolean(
-                await env.GREEN_STATE.get("anny_session_token"),
-              )
-                ? "verified"
-                : "unverified",
-              ledger_sync_state: "synchronized", // Simulated for now
-            })
-          };
-
-          return new Response(JSON.stringify(payload), {
-            status: 200,
-            headers: {
-              "Content-Type": "application/json",
-              "Cache-Control": "no-store, private",
-              ...corsHeaders,
+          return new Response(
+            JSON.stringify(
+              sanitizeTelemetry({
+                worker_region: (request as any).cf?.colo || 'DEV',
+                uptimeSeconds: Math.floor((Date.now() - workerStartTime) / 1000),
+                kv_cache_ratio: Math.round(Number(ratio) * 100) + "%",
+                success: true,
+                latencyMs: Math.round(performance.now() - startTime),
+                timestamp: new Date().toISOString(),
+                kv_cache_latency_ms: kvLatency,
+                upstream_rpc_status: rpcStatus,
+                edge_version: "v2.4.0-stable",
+                environment: "production",
+                cloudflareEdge: true,
+                auth_handshake_status: Boolean(
+                  await env.GREEN_STATE.get("anny_session_token"),
+                )
+                  ? "verified"
+                  : "unverified",
+                ledger_sync_state: "synchronized", // Simulated for now
+              }),
+            ),
+            {
+              status: 200,
+              headers: {
+                "Content-Type": "application/json",
+                "Cache-Control": "no-store, private",
+                ...corsHeaders,
+              },
             },
-          });
+          );
         }
+
 
         if (request.method === "GET" && url.pathname === "/api/health") {
           let kvHits = parseInt(await env.GREEN_STATE.get("telemetry_kv_hits") || "0", 10);
