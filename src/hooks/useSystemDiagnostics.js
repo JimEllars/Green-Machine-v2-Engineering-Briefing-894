@@ -55,15 +55,23 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
     try {
       // 1. Edge Worker Telemetry
       const workerUrl = getWorkerUrl();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
       const edgeRes = await fetch(`${workerUrl}/api/health`, {
          headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
-         }
+         },
+         signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       if (edgeRes.ok) {
         const data = await edgeRes.json().catch(() => ({}));
         // Check if the response follows the standardized { status, data, ... } wrapper
-        if (data && data.status && Array.isArray(data.data) && data.data.length > 0) {
+        if (data && data.status === "ok" && !Array.isArray(data.data)) {
+           localTelemetry = { latencyMs: data.latencyMs, ...data };
+           setTelemetry(prev => ({ ...prev, ...localTelemetry }));
+        } else if (data && data.status && Array.isArray(data.data) && data.data.length > 0) {
           localTelemetry = data.data[0];
           setTelemetry(prev => ({ ...prev, ...data.data[0] }));
         } else {
@@ -160,7 +168,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
         // Exponential backoff logic based on error count
         // Using a function form of state to ensure latest value
         setErrorCount(currentErrorCount => {
-           const intervalTime = currentErrorCount === 0 ? 30000 : Math.min(30000 * Math.pow(2, currentErrorCount), 300000);
+           const intervalTime = currentErrorCount === 0 ? 10000 : Math.min(10000 * Math.pow(2, currentErrorCount), 60000);
            timeoutId = setTimeout(runFetch, intervalTime);
            return currentErrorCount;
         });

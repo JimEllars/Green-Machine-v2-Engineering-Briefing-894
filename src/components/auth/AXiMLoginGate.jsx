@@ -3,11 +3,27 @@ import { supabase } from '../../supabaseClient';
 import SafeIcon from '../../common/SafeIcon';
 
 const AXiMLoginGate = () => {
+  const [initialAuthChecked, setInitialAuthChecked] = React.useState(false);
+  const [isRefreshingToken, setIsRefreshingToken] = React.useState(false);
+  const [isOffline, setIsOffline] = React.useState(!navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
 
     const initializeAuth = async () => {
+      setIsRefreshingToken(true);
       if (token) {
         // Hydrate the local React/Supabase session seamlessly
         const { error } = await supabase.auth.setSession({
@@ -35,15 +51,28 @@ const AXiMLoginGate = () => {
         // Strip token from history to prevent token leakage
         const newUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
+        setInitialAuthChecked(true);
       } else {
-        // Automatically route the user to SSO
-        const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
-        window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
+        // If we have an existing session and just network issue, don't redirect
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+           setInitialAuthChecked(true);
+        } else {
+           // Automatically route the user to SSO
+           const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
+           window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
+        }
       }
+      setIsRefreshingToken(false);
     };
 
     initializeAuth();
   }, []);
+
+  if (isOffline && initialAuthChecked) {
+    return null; // Return nothing so the main app can handle the render when offline but logged in.
+  }
+
 
   return (
     <div className="min-h-screen bg-black text-emerald-400 flex items-center justify-center p-4">

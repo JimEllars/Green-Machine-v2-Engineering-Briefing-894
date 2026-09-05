@@ -217,7 +217,7 @@ export default function MarketFeedMatrix() {
   }, [marketData]);
 
   return (
-    <div className="bg-zinc-900/80 backdrop-blur-xl border border-zinc-800/50 rounded-xl p-6 shadow-2xl">
+    <div className="border border-slate-800 bg-slate-900/60 backdrop-blur-md rounded-xl p-6 shadow-2xl">
             {isDegraded && (
         <div className="mb-4 bg-amber-500/20 border border-amber-500/50 rounded-lg p-3 text-amber-400 text-sm font-medium flex items-center justify-center gap-2">
           <SafeIcon name="AlertTriangle" className="w-4 h-4" />
@@ -341,7 +341,7 @@ export default function MarketFeedMatrix() {
         }).length === 0 && (
         <div className="col-span-full py-12 flex flex-col items-center justify-center border border-zinc-800/50 border-dashed rounded-xl bg-zinc-900/30">
           <SafeIcon name="Activity" className="w-8 h-8 text-slate-600 mb-3" />
-          <p className="text-slate-400 font-mono text-sm">No market feed data available</p>
+          <p className="text-slate-400 tabular-nums font-mono text-sm transition-colors duration-300">No market feed data available</p>
           <p className="text-slate-600 text-xs mt-1">Awaiting synchronization from edge cache...</p>
         </div>
       )}
@@ -354,7 +354,7 @@ export default function MarketFeedMatrix() {
           <motion.div
             key={asset.symbol}
             layout
-            className="bg-slate-800/80 rounded-xl p-5 border border-slate-700 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-900/20 transition-colors relative"
+            className="border border-slate-800 bg-slate-900/60 backdrop-blur-md rounded-xl p-5 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-900/20 transition-colors relative"
           >
 
             {/* Circuit Breaker Status Indicator */}
@@ -385,7 +385,7 @@ export default function MarketFeedMatrix() {
                 key={asset.price}
                 initial={{ opacity: 0.5, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-2xl font-mono font-bold text-white"
+                className="text-2xl tabular-nums font-mono font-bold text-white transition-colors duration-300"
               >
                 ${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </motion.div>
@@ -470,13 +470,13 @@ export default function MarketFeedMatrix() {
                          {(signal.action || 'UNKNOWN').toUpperCase()}
                        </span>
                        <span className="text-white font-semibold">{signal.symbol || 'N/A'}</span>
-                       <span className="text-slate-400 font-mono text-sm">@ ${(signal.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
+                       <span className="text-slate-400 tabular-nums font-mono text-sm transition-colors duration-300">@ ${(signal.price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</span>
                      </div>
                      <div className="flex items-center gap-4 text-xs text-slate-500">
                         {signal.probability_of_profit !== undefined && (
                           <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/50 rounded-md border border-zinc-700/50">
                             <SafeIcon name="Brain" className="w-3 h-3 text-purple-400" />
-                            <span className={`font-mono font-medium ${signal.approved ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            <span className={`tabular-nums font-mono font-medium transition-colors duration-300 ${signal.approved ? 'text-emerald-400' : 'text-rose-400'}`}>
                               {signal.probability_of_profit}% AI Win Prob
                             </span>
                             <span className="text-zinc-600">|</span>
@@ -526,7 +526,7 @@ export default function MarketFeedMatrix() {
           {exchangeBalance && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-950/50 rounded-full border border-zinc-800/80">
               <span className="text-xs text-slate-400 font-medium">Available Liquidity:</span>
-              <span className={`font-mono text-sm font-bold ${exchangeBalance.available_usdt < 20 ? 'text-rose-400' : 'text-emerald-400'}`}>
+              <span className={`tabular-nums font-mono text-sm transition-colors duration-300 font-bold ${exchangeBalance.available_usdt < 20 ? 'text-rose-400' : 'text-emerald-400'}`}>
                 ${(exchangeBalance.available_usdt || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
@@ -543,7 +543,7 @@ export default function MarketFeedMatrix() {
                  </div>
                  <div className="flex items-center gap-4 text-xs">
                     <span className="text-slate-400">
-                      Invested: <span className="font-mono text-white">${(pos.investedAmount || pos.amount || pos.invested || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      Invested: <span className="tabular-nums font-mono text-white transition-colors duration-300">${(pos.investedAmount || pos.amount || pos.invested || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </span>
                     <span className={`font-mono font-bold ${(pos.pnl || pos.roi || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                       PNL: {(pos.pnl || pos.roi || 0) >= 0 ? '+' : ''}{(pos.pnl || pos.roi || 0).toFixed(2)}%
