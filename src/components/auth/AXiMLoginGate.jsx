@@ -57,8 +57,22 @@ const AXiMLoginGate = () => {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
            setInitialAuthChecked(true);
+           try {
+             // Cache a minimal session representation for offline reloads
+             localStorage.setItem('axim_offline_session', JSON.stringify({ active: true, timestamp: Date.now() }));
+           } catch(e) { /* ignore */ }
         } else {
-           if (isOffline) {
+           let cachedOffline = false;
+           try {
+               const stored = localStorage.getItem('axim_offline_session');
+               if (stored) {
+                   const parsed = JSON.parse(stored);
+                   // Accept cached session if within 24 hours
+                   if (Date.now() - parsed.timestamp < 86400000) cachedOffline = true;
+               }
+           } catch(e) { /* ignore */ }
+
+           if (isOffline || cachedOffline) {
              setInitialAuthChecked(true);
            } else {
              // Automatically route the user to SSO

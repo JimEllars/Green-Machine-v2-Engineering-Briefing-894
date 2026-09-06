@@ -58,7 +58,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
       const workerUrl = getWorkerUrl();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const edgeRes = await fetch(`${workerUrl}/api/telemetry`, {
+      const edgeRes = await fetch(`${workerUrl}/api/v1/diagnostics/health`, {
          headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
          },
@@ -68,20 +68,29 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
 
       if (edgeRes.ok) {
         const data = await edgeRes.json().catch(() => ({}));
-        if (data && data.success && data.data) {
-           localTelemetry = { latencyMs: data.latency_ms, colo: data.colo, ...data.data };
+        if (data && data.success) {
+           localTelemetry = {
+               latencyMs: data.latency_ms,
+               colo: data.colo,
+               kvStatus: data.kv_status,
+               rpcStatus: data.rpc_status,
+               ...data.data
+           };
            setTelemetry(prev => ({ ...prev, ...localTelemetry, offline: false, _stale: false }));
+           edgeSuccess = true;
         } else if (data && data.status === "ok" && !Array.isArray(data.data)) {
            localTelemetry = { latencyMs: data.latencyMs, ...data };
            setTelemetry(prev => ({ ...prev, ...localTelemetry, offline: false, _stale: false }));
+           edgeSuccess = true;
         } else if (data && data.status && Array.isArray(data.data) && data.data.length > 0) {
           localTelemetry = data.data[0];
           setTelemetry(prev => ({ ...prev, ...data.data[0], offline: false, _stale: false }));
+          edgeSuccess = true;
         } else {
           localTelemetry = data;
           setTelemetry(prev => ({ ...prev, ...data, offline: false, _stale: false }));
+          edgeSuccess = true;
         }
-        edgeSuccess = true;
       }
     } catch (e) {
       console.error('Edge health check failed', e);
