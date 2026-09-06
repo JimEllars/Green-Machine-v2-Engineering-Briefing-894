@@ -20,6 +20,8 @@ export interface Env {
   ANNY_EMAIL?: string;
   ANNY_PASSWORD?: string;
   EMAILIT_API_KEY?: string;
+  EMAIL_FROM?: string;
+  EMAIL_TO_ADMIN?: string;
   ORACLE_API_KEY: string;
   AXIM_INTERNAL_KEY: string;
   SUPABASE_URL: string;
@@ -4575,6 +4577,7 @@ Market Context:
           url.pathname !== "/api/admin/force-oracle-ping" &&
           url.pathname !== "/api/admin/audit-logs" &&
           url.pathname !== "/api/admin/panic-close" &&
+          url.pathname !== "/api/notify/test-email" &&
           url.pathname !== "/api/admin/hitl-approve" &&
           url.pathname !== "/api/admin/hitl-reject" &&
           url.pathname !== "/api/v1/dlq/replay"
@@ -4745,7 +4748,60 @@ Market Context:
           }
         }
 
-        if (url.pathname === "/api/admin/panic-close" && request.method === "POST") {
+                if (url.pathname === "/api/notify/test-email" && request.method === "POST") {
+          try {
+            if (!env.EMAILIT_API_KEY) {
+               return new Response(
+                 JSON.stringify({ success: false, error: "EMAILIT_API_KEY is not configured" }),
+                 { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+               );
+            }
+            let body = {} as any;
+            try {
+               body = await request.json();
+            } catch (e) {}
+
+            const target = body.targetEmail || env.EMAIL_TO_ADMIN || "alerts@axim.us.com";
+            const subject = body.subject || `[System Diagnostic] Edge Worker Telemetry Alert (${env.VITE_AXIM_INTERNAL_KEY ? 'Authenticated' : 'Unauthenticated'})`;
+            const from = env.EMAIL_FROM || "alerts@axim.us.com";
+
+            const manager = new (await import("./emailit_client")).EmailDispatchManager(
+              env.EMAILIT_API_KEY,
+              "", // no resend required for diagnostic test
+              env,
+              ctx
+            );
+            await manager.init();
+
+            const result = await manager.send({
+              from: `System Diagnostics <${from}>`,
+              to: target,
+              subject: subject,
+              html: `<p>Edge Worker <b>${env.VITE_AXIM_CORE_API_URL || 'Local'}</b> diagnostic alert triggered at ${new Date().toISOString()}.</p>`,
+              text: `Edge Worker diagnostic alert triggered at ${new Date().toISOString()}.`
+            });
+
+            if (result.success) {
+               return new Response(
+                 JSON.stringify({ success: true, timestamp: Date.now(), provider: result.provider, target: target }),
+                 { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+               );
+            } else {
+               return new Response(
+                 JSON.stringify({ success: false, error: result.error }),
+                 { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+               );
+            }
+
+          } catch (e: any) {
+            return new Response(
+              JSON.stringify({ success: false, error: e.message || "Failed to dispatch diagnostic email" }),
+              { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+            );
+          }
+        }
+
+if (url.pathname === "/api/admin/panic-close" && request.method === "POST") {
           try {
             const authHeader = request.headers.get("Authorization");
             if (!authHeader || !authHeader.startsWith("Bearer ")) {
