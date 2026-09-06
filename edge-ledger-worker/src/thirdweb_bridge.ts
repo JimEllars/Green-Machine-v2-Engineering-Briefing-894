@@ -1003,7 +1003,7 @@ export default {
 
 
 
-        if (request.method === "GET" && url.pathname === "/api/health") {
+        if (request.method === "GET" && (url.pathname === "/api/health" || url.pathname === "/api/v1/telemetry/health" || url.pathname === "/api/v1/diagnostics/health")) {
           let kvStatus = "connected";
           try {
              // lightweight read/ping to configured KV namespace
@@ -1012,8 +1012,10 @@ export default {
              kvStatus = "degraded";
           }
           const responsePayload = {
-            status: "ok",
+            status: "healthy",
             timestamp: new Date().toISOString(),
+            region: (request as any).cf?.colo || "UNKNOWN",
+            memory: "ok",
             kv_status: kvStatus,
             version: "2.1.0",
             environment: env.ENVIRONMENT || "production",
@@ -1027,49 +1029,7 @@ export default {
           });
         }
 
-        if (request.method === "GET" && url.pathname === "/api/v1/diagnostics/health") {
-          let kvStatus = "connected";
-          try {
-             // lightweight read/ping to configured KV namespace
-             await env.GREEN_STATE.get("health_ping");
-          } catch(e) {
-             kvStatus = "degraded";
-          }
-          const responsePayload = {
-            success: true,
-            status: "ok",
-            timestamp: new Date().toISOString(),
-            kv_status: kvStatus,
-            rpc_status: "ok", // Default ok, could be expanded
-            latency_ms: Math.round(performance.now() - startTime),
-            colo: request.cf?.colo || 'DEV',
-            data: {}
-          };
-          return new Response(JSON.stringify(responsePayload), {
-             headers: {
-                 "Content-Type": "application/json",
-                 ...corsHeaders,
-                 "Cache-Control": "public, max-age=15, s-maxage=30"
-             }
-          });
-        } catch(e) {
-             kvStatus = "degraded";
-          }
-          const responsePayload = {
-            status: "ok",
-            timestamp: new Date().toISOString(),
-            kv_status: kvStatus,
-            version: "2.1.0",
-            environment: env.ENVIRONMENT || "production",
-            latencyMs: Math.round(performance.now() - startTime)
-          };
-          return new Response(JSON.stringify(responsePayload), {
-             headers: {
-                 "Content-Type": "application/json",
-                 ...corsHeaders
-             }
-          });
-        }
+
 
         if (request.method === "GET" && url.pathname === "/api/dlq-status") {
           const signature = request.headers.get("X-Axim-Signature");
@@ -4611,7 +4571,7 @@ Market Context:
           url.pathname !== "/api/admin/quarantine" &&
           url.pathname !== "/api/admin/quarantine/all" &&
           url.pathname !== "/api/admin/execute-trade" &&
-          url.pathname !== "/api/health" &&
+          url.pathname !== "/api/health" && url.pathname !== "/api/v1/telemetry/health" && url.pathname !== "/api/v1/diagnostics/health" &&
           url.pathname !== "/api/telemetry" &&
           url.pathname !== "/api/admin/renew-anny-session" &&
           url.pathname !== "/api/admin/validate-signal" &&
@@ -5121,7 +5081,7 @@ if (url.pathname === "/api/admin/panic-close" && request.method === "POST") {
             .text()
             .catch(() => '{"error": "unparseable"}');
 
-          await env.GREEN_STATE.put(errorId, rawPayload, {
+          await env.GREEN_STATE.put(errorId, JSON.stringify({ payload: rawPayload, error: (error as Error).message, timestamp: Date.now() }), {
             metadata: {
               error: (error as Error).message,
               timestamp: Date.now(),
