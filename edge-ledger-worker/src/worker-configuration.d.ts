@@ -13043,6 +13043,9 @@ declare namespace Cloudflare {
     //
     // You can use `wrangler types` to generate the `Env` type automatically.
     interface Env {
+      EMAILIT_API_KEY?: string;
+      EMAIL_FROM?: string;
+      EMAIL_TO_ADMIN?: string;
     }
     // Project-specific parameters used to inform types.
     //

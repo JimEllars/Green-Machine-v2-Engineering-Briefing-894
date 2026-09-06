@@ -8,3 +8,5 @@ RESEND_API_KEY=key
 SUPABASE_READ_URL=url
 SUPABASE_SERVICE_ROLE_KEY=key
 CFO_APP_URL=url
+EMAIL_FROM=alerts@yourdomain.com
+EMAIL_TO_ADMIN=your_personal_email@domain.com

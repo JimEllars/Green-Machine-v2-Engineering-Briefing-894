@@ -42,6 +42,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
   const [isFetching, setIsFetching] = useState(false);
   const [errorCount, setErrorCount] = useState(0);
   const [, startTransition] = useTransition();
+  const [emailServiceStatus, setEmailServiceStatus] = useState('idle');
 
   const fetchDiagnostics = useCallback(async () => {
     setIsFetching(true);
@@ -323,6 +324,36 @@ const [computeDebt, setComputeDebt] = useState(() => {
     };
   }, []);
 
-  return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics, computeDebt };
+
+
+  const triggerTestEmail = useCallback(async (targetEmail, subject) => {
+    try {
+      setEmailServiceStatus('fetching');
+      const workerUrl = getWorkerUrl();
+      const res = await fetch(`${workerUrl}/api/notify/test-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
+        },
+        body: JSON.stringify({ targetEmail, subject })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setEmailServiceStatus('healthy');
+        return { success: true, target: data.target, timestamp: data.timestamp };
+      } else {
+        setEmailServiceStatus('error');
+        return { success: false, error: data.error || 'Failed to trigger test email' };
+      }
+    } catch (e) {
+      console.error('Failed to trigger test email', e);
+      setEmailServiceStatus('error');
+      return { success: false, error: e.message };
+    }
+  }, []);
+
+  return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics, computeDebt, emailServiceStatus, triggerTestEmail };
 
 };

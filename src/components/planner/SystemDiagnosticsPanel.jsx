@@ -31,11 +31,13 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   const [webhookTarget, setWebhookTarget] = useState("/api/webhooks/anny-signal");
   const [webhookPayload, setWebhookPayload] = useState("");
   const [isReplayingWebhook, setIsReplayingWebhook] = useState(false);
-  const { telemetry: sysTelemetry, telemetryHistory, latencyMs: sysLatency, status: sysStatus, isFetching: sysIsFetching, computeDebt } = useSystemDiagnostics();
+  const { telemetry: sysTelemetry, telemetryHistory, latencyMs: sysLatency, status: sysStatus, isFetching: sysIsFetching, computeDebt, emailServiceStatus, triggerTestEmail } = useSystemDiagnostics();
   const [webhookResult, setWebhookResult] = useState(null);
   const [deepTelemetry, setDeepTelemetry] = useState(null);
   const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
   const [healthData, setHealthData] = useState(null);
+  const [emailTarget, setEmailTarget] = useState('');
+  const [emailResult, setEmailResult] = useState(null);
 
   useEffect(() => {
     const handleRealtimeStatus = (e) => setRealtimeStatus(e.detail);
@@ -66,6 +68,13 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
 
   const fetchDeepTelemetry = async () => {};
+
+  const handleTestEmail = async () => {
+    setEmailResult(null);
+    const result = await triggerTestEmail(emailTarget || undefined, "Diagnostics Test");
+    setEmailResult(result);
+  };
+
 
 
   useEffect(() => {
@@ -567,6 +576,53 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
 
 
       <div className="grid grid-cols-1 gap-4 flex-grow">
+
+            <div className="bg-zinc-800 p-4 rounded border border-zinc-700">
+              <h3 className="text-sm font-semibold text-zinc-300 mb-2 flex items-center gap-2">
+                <SafeIcon icon="EnvelopeIcon" className="w-4 h-4 text-emerald-400" />
+                Email Subsystem & Failover
+              </h3>
+              <div className="flex flex-col gap-2 mb-4">
+                 <div className="flex justify-between text-xs items-center p-2 bg-zinc-900 rounded">
+                    <span className="text-zinc-400">Service Status</span>
+                    <span className={`px-2 py-0.5 rounded text-xs ${emailServiceStatus === 'healthy' ? 'bg-emerald-900 text-emerald-300' : emailServiceStatus === 'error' ? 'bg-red-900 text-red-300' : emailServiceStatus === 'fetching' ? 'bg-yellow-900 text-yellow-300' : 'bg-zinc-700 text-zinc-400'}`}>
+                       {emailServiceStatus.toUpperCase()}
+                    </span>
+                 </div>
+                 <div className="flex justify-between text-xs items-center p-2 bg-zinc-900 rounded">
+                    <span className="text-zinc-400">Primary Provider</span>
+                    <span className="text-emerald-400">EmailIt</span>
+                 </div>
+                 <div className="flex justify-between text-xs items-center p-2 bg-zinc-900 rounded">
+                    <span className="text-zinc-400">Failover Circuit</span>
+                    <span className="text-emerald-400 font-mono">Resend (Active/Ready)</span>
+                 </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <input
+                   type="email"
+                   placeholder="Target Email (Optional, defaults to Admin)"
+                   className="w-full bg-zinc-900 text-zinc-100 text-xs px-2 py-1.5 border border-zinc-700 rounded outline-none focus:border-emerald-500 transition-colors"
+                   value={emailTarget}
+                   onChange={(e) => setEmailTarget(e.target.value)}
+                />
+                <button
+                   onClick={handleTestEmail}
+                   disabled={emailServiceStatus === 'fetching'}
+                   className={`w-full text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center justify-center gap-2 ${emailServiceStatus === 'fetching' ? 'bg-emerald-900 text-emerald-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+                >
+                   {emailServiceStatus === 'fetching' && <SafeIcon icon="ArrowPathIcon" className="w-3 h-3 animate-spin" />}
+                   Send Test Alert
+                </button>
+                {emailResult && (
+                   <div className={`text-xs p-2 rounded mt-2 break-all ${emailResult.success ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-800' : 'bg-red-900/50 text-red-300 border border-red-800'}`}>
+                      {emailResult.success ? `Diagnostic queued/sent to ${emailResult.target} via ${emailResult.provider || 'primary'}` : `Failed: ${emailResult.error}`}
+                   </div>
+                )}
+              </div>
+            </div>
+
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
           <span className="text-sm text-slate-300">Database Node Connection</span>
           <div className="flex items-center gap-2">
