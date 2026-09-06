@@ -20,7 +20,9 @@ const AXiMLoginGate = () => {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
+    let token = params.get('token');
+    if (token) sessionStorage.setItem('axim_sso_token_backup', token);
+    else token = sessionStorage.getItem('axim_sso_token_backup');
 
     const initializeAuth = async () => {
       setIsRefreshingToken(true);
@@ -51,6 +53,7 @@ const AXiMLoginGate = () => {
         // Strip token from history to prevent token leakage
         const newUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
+        sessionStorage.removeItem('axim_sso_token_backup');
         setInitialAuthChecked(true);
       } else {
         // If we have an existing session and just network issue, don't redirect
@@ -106,7 +109,7 @@ const AXiMLoginGate = () => {
             <h1 className="text-2xl font-bold text-white tracking-tight">AXiM Enterprise SSO</h1>
             <p className="text-zinc-400 mt-2 flex items-center gap-2">
               <SafeIcon name="Loader" className="w-4 h-4 animate-spin text-emerald-500" />
-              Authenticating...
+              Authenticating... <div className="w-32 h-2 mt-4 bg-zinc-800 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 animate-pulse w-1/2"></div></div>
             </p>
           </div>
         </div>

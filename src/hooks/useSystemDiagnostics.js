@@ -58,7 +58,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
       const workerUrl = getWorkerUrl();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const edgeRes = await fetch(`${workerUrl}/api/v1/diagnostics/health`, {
+      const edgeRes = await fetch(`${workerUrl}/api/v1/telemetry/health`, {
          headers: {
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
          },
@@ -124,7 +124,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
        edgeLatencyMs: localTelemetry?.latencyMs || currentLatency,
        dbLatencyMs,
        totalLatencyMs: currentLatency,
-       status: edgeSuccess && dbSuccess ? 'Healthy' : (edgeSuccess || dbSuccess ? 'Degraded' : 'Offline')
+       status: edgeSuccess && dbSuccess ? 'Healthy' : (edgeSuccess || dbSuccess ? 'Degraded Telemetry' : 'Offline')
     };
 
     setTelemetryHistory(prev => {
@@ -136,7 +136,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
        setStatus('Healthy');
        setErrorCount(0);
     } else if (edgeSuccess || dbSuccess) {
-       setStatus('Degraded');
+       setStatus('Degraded Telemetry');
        setErrorCount(prev => prev + 1);
     } else {
        setStatus('Offline');
