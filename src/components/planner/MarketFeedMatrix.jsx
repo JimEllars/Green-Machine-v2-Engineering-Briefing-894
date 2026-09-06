@@ -227,7 +227,7 @@ export default function MarketFeedMatrix() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <SafeIcon name="TrendingUp" className="text-emerald-500" />
+            <SafeIcon name="TrendingUp" className="text-emerald-400" />
             Live Market Telemetry
             {(isDegraded || isCircuitBreaker || isRateLimited) && (
               <span className="ml-3 px-2 py-0.5 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 shadow-[0_0_8px_rgba(245,158,11,0.2)]">
@@ -251,7 +251,7 @@ export default function MarketFeedMatrix() {
               Telemetry Stale
             </div>
           )}
-          <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-full border border-emerald-500/20">
+          <div className="flex items-center gap-2 text-xs font-medium px-3 py-1 bg-emerald-500/20 glow text-emerald-400 rounded-full border border-emerald-500/20">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             KV Cache: ACTIVE
           </div>
@@ -260,7 +260,7 @@ export default function MarketFeedMatrix() {
 
 
       {/* CFO Trend Distribution Bar */}
-      <div className="mb-6 bg-zinc-900/50 rounded-lg p-3 border border-zinc-800/50">
+      <div className="mb-6 bg-slate-900/80 backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.08)] border border-emerald-500/20 rounded-lg p-3 border border-zinc-800/50">
         <div className="flex justify-between items-center mb-2">
           <span className="text-xs font-semibold text-slate-400">Anny CFO Trend Distribution</span>
         </div>
@@ -310,7 +310,7 @@ export default function MarketFeedMatrix() {
           ))}
         </div>
 
-        <div className="flex space-x-2 items-center bg-zinc-900/50 rounded-lg p-1 border border-zinc-800/50">
+        <div className="flex space-x-2 items-center bg-slate-900/80 backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.08)] border border-emerald-500/20 rounded-lg p-1 border border-zinc-800/50">
           <span className="text-xs text-slate-500 mr-2 ml-2">Market Polling:</span>
           {['15s', '30s', '60s', 'Paused'].map(intervalLabel => {
             const msMap = { '15s': 15000, '30s': 30000, '60s': 60000, 'Paused': null };
@@ -436,7 +436,7 @@ export default function MarketFeedMatrix() {
       {/* Anny Signal & Bot Activity Panel */}
       <div className="mt-8 border border-zinc-800/50 rounded-xl bg-black/40 backdrop-blur-md overflow-hidden shadow-xl">
         <div
-          className="p-4 bg-zinc-900/60 flex items-center justify-between cursor-pointer hover:bg-zinc-800/60 transition-colors border-b border-zinc-800/50"
+          className="p-4 bg-zinc-900/60 flex items-center justify-between cursor-pointer hover:bg-slate-800/80 transition-all duration-150 ease-in-out/60 transition-colors border-b border-zinc-800/50"
           onClick={() => setIsSignalsExpanded(!isSignalsExpanded)}
         >
           <div className="flex items-center gap-3">
@@ -474,7 +474,7 @@ export default function MarketFeedMatrix() {
                      </div>
                      <div className="flex items-center gap-4 text-xs text-slate-500">
                         {signal.probability_of_profit !== undefined && (
-                          <div className="flex items-center gap-2 px-2 py-1 bg-zinc-900/50 rounded-md border border-zinc-700/50">
+                          <div className="flex items-center gap-2 px-2 py-1 bg-slate-900/80 backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.08)] border border-emerald-500/20 rounded-md border border-zinc-700/50">
                             <SafeIcon name="Brain" className="w-3 h-3 text-purple-400" />
                             <span className={`tabular-nums font-mono font-medium transition-colors duration-300 ${signal.approved ? 'text-emerald-400' : 'text-rose-400'}`}>
                               {signal.probability_of_profit}% AI Win Prob

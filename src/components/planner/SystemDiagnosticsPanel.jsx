@@ -80,6 +80,12 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   useEffect(() => {
     if (sysTelemetry) {
       setDeepTelemetry(sysTelemetry);
+      setEdgeHeaders({
+        region: sysTelemetry.colo || 'N/A',
+        cacheStatus: sysTelemetry.kvStatus === 'connected' ? 'HIT' : 'MISS',
+        execTime: sysTelemetry.latencyMs?.toString() || '0'
+      });
+      setEdgeColo(sysTelemetry.colo || 'N/A');
     }
   }, [sysTelemetry]);
 

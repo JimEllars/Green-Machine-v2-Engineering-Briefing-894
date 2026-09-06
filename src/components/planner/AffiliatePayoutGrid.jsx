@@ -205,12 +205,12 @@ export default function AffiliatePayoutGrid() {
             placeholder="Search Tx Hash or Recipient..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="text-sm px-3 py-2 bg-zinc-900/50 backdrop-blur-sm text-zinc-100 rounded-lg border border-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors placeholder-zinc-500 w-64 shadow-inner"
+            className="text-sm px-3 py-2 bg-slate-900/80 backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.08)] border border-emerald-500/20 backdrop-blur-sm text-zinc-100 rounded-lg border border-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors placeholder-zinc-500 w-64 shadow-inner"
           />
           <select
             value={selectedTokenFilter}
             onChange={(e) => setSelectedTokenFilter(e.target.value)}
-            className="text-sm px-3 py-2 bg-zinc-900/50 backdrop-blur-sm text-zinc-100 rounded-lg border border-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors shadow-inner"
+            className="text-sm px-3 py-2 bg-slate-900/80 backdrop-blur-md shadow-[0_0_15px_rgba(16,185,129,0.08)] border border-emerald-500/20 backdrop-blur-sm text-zinc-100 rounded-lg border border-zinc-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors shadow-inner"
           >
             <option value="All Tokens">All Tokens</option>
             <option value="ETH">ETH</option>
