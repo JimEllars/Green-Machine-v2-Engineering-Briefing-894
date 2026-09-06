@@ -182,3 +182,17 @@ Sprint 11 is now complete and active feature development has concluded. The AXiM
 - **KV Stale-While-Revalidate Fallback**: Implemented circuit-breaking fallback logic for Oracle API fetches (`market_watcher.ts`). Rate limits or upstream connection errors now retrieve the latest stale cache from the `MARKET_CACHE` namespace. The edge worker tags these fallback payloads with `X-Cache-Status: STALE-FALLBACK` and an HTTP 200 code to preserve frontend integrity.
 - **Frontend Diagnostics Hooks**: Refactored `useSystemDiagnostics.js` to introspect `X-Cache-Status` headers, correctly translating fallback state to `degraded-cached`. The frontend maintains stable, uninterrupted functionality even when upstream services fail.
 - **System Observability UI**: Added clean, high-contrast Tailwind micro-badges to `MarketFeedMatrix.jsx` and `SystemDiagnosticsPanel.jsx` to reflect edge connection quality (e.g., "Edge Online", "KV Cached Fallback", "Degraded RPC"). Additionally, a dismissible amber pill appears when rendering cached data, notifying the user without locking out console actions.
+
+## Sprint 895 Production Hardening, Edge Telemetry & Diagnostics Sync
+
+**Telemetry & Diagnostics Features Activated:**
+- `GET /health` endpoint has been successfully enabled on the Cloudflare Worker, exposing operational status, versioning, environment configurations, and Worker metadata without throwing KV binding overhead or 500 status codes.
+- An in-memory robust multi-provider strategy fallback logic with an in-memory sliding error counter (`rpcFailures`) to shift outbound RPC interactions seamlessly to a designated secondary backend in `edge-ledger-worker/src/thirdweb_bridge.ts`.
+- Uniform telemetry formatting using standardized edge attributes across success and failure response objects to ensure precise latency, timestamping, state routing, data properties and API usage mappings throughout worker lifecycle events.
+- Extracted backend analytics mapping the live Supabase realtime event `api_usage_logs` directly against telemetry feeds for auto-degrading gracefully to a localized 15s ping poll whenever websocket channels undergo termination in `src/hooks/useSystemDiagnostics.js`.
+
+**UI/UX Transformations (Glassmorphic Elevation & Data Refinement):**
+- Introduced fluidly pulsing and semi-transparent CSS skeleton loaders directly to internal `TradeExecutionLedger.jsx` during network fetch conditions removing jitter.
+- CSS Micro-animation triggers mapping via `animate-[pulse_0.5s_ease-in-out]` on standard rate metrics changes implemented specifically for dynamic telemetry visualizations across `MarketFeedMatrix.jsx`.
+- Tailwind configuration parameters respected, using exact dark mode styling specifications `slate/emerald` to support enterprise presentation demands.
+- Frontend builds cleanly passing static type analysis, ESLint checking rules mapping strictly against project mandates. Codebase maintains strict functional session stability within existing authentication patterns.
