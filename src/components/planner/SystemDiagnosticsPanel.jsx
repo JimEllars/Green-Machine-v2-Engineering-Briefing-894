@@ -31,7 +31,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
   const [webhookTarget, setWebhookTarget] = useState("/api/webhooks/anny-signal");
   const [webhookPayload, setWebhookPayload] = useState("");
   const [isReplayingWebhook, setIsReplayingWebhook] = useState(false);
-  const { telemetry: sysTelemetry, telemetryHistory, latencyMs: sysLatency, status: sysStatus, isFetching: sysIsFetching, computeDebt, emailServiceStatus, triggerTestEmail } = useSystemDiagnostics();
+  const { telemetry: sysTelemetry, telemetryHistory, latencyMs: sysLatency, status: sysStatus, isFetching: sysIsFetching, computeDebt, emailServiceStatus, triggerTestEmail, emailService, verifyEmailDelivery } = useSystemDiagnostics();
   const [webhookResult, setWebhookResult] = useState(null);
   const [deepTelemetry, setDeepTelemetry] = useState(null);
   const [realtimeStatus, setRealtimeStatus] = useState('CONNECTING');
@@ -526,7 +526,37 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
            {sysLatency > 0 ? `${sysLatency}ms` : '--ms'}
         </div>
 
-                {/* Edge Error Telemetry Badge */}
+
+        {/* EmailIt Telemetry Widget */}
+        {emailService && (
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors bg-slate-800/30 border-slate-700/50 text-slate-300">
+             <div className="flex items-center gap-2">
+                 <div className={`w-1.5 h-1.5 rounded-full ${emailService.status === 'operational' ? 'bg-emerald-500 animate-pulse' : emailService.status === 'degraded' ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                 <span>EmailIt Delivery: {emailService.status}</span>
+             </div>
+             {emailService.lastCheckTimestamp && (
+                 <span className="text-slate-500 ml-1">
+                     (Last: {new Date(emailService.lastCheckTimestamp).toLocaleTimeString()})
+                 </span>
+             )}
+             <button
+               onClick={async () => {
+                   const res = await verifyEmailDelivery();
+                   if (res && res.success) {
+                       alert('Test Email dispatched! Msg ID: ' + res.messageId);
+                   } else {
+                       alert('Test Email failed: ' + (res ? res.error : 'Unknown'));
+                   }
+               }}
+               className="ml-2 bg-slate-700 hover:bg-slate-600 px-2 py-0.5 rounded text-[9px] transition-colors"
+               disabled={emailServiceStatus === 'fetching'}
+             >
+               {emailServiceStatus === 'fetching' ? 'TESTING...' : 'TEST'}
+             </button>
+          </div>
+        )}
+
+        {/* Edge Error Telemetry Badge */}
         {dlqStatus?.edge_error_telemetry && (
           <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${
             dlqStatus.edge_error_telemetry.error_rate_pct === 0 ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :

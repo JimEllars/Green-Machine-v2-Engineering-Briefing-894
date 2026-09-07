@@ -43,6 +43,11 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
   const [errorCount, setErrorCount] = useState(0);
   const [, startTransition] = useTransition();
   const [emailServiceStatus, setEmailServiceStatus] = useState('idle');
+  const [emailService, setEmailService] = useState({
+    status: 'operational',
+    lastCheckTimestamp: null,
+    lastDeliveryLatency: 0
+  });
 
   const fetchDiagnostics = useCallback(async () => {
     setIsFetching(true);
@@ -335,6 +340,63 @@ const [computeDebt, setComputeDebt] = useState(() => {
 
 
 
+  const verifyEmailDelivery = useCallback(async () => {
+    try {
+      const workerUrl = getWorkerUrl();
+      const start = performance.now();
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      const res = await fetch(`${workerUrl}/api/email/verify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
+        },
+        body: JSON.stringify({}),
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      const latency = Math.round(performance.now() - start);
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          setEmailService({
+            status: 'operational',
+            lastCheckTimestamp: new Date().toISOString(),
+            lastDeliveryLatency: latency
+          });
+          return { success: true, messageId: data.messageId, timestamp: data.timestamp };
+        } else {
+          setEmailService(prev => ({
+            ...prev,
+            status: 'degraded',
+            lastCheckTimestamp: new Date().toISOString()
+          }));
+          return { success: false, error: data.error || 'Failed to trigger test email' };
+        }
+      } else {
+        setEmailService(prev => ({
+          ...prev,
+          status: 'offline',
+          lastCheckTimestamp: new Date().toISOString()
+        }));
+        return { success: false, error: 'Server error ' + res.status };
+      }
+    } catch (e) {
+      console.error('Failed to verify email delivery', e);
+      setEmailService(prev => ({
+        ...prev,
+        status: 'offline',
+        lastCheckTimestamp: new Date().toISOString()
+      }));
+      return { success: false, error: e.message };
+    }
+  }, []);
+
   const triggerTestEmail = useCallback(async (targetEmail, subject) => {
     try {
       setEmailServiceStatus('fetching');
@@ -363,6 +425,6 @@ const [computeDebt, setComputeDebt] = useState(() => {
     }
   }, []);
 
-  return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics, computeDebt, emailServiceStatus, triggerTestEmail };
+  return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics, computeDebt, emailServiceStatus, triggerTestEmail, emailService, verifyEmailDelivery };
 
 };
