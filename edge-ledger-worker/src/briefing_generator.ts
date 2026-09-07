@@ -171,6 +171,23 @@ export async function sendEmailItNotification(
   return { success: false, error: lastError?.message || "Unknown error" };
 }
 
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number = 3000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal as any });
+    clearTimeout(id);
+    return response;
+  } catch (error: any) {
+    clearTimeout(id);
+    if (error.name === "AbortError") {
+      throw new Error(`Request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  }
+}
+
 export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummaryText: string = "AI Financial Audit unavailable.") {
   try {
     const cacheResult =
@@ -184,7 +201,7 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
     let active_vault_balance = 0;
 
     try {
-      const summaryResponse = await fetch(
+      const summaryResponse = await fetchWithTimeout(
         `${env.SUPABASE_URL}/rest/v1/rpc/get_combined_portfolio`,
         {
           method: "POST",
@@ -203,7 +220,7 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
       }
 
       // Simulate/Fetch 24h metrics from blockchain_transactions
-      const txResponse = await fetch(
+      const txResponse = await fetchWithTimeout(
         `${env.SUPABASE_URL}/rest/v1/blockchain_transactions?select=amount,status,currency,actual_gas_used,created_at`,
         {
           headers: {
@@ -263,7 +280,7 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
     // Fetch live API usage summary
     let totalTokens = "N/A";
     try {
-      const summaryResponse = await fetch(
+      const summaryResponse = await fetchWithTimeout(
         `${env.SUPABASE_URL}/rest/v1/api_usage_summary?select=total_tokens&limit=1`,
         {
           headers: {
@@ -357,7 +374,7 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
 
     let portfolioSummaryHtml = "<p>Portfolio data unavailable</p>";
     try {
-      const portResp = await fetch(
+      const portResp = await fetchWithTimeout(
         `${env.SUPABASE_URL}/rest/v1/rpc/get_combined_portfolio`,
         {
           method: "POST",
@@ -371,6 +388,8 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
       if (portResp.ok) {
         const pData = await portResp.json() as any;
         if (pData && pData.length > 0 && pData[0].combined_portfolio) {
+          // Cache successful fetch
+          ctx.waitUntil(env.GREEN_STATE.put("BRIEFING_CACHE:portfolio", JSON.stringify(pData[0].combined_portfolio), { expirationTtl: 3600 }));
           const cp = pData[0].combined_portfolio;
           portfolioSummaryHtml = `<p><b>Total Balance:</b> $${cp.total_balance_usd}</p><ul>`;
           if (cp.assets) {
@@ -383,9 +402,24 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
       }
     } catch (e) {
       console.error(
-        "Failed to fetch combined portfolio for briefing",
+        "Failed to fetch combined portfolio for briefing, attempting fallback",
         e,
       );
+      try {
+        const cachedPortStr = await env.GREEN_STATE.get("BRIEFING_CACHE:portfolio");
+        if (cachedPortStr) {
+          const cp = JSON.parse(cachedPortStr);
+          portfolioSummaryHtml = `<p><b>Total Balance (Cached):</b> ${cp.total_balance_usd}</p><ul>`;
+          if (cp.assets) {
+            for (const [k, v] of Object.entries(cp.assets)) {
+              portfolioSummaryHtml += `<li>${k}: ${(v as any).amount} (${(v as any).usd_value})</li>`;
+            }
+          }
+          portfolioSummaryHtml += "</ul>";
+        }
+      } catch (cacheErr) {
+        console.error("Cache fallback failed", cacheErr);
+      }
     }
 
     const html = `

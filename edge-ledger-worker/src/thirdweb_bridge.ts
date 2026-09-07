@@ -983,7 +983,13 @@ export default {
 
         // 0. Uniform CORS Preflight
         if (request.method === "OPTIONS") {
-          return new Response(null, { headers: corsHeaders });
+          // Explicitly permit Content-Type, Authorization, and apikey for OPTIONS requests on all /api/* routes
+          const customCorsHeaders = {
+            ...corsHeaders,
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, X-Axim-Signature",
+            "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+          };
+          return new Response(null, { headers: customCorsHeaders });
         }
 
         // 0.5 Uniform JWT Validation (if Authorization header is present)
@@ -1031,7 +1037,88 @@ export default {
 
 
 
-        if (request.method === "GET" && url.pathname === "/api/dlq-status") {
+
+        if (request.method === "POST" && url.pathname === "/api/email/verify") {
+          const signature = request.headers.get("X-Axim-Signature");
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
+            // Alternatively allow service key
+            const authHeader = request.headers.get("Authorization");
+            if (!authHeader || authHeader !== `Bearer ${env.SUPABASE_SERVICE_KEY}`) {
+              return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
+                status: 401,
+                headers: { "Content-Type": "application/json", ...corsHeaders },
+              });
+            }
+          }
+          try {
+            const body = await request.json().catch(() => ({}));
+            const targetEmail = body.targetEmail || env.EMAIL_TO_ADMIN || "jrellars@gmail.com";
+            const subject = body.subject || "AXiM Green Machine: Test Dispatch";
+            const res = await sendEmailItNotification({
+              to: targetEmail,
+              subject: subject,
+              html: `<h1>Test Dispatch</h1><p>This is a verification email from AXiM Green Machine.</p>`
+            }, env);
+
+            if (res.success) {
+               return new Response(JSON.stringify({ success: true, messageId: (res as any).messageId, timestamp: new Date().toISOString() }), {
+                 status: 200,
+                 headers: { "Content-Type": "application/json", ...corsHeaders }
+               });
+            } else {
+               return new Response(JSON.stringify({ success: false, error: res.error || "Email dispatch failed", timestamp: new Date().toISOString() }), {
+                 status: 400,
+                 headers: { "Content-Type": "application/json", ...corsHeaders }
+               });
+            }
+          } catch(e: any) {
+            return new Response(JSON.stringify({ success: false, error: e.message, timestamp: new Date().toISOString() }), {
+               status: 400,
+               headers: { "Content-Type": "application/json", ...corsHeaders }
+            });
+          }
+        }
+
+        if (request.method === "POST" && url.pathname === "/api/briefing/trigger-manual") {
+          const signature = request.headers.get("X-Axim-Signature");
+          if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
+            return new Response(JSON.stringify({ success: false, error: "Unauthorized" }), {
+              status: 401,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            });
+          }
+          try {
+             ctx.waitUntil(
+               (async () => {
+                 try {
+                   await dispatchExecutiveBriefing(env, ctx, "Manual Execution Trigger");
+                   await env.GREEN_STATE.put(`briefing_telemetry:${Date.now()}`, JSON.stringify({
+                       trigger: "manual",
+                       timestamp: new Date().toISOString(),
+                       status: "success"
+                   }), { expirationTtl: 86400 * 7 });
+                 } catch (e: any) {
+                   await env.GREEN_STATE.put(`briefing_telemetry_error:${Date.now()}`, JSON.stringify({
+                       trigger: "manual",
+                       timestamp: new Date().toISOString(),
+                       status: "error",
+                       error: e.message
+                   }), { expirationTtl: 86400 * 7 });
+                 }
+               })()
+             );
+             return new Response(JSON.stringify({ success: true, message: "Manual briefing triggered", timestamp: new Date().toISOString() }), {
+               status: 202,
+               headers: { "Content-Type": "application/json", ...corsHeaders }
+             });
+          } catch(e: any) {
+             return new Response(JSON.stringify({ success: false, error: e.message, timestamp: new Date().toISOString() }), {
+               status: 500,
+               headers: { "Content-Type": "application/json", ...corsHeaders }
+             });
+          }
+        }
+if (request.method === "GET" && url.pathname === "/api/dlq-status") {
           const signature = request.headers.get("X-Axim-Signature");
           if (!signature || !timingSafeEqual(signature, env.AXIM_INTERNAL_KEY)) {
             return new Response(JSON.stringify({ success: false, error: "Unauthorized", timestamp: Date.now() }), {
