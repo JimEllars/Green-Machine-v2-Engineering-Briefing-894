@@ -752,6 +752,9 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
       {/* Input Area */}
       <form onSubmit={handleConsultSubmit} className="flex gap-2 p-4 bg-slate-900/90 border-t border-slate-700/50 p-5 rounded-b-xl">
         <input
+          id="strategy-consult-input"
+          aria-label="Strategy consultation prompt"
+          autoComplete="off"
           type="text"
           value={promptInput}
           onChange={(e) => setPromptInput(e.target.value)}

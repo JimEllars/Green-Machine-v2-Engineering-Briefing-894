@@ -7,16 +7,40 @@ const AXiMLoginGate = () => {
   const [isRefreshingToken, setIsRefreshingToken] = React.useState(false);
   const [isOffline, setIsOffline] = React.useState(!navigator.onLine);
 
+
   useEffect(() => {
-    const handleOnline = () => setIsOffline(false);
-    const handleOffline = () => setIsOffline(true);
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED' && session) {
+        // Silently update cache without triggering unmounts
+        try {
+          localStorage.setItem('axim_offline_session', JSON.stringify({ active: true, timestamp: Date.now() }));
+        } catch(e) { /* ignore */ }
+      }
+    });
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+
+  useEffect(() => {
+    let offlineTimeout;
+    const handleOnline = () => {
+       clearTimeout(offlineTimeout);
+       setIsOffline(false);
+    };
+    const handleOffline = () => {
+       offlineTimeout = setTimeout(() => setIsOffline(true), 500);
+    };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
+      clearTimeout(offlineTimeout);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

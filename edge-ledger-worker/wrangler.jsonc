@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "green-machine-edge-ledger",
-  "main": "src/thirdweb_bridge.ts",
+  "main": "src/index.ts",
   "compatibility_date": "2026-07-23",
   "observability": {
     "enabled": true,

@@ -201,6 +201,9 @@ export default function AffiliatePayoutGrid() {
             </button>
           )}
           <input
+            id="affiliate-search-input"
+            aria-label="Search Transaction Hash or Recipient"
+            autoComplete="off"
             type="text"
             placeholder="Search Tx Hash or Recipient..."
             value={searchQuery}

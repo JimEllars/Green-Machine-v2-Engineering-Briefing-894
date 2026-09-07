@@ -475,7 +475,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
             )}
 
 <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${edgeCacheAvailable ? 'bg-amber-500/10 border-amber-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-rose-500/10 border-rose-500/50 text-rose-400 shadow-[0_0_10px_rgba(225,29,72,0.3)]'}`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${edgeCacheAvailable ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+          <div className={`w-1.5 h-1.5 rounded-full ${!edgeCacheAvailable ? 'bg-rose-500' : sysLatency < 120 ? 'bg-emerald-500 animate-pulse' : sysLatency <= 300 ? 'bg-amber-500 animate-pulse' : 'bg-rose-500 animate-pulse'}`} />
           {edgeCacheAvailable ? 'CF Worker: Active | KV Synced' : 'CF Worker: Unreachable'}
         </div>
         <div className={`flex items-center gap-2 px-3 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider transition-colors ${dlqStatus?.anny_oracle?.session_valid ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-amber-500/10 border-amber-500/50 text-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.3)]'}`}>
@@ -1057,6 +1057,9 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                     <div>
                       <label className="block text-[10px] text-slate-400 font-mono mb-1">Target Endpoint</label>
                       <input
+                        id="webhook-target-input"
+                        aria-label="Webhook Target Endpoint"
+                        autoComplete="url"
                         type="text"
                         value={webhookTarget}
                         onChange={(e) => setWebhookTarget(e.target.value)}

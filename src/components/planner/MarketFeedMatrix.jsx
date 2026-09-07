@@ -217,7 +217,7 @@ export default function MarketFeedMatrix() {
   }, [marketData]);
 
   return (
-    <div className="border border-slate-800 bg-slate-900/60 backdrop-blur-md rounded-xl p-6 shadow-2xl">
+    <div className="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-xl p-6 shadow-2xl">
             {isDegraded && (
         <div className="mb-4 bg-amber-500/20 border border-amber-500/50 rounded-lg p-3 text-amber-400 text-sm font-medium flex items-center justify-center gap-2">
           <SafeIcon name="AlertTriangle" className="w-4 h-4" />
@@ -354,7 +354,7 @@ export default function MarketFeedMatrix() {
           <motion.div
             key={asset.symbol}
             layout
-            className="border border-slate-800 bg-slate-900/60 backdrop-blur-md rounded-xl p-5 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-900/20 transition-colors relative"
+            className="bg-slate-900/60 backdrop-blur-md border border-slate-800/80 rounded-xl p-5 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-900/20 transition-colors relative"
           >
 
             {/* Circuit Breaker Status Indicator */}

@@ -218,7 +218,7 @@ const TradeExecutionLedger = () => {
       </div>
 
       {/* Table Section */}
-      <div className="flex-grow overflow-x-auto relative z-10 rounded-xl border border-zinc-800/60 bg-zinc-900/40">
+      <div className="flex-grow overflow-x-auto scroller-subtle relative z-10 rounded-xl border border-zinc-800/60 bg-zinc-900/40">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-zinc-800/80 sticky top-0 text-zinc-300 font-medium text-xs uppercase tracking-wider backdrop-blur-md">
             <tr>
