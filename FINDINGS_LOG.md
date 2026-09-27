@@ -196,3 +196,17 @@ Sprint 11 is now complete and active feature development has concluded. The AXiM
 - CSS Micro-animation triggers mapping via `animate-[pulse_0.5s_ease-in-out]` on standard rate metrics changes implemented specifically for dynamic telemetry visualizations across `MarketFeedMatrix.jsx`.
 - Tailwind configuration parameters respected, using exact dark mode styling specifications `slate/emerald` to support enterprise presentation demands.
 - Frontend builds cleanly passing static type analysis, ESLint checking rules mapping strictly against project mandates. Codebase maintains strict functional session stability within existing authentication patterns.
+
+### Sprint 895 Production Hardening, Edge Telemetry & Diagnostics Sync Update
+- **Edge Worker Telemetry (`edge-ledger-worker/src/index.ts`)**:
+  - Restructured CORS handling to properly return HTTP 204 for `OPTIONS` requests and updated allowed headers to include `X-Axim-Signature`.
+  - Added dedicated `/health` endpoint returning system status and versions.
+  - Added `/telemetry` endpoint providing KV caching read ping checks, upstream connection simulated latencies, and process memory states.
+  - Added structured JSON tracing to all Edge worker invocations using a `finally` block to capture `status`, `latencyMs`, `url`, and `requestId`.
+- **Diagnostics Resilience (`src/hooks/useSystemDiagnostics.js`)**:
+  - Implemented 10s-60s exponential backoff with 1.5x multiplier and jitter for telemetry fetch loop to prevent thundering herds on recovery.
+  - Added `sessionStorage` fallback cache to retain the last known healthy telemetry state, avoiding UI layout shift or flickering during deployment blips.
+- **Diagnostics Panel (`src/components/planner/SystemDiagnosticsPanel.jsx`)**:
+  - Adjusted Edge API pulsing indicator: now uses emerald for <= 800ms latency, amber for > 800ms, and rose for offline.
+- **SSO Gate Hardening (`src/components/auth/AXiMLoginGate.jsx`)**:
+  - Validated offline caching logic (`axim_offline_session`) allowing continuous operation without unmounting the app when a brief telemetry timeout or offline event fires.

@@ -516,8 +516,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
           title={sysStatus === 'Offline' ? "Failed to connect to edge or db. Retrying..." : ""}
         >
           <div className={`w-1.5 h-1.5 rounded-full ${
-            sysStatus === 'Healthy' && sysLatency <= 400 ? 'bg-emerald-500 animate-pulse' :
-            sysStatus.includes('Degraded') || sysLatency > 400 ? 'bg-amber-500 animate-pulse' :
+            sysStatus === 'Healthy' && sysLatency <= 800 ? 'bg-emerald-500 animate-pulse' :
+            sysStatus.includes('Degraded') || sysLatency > 800 ? 'bg-amber-500 animate-pulse' :
             'bg-rose-500'
           }`} />
           System: {sysStatus}

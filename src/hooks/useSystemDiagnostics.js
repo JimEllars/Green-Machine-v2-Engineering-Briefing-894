@@ -141,6 +141,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
 
     if (edgeSuccess && dbSuccess) {
        setStatus('Healthy');
+       sessionStorage.setItem('axim_last_healthy_telemetry', JSON.stringify({ telemetry: localTelemetry, latencyMs: currentLatency, timestamp: Date.now() }));
        setErrorCount(0);
     } else if (edgeSuccess || dbSuccess) {
        setStatus('Degraded Telemetry');
@@ -152,9 +153,18 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
        // Fallback mock data when edge is unreachable
        if (!localTelemetry) {
            // Fallback only if we have NO prior cached state, otherwise keep the last known healthy state
+           let cachedState = null;
+           try {
+               const cached = sessionStorage.getItem('axim_last_healthy_telemetry');
+               if (cached) cachedState = JSON.parse(cached);
+           } catch (e) { /* ignore */ }
+
            setTelemetry(prev => {
                if (prev && Object.keys(prev).length > 0 && !prev.offline) {
                   return { ...prev, offline: true, _stale: true };
+               }
+               if (cachedState && cachedState.telemetry) {
+                  return { ...cachedState.telemetry, offline: true, _stale: true };
                }
                return {
                    ...prev,
@@ -193,7 +203,7 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
         // Using a function form of state to ensure latest value
         setErrorCount(currentErrorCount => {
            // Add 0-20% jitter to prevent thundering herd cascades
-           const baseInterval = currentErrorCount === 0 ? 30000 : Math.min(30000 * Math.pow(2, currentErrorCount), 60000);
+           const baseInterval = currentErrorCount === 0 ? 10000 : Math.min(10000 * Math.pow(1.5, currentErrorCount), 60000);
            const jitter = baseInterval * 0.2 * Math.random();
            const intervalTime = baseInterval + jitter;
            timeoutId = setTimeout(runFetch, intervalTime);
