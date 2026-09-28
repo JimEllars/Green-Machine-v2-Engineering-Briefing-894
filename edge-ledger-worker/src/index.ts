@@ -1,26 +1,30 @@
 import thirdwebBridge from "./thirdweb_bridge";
 import { fetchHealth } from "./market_watcher";
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Version, X-Axim-Signature',
-  'Access-Control-Max-Age': '86400',
+const getCorsHeaders = (request: Request) => {
+  const origin = request.headers.get('origin') || '*';
+  const allowedOrigin = (origin.match(/^https:\/\/.*\.axim\.us\.com$/) || origin.startsWith('http://localhost:')) ? origin : '*';
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Version, X-Axim-Signature',
+    'Access-Control-Max-Age': '86400',
+  };
 };
 
 export function handleOptions(request: Request): Response {
   return new Response(null, {
     status: 204,
-    headers: CORS_HEADERS,
+    headers: getCorsHeaders(request),
   });
 }
 
-export function jsonResponse(data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
+export function jsonResponse(request: Request, data: unknown, status = 200, extraHeaders: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      ...CORS_HEADERS,
+      ...getCorsHeaders(request),
       ...extraHeaders,
     },
   });
@@ -81,7 +85,7 @@ export default {
 
         const totalDuration = Date.now() - startTime;
 
-        return jsonResponse({
+        return jsonResponse(request, {
           status: dbStatus === 'connected' ? 'operational' : 'degraded',
           timestamp: new Date().toISOString(),
           region: (request as any).cf?.colo || 'DEV-EDGE',
@@ -97,13 +101,14 @@ export default {
             emailit: env.EMAILIT_API_KEY ? 'configured' : 'missing_key',
           },
           version: '2.1.0-telemetry',
+          latencyMs: totalDuration,
         }, 200, {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
         });
       }
 
       if (url.pathname === "/health" || url.pathname === "/api/health") {
-        return jsonResponse({
+        return jsonResponse(request, {
             status: "operational",
             version: "v2.1.0-telemetry",
             timestamp: new Date().toISOString(),
@@ -145,7 +150,7 @@ export default {
           version: '2.4.0-prod'
         };
 
-        return jsonResponse(telemetryPayload, 200, { 'Cache-Control': 'no-store' });
+        return jsonResponse(request, telemetryPayload, 200, { 'Cache-Control': 'no-store' });
       }
 
       if (url.pathname.startsWith("/api/bridge/")) {
@@ -163,9 +168,9 @@ export default {
       if (url.pathname.startsWith("/api/briefing/")) {
         // Route to briefing_generator.ts logic
         const { dispatchExecutiveBriefing } = await import("./briefing_generator");
-        await dispatchExecutiveBriefing(env, ctx);
+        const html = await dispatchExecutiveBriefing(env, ctx);
         status = 200;
-        return jsonResponse({ status: "briefing_dispatched" }, 200);
+        return jsonResponse(request, { status: "briefing_dispatched", html }, 200);
       }
 
       // Default route
@@ -175,7 +180,7 @@ export default {
 
     } catch (error: any) {
       status = 500;
-      return jsonResponse({ status: "error", message: error.message }, 500);
+      return jsonResponse(request, { status: "error", message: error.message }, 500);
     } finally {
         const latencyMs = Date.now() - startTime;
         const logPayload = {

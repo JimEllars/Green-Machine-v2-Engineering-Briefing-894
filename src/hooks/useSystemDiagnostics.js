@@ -46,7 +46,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
     setIsLiveSyncing(true);
     try {
       const baseUrl = getWorkerUrl();
-      const response = await fetch(`${baseUrl}/api/telemetry`, {
+      const response = await fetch(`${baseUrl}/api/diagnostics`, {
         headers: {
             'Accept': 'application/json',
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
@@ -76,7 +76,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
 
   useEffect(() => {
     fetchDiagnosticsNew();
-    const interval = setInterval(fetchDiagnosticsNew, 15000);
+    const interval = setInterval(fetchDiagnosticsNew, 30000);
     return () => clearInterval(interval);
   }, [fetchDiagnosticsNew]);
 

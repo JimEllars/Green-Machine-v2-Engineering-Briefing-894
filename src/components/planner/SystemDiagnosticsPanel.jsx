@@ -1218,7 +1218,7 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                                 <span className="text-[10px] text-slate-300">Auth Gateway</span>
                             </div>
                             <div className="flex items-center gap-1">
-                                <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.services?.kv === 'operational' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                <div className={`w-1.5 h-1.5 rounded-full ${(diagnostics.services?.kv === 'operational' || diagnostics.services?.kv === 'ready' || diagnostics.services?.kv === 'ready_alt' || diagnostics.services?.kv_ledger === 'ready' || diagnostics.services?.kv_ledger === 'ready_alt') ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                                 <span className="text-[10px] text-slate-300">KV State</span>
                             </div>
                             <div className="flex items-center gap-1">

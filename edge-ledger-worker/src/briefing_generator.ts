@@ -38,7 +38,7 @@ export async function sendViaResend(
   console.log(`Failing over to Resend. Reason: ${reason}`);
 
   const payload: any = {
-    from: "noreply@axim.us.com",
+    from: "AXiM Executive Intelligence <briefing@emailit.axim.us.com>",
     to: Array.isArray(params.to) ? params.to : [params.to],
     subject: params.subject,
     html: params.html,
@@ -118,7 +118,8 @@ export async function sendEmailItNotification(
           cc: params.cc,
           subject: params.subject,
           html: params.html,
-          from: "noreply@axim.us.com",
+          text: params.html.replace(/<[^>]*>?/gm, ''),
+          from: "AXiM Executive Intelligence <briefing@emailit.axim.us.com>",
         }),
         signal: controller.signal as any,
       });
@@ -188,7 +189,7 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
   }
 }
 
-export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummaryText: string = "AI Financial Audit unavailable.") {
+export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummaryText: string = "AI Financial Audit unavailable."): Promise<string> {
   try {
     const cacheResult =
       await env.MARKET_CACHE.getWithMetadata("latest_prices");
@@ -490,6 +491,7 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
         { expirationTtl: 86400 },
       );
     }
+    return html;
   } catch (err: any) {
     console.error("Error generating executive briefing", err);
     await env.GREEN_STATE.put(
@@ -513,5 +515,6 @@ export async function dispatchExecutiveBriefing(env: Env, ctx: any, auditSummary
     } catch (e) {
       console.error("Failed to write to retry queue", e);
     }
+    return "";
   }
 }
