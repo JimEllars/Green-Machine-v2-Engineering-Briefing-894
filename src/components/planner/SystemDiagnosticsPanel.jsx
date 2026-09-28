@@ -1191,38 +1191,38 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                       <div className="bg-slate-900 p-2 rounded border border-slate-700">
                         <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Status</div>
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${diagnostics.status === 'operational' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
-                          <span className="text-xs text-slate-200 font-bold capitalize">{diagnostics.status}</span>
+                          <div className={`w-2 h-2 rounded-full ${diagnostics?.status === 'operational' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'}`} />
+                          <span className="text-xs text-slate-200 font-bold capitalize">{diagnostics?.status}</span>
                         </div>
                       </div>
 
                       <div className="bg-slate-900 p-2 rounded border border-slate-700">
                         <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Real-Time Latency</div>
                         <div className="flex items-center gap-2">
-                          <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.latencyMs < 50 ? 'bg-emerald-500' : diagnostics.latencyMs < 150 ? 'bg-amber-500' : 'bg-rose-500'}`} />
-                          <span className="text-xs text-slate-200 font-bold">{diagnostics.latencyMs}ms</span>
+                          <div className={`w-1.5 h-1.5 rounded-full ${diagnostics?.latencyMs < 50 ? 'bg-emerald-500' : diagnostics?.latencyMs < 150 ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                          <span className="text-xs text-slate-200 font-bold">{diagnostics?.latencyMs}ms</span>
                         </div>
                       </div>
                       <div className="bg-slate-900 p-2 rounded border border-slate-700">
                         <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Region (Colo)</div>
                         <div className="flex items-center gap-2">
                           <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                          <span className="text-xs text-slate-200 font-bold">{diagnostics.edge?.colo || diagnostics.region}</span>
+                          <span className="text-xs text-slate-200 font-bold">{diagnostics?.edge?.colo || diagnostics?.region}</span>
                         </div>
                       </div>
                       <div className="bg-slate-900 p-2 rounded border border-slate-700 col-span-2">
                         <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Subsystems</div>
                         <div className="flex justify-between mt-1">
                             <div className="flex items-center gap-1">
-                                <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.services?.database === 'connected' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                <div className={`w-1.5 h-1.5 rounded-full ${diagnostics?.services?.database === 'connected' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                                 <span className="text-[10px] text-slate-300">Auth Gateway</span>
                             </div>
                             <div className="flex items-center gap-1">
-                                <div className={`w-1.5 h-1.5 rounded-full ${(diagnostics.services?.kv === 'operational' || diagnostics.services?.kv === 'ready' || diagnostics.services?.kv === 'ready_alt' || diagnostics.services?.kv_ledger === 'ready' || diagnostics.services?.kv_ledger === 'ready_alt') ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                <div className={`w-1.5 h-1.5 rounded-full ${(diagnostics?.services?.kv === 'operational' || diagnostics?.services?.kv === 'ready' || diagnostics?.services?.kv === 'ready_alt' || diagnostics?.services?.kv_ledger === 'ready' || diagnostics?.services?.kv_ledger === 'ready_alt') ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                                 <span className="text-[10px] text-slate-300">KV State</span>
                             </div>
                             <div className="flex items-center gap-1">
-                                <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.services?.briefingCron === 'scheduled' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                <div className={`w-1.5 h-1.5 rounded-full ${diagnostics?.services?.briefingCron === 'scheduled' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                                 <span className="text-[10px] text-slate-300">Automation Engine</span>
                             </div>
                         </div>
@@ -1234,8 +1234,8 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                       <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
                          {/* We fake an event stream using the current payload as the latest event, since full history isn't stored locally in the basic diagnostic structure */}
                          <div className="flex items-center gap-2 bg-slate-900/50 p-1 rounded border border-slate-800">
-                           <span className="text-emerald-500 font-bold">[{new Date(diagnostics.timestamp).toLocaleTimeString()}]</span>
-                           <span className="text-slate-300">Ping to {diagnostics.region} returned {diagnostics.status} (DB: {diagnostics.latency.database_ms}ms)</span>
+                           <span className="text-emerald-500 font-bold">[{diagnostics?.timestamp ? new Date(diagnostics.timestamp).toLocaleTimeString() : 'Unknown Time'}]</span>
+                           <span className="text-slate-300">Ping to {diagnostics?.region} returned {diagnostics?.status} (DB: {diagnostics?.latency?.database_ms}ms)</span>
                          </div>
                       </div>
                     </div>
