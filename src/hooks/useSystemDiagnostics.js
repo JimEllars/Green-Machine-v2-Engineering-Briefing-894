@@ -36,6 +36,108 @@ export const dispatchTelemetry = async (eventType, payload) => {
 
 export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 15000) => {
 
+  const [diagnosticsState, setDiagnosticsState] = useState({
+    isLoading: true,
+    isDegraded: false,
+    edgeStatus: 'checking',
+    databaseStatus: 'checking',
+    edgeColo: 'N/A',
+    kvStatus: 'checking',
+    lastCron: null,
+    edgeLatencyMs: 0,
+    databaseLatencyMs: 0,
+    rawTelemetry: null,
+    lastChecked: null,
+    error: null,
+  });
+
+  const isMountedDiagnostics = useRef(true);
+
+  const runDiagnostics = useCallback(async () => {
+    const workerBase = getWorkerUrl();
+    const startEdge = performance.now();
+    let edgeStatus = 'offline';
+    let edgeLatencyMs = 0;
+    let edgeColo = 'UNKNOWN';
+    let kvStatus = 'unknown';
+    let lastCron = null;
+    let rawTelemetry = null;
+
+    // 1. Check Cloudflare Edge Telemetry
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(`${workerBase}/api/telemetry`, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        rawTelemetry = await res.json();
+        edgeStatus = rawTelemetry.status === 'healthy' ? 'healthy' : 'degraded';
+        edgeColo = rawTelemetry.edge?.colo || 'EDGE';
+        kvStatus = rawTelemetry.services?.kv || 'unknown';
+        lastCron = rawTelemetry.services?.lastCron || null;
+      } else {
+        edgeStatus = 'degraded';
+      }
+      edgeLatencyMs = Math.round(performance.now() - startEdge);
+    } catch (err) {
+      edgeStatus = 'offline';
+      edgeLatencyMs = Math.round(performance.now() - startEdge);
+    }
+
+    // 2. Check Supabase Database
+    const startDb = performance.now();
+    let databaseStatus = 'offline';
+    let databaseLatencyMs = 0;
+
+    try {
+      const { error } = await supabase
+        .from('user_profiles')
+        .select('id', { count: 'exact', head: true })
+        .limit(1);
+
+      databaseLatencyMs = Math.round(performance.now() - startDb);
+      databaseStatus = error ? 'degraded' : 'healthy';
+    } catch {
+      databaseLatencyMs = Math.round(performance.now() - startDb);
+      databaseStatus = 'offline';
+    }
+
+    if (!isMountedDiagnostics.current) return;
+
+    const isDegraded = edgeStatus !== 'healthy' || databaseStatus !== 'healthy';
+
+    setDiagnosticsState({
+      isLoading: false,
+      isDegraded,
+      edgeStatus,
+      databaseStatus,
+      edgeColo,
+      kvStatus,
+      lastCron,
+      edgeLatencyMs,
+      databaseLatencyMs,
+      rawTelemetry,
+      lastChecked: new Date(),
+      error: null,
+    });
+  }, []);
+
+  useEffect(() => {
+    isMountedDiagnostics.current = true;
+    runDiagnostics();
+    const interval = setInterval(runDiagnostics, pollInterval);
+    return () => {
+      isMountedDiagnostics.current = false;
+      clearInterval(interval);
+    };
+  }, [runDiagnostics, pollInterval]);
+
+
+
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorLocal, setErrorLocal] = useState(null);
@@ -502,7 +604,7 @@ const [computeDebt, setComputeDebt] = useState(() => {
     }
   }, []);
 
-  return {
+  return { diagnosticsState, refreshDiagnosticsState: runDiagnostics,
     telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics,
     computeDebt, emailServiceStatus, triggerTestEmail, emailService, verifyEmailDelivery,
     diagnostics: data,
