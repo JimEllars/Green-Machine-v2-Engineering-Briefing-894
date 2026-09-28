@@ -27,3 +27,9 @@ This document outlines the step-by-step procedure to follow when going live.
 ### Post-Deploy Operator Verification (Phase 13 HITL Change)
 - [ ] Confirm `GET /api/admin/hitl-approve?token=...` displays the HTML confirmation page and does NOT execute a trade.
 - [ ] Check if `wrangler secret list` holds `SUPABASE_SERVICE_KEY` or `SUPABASE_SERVICE_ROLE_KEY` in production and unify them in `.dev.vars` / script code if necessary.
+
+## 6. Telemetry & Edge Health Deployment Checks
+- [ ] Ensure `OPTIONS` HTTP requests on edge worker URLs return `204 No Content` and valid CORS headers (`Access-Control-Allow-Origin: *`, `X-Axim-Signature`).
+- [ ] Call `GET /health` on the edge worker and confirm `status: "operational"` and correct `region`.
+- [ ] Verify `useSystemDiagnostics.js` properly polls with exponential backoff and sets `sessionStorage` fallback telemetry.
+- [ ] Ensure the AXiMLoginGate stays open gracefully when offline or edge latency spikes above 800ms.

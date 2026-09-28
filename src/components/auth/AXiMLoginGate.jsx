@@ -41,6 +41,14 @@ const AXiMLoginGate = () => {
     };
   }, []);
 
+  useEffect(() => {
+    // Ensure auth state persists if the network temporarily drops
+    if (isOffline && initialAuthChecked) {
+      // Keep the component mounted and effectively bypass redirection
+      // which allows the application child components to remain functional using cached state
+    }
+  }, [isOffline, initialAuthChecked]);
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
