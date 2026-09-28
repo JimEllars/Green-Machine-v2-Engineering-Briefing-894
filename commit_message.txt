@@ -1,0 +1,1 @@
+feat(telemetry): activate edge KV telemetry and modernize diagnostics panel

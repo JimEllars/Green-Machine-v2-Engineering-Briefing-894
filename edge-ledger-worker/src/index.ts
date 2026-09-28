@@ -7,7 +7,7 @@ const getCorsHeaders = (request: Request) => {
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Version, X-Axim-Signature',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Version, X-Axim-Signature, x-client-info, apikey',
     'Access-Control-Max-Age': '86400',
   };
 };
@@ -109,7 +109,7 @@ export default {
 
       if (url.pathname === "/health" || url.pathname === "/api/health") {
         return jsonResponse(request, {
-            status: "operational",
+            status: "healthy",
             version: "v2.1.0-telemetry",
             timestamp: new Date().toISOString(),
             region: (request as any).cf?.colo || "local",
@@ -120,37 +120,43 @@ export default {
 
       if (url.pathname === "/telemetry" || url.pathname === "/api/telemetry") {
         const startTimeTel = Date.now();
-        let kvStatus = 'operational';
+        let kvHealthy = false;
+        let lastCronInfo = null;
+
+        const targetKV = env.LEDGER_KV || env.GREEN_STATE || env.MARKET_CACHE;
 
         try {
-          if (env.GREEN_STATE) {
-            await env.GREEN_STATE.get('health_check');
-          } else if (env.MARKET_CACHE) {
-            await env.MARKET_CACHE.get('health_check');
+          if (targetKV) {
+            await targetKV.put("telemetry:ping", Date.now().toString(), { expirationTtl: 120 });
+            kvHealthy = true;
+            const rawCron = await targetKV.get("telemetry:last_cron");
+            lastCronInfo = rawCron ? JSON.parse(rawCron) : { status: "not_recorded" };
           }
         } catch {
-          kvStatus = 'degraded';
+          kvHealthy = false;
         }
 
+        const cfData = (request as any).cf || {};
         const telemetryPayload = {
-          status: 'healthy',
+          status: kvHealthy ? "healthy" : "degraded",
           timestamp: new Date().toISOString(),
           edge: {
-            colo: (request as any).cf?.colo || 'LOCAL-DEV',
-            country: (request as any).cf?.country || 'US',
-            asn: (request as any).cf?.asn || 0,
+            colo: cfData.colo || "LOCAL",
+            country: cfData.country || "UNKNOWN",
+            city: cfData.city || "UNKNOWN",
+            httpProtocol: cfData.httpProtocol || "HTTP/2",
           },
           services: {
-            kv: kvStatus,
-            thirdwebBridge: 'active',
-            briefingCron: 'scheduled',
-            database: 'connected',
+            kv: kvHealthy ? "connected" : "unavailable",
+            lastCron: lastCronInfo,
+            workerLatencyMs: Date.now() - startTimeTel,
           },
-          latencyMs: Date.now() - startTimeTel,
-          version: '2.4.0-prod'
+          version: "2.1.0-prod",
         };
 
-        return jsonResponse(request, telemetryPayload, 200, { 'Cache-Control': 'no-store' });
+        return jsonResponse(request, telemetryPayload, 200, {
+          'Cache-Control': 'no-store, no-cache, must-revalidate'
+        });
       }
 
       if (url.pathname.startsWith("/api/bridge/")) {
@@ -198,8 +204,31 @@ export default {
   },
 
   async scheduled(event: any, env: any, ctx: any) {
-    if (thirdwebBridge.scheduled) {
-      await thirdwebBridge.scheduled(event, env, ctx);
+    const runStart = Date.now();
+    let outcome = "success";
+    let errorMsg = null;
+
+    try {
+      if (thirdwebBridge.scheduled) {
+        await thirdwebBridge.scheduled(event, env, ctx);
+      }
+    } catch (err: any) {
+      outcome = "failed";
+      errorMsg = err?.message || String(err);
+    } finally {
+      const targetKV = env.LEDGER_KV || env.GREEN_STATE || env.MARKET_CACHE;
+      if (targetKV) {
+        const cronLog = {
+          timestamp: new Date().toISOString(),
+          durationMs: Date.now() - runStart,
+          status: outcome,
+          error: errorMsg,
+          cronSchedule: event.cron,
+        };
+        ctx.waitUntil(
+          targetKV.put("telemetry:last_cron", JSON.stringify(cronLog), { expirationTtl: 86400 * 7 })
+        );
+      }
     }
   }
 };
