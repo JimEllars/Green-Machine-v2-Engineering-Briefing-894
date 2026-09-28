@@ -1130,7 +1130,9 @@ const handleSyncKV = async () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Alerts & Stats */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            <SystemDiagnosticsPanel dlqStatus={dlqStatus} onDiagnosticsUpdate={handleDiagnosticsUpdate} onOpenQuarantineManager={() => setIsQuarantineModalOpen(true)} />
+            <ComponentErrorBoundary>
+              <SystemDiagnosticsPanel dlqStatus={dlqStatus} onDiagnosticsUpdate={handleDiagnosticsUpdate} onOpenQuarantineManager={() => setIsQuarantineModalOpen(true)} />
+            </ComponentErrorBoundary>
           </div>
 
           {/* Center Column: Market & Ledger */}
