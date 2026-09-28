@@ -10,6 +10,10 @@ const AXiMLoginGate = () => {
 
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN') {
+        // Prevent unmount loops if the app receives a late signed_in event
+        if (initialAuthChecked) return;
+      }
       if (event === 'TOKEN_REFRESHED' && session) {
         // Silently update cache without triggering unmounts
         try {
@@ -103,7 +107,7 @@ const AXiMLoginGate = () => {
         sessionStorage.removeItem('axim_sso_token_backup');
         setInitialAuthChecked(true);
       } else {
-        // If we have an existing session and just network issue, don't redirect
+        // Optimistic check first
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
            setInitialAuthChecked(true);

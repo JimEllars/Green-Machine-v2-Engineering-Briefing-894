@@ -46,8 +46,11 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
     setIsLiveSyncing(true);
     try {
       const baseUrl = getWorkerUrl();
-      const response = await fetch(`${baseUrl}/diagnostics`, {
-        headers: { 'Accept': 'application/json' },
+      const response = await fetch(`${baseUrl}/api/telemetry`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
+        },
       });
 
       if (!response.ok) {
