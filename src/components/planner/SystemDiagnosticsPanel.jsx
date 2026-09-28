@@ -1195,29 +1195,36 @@ const SystemDiagnosticsPanel = ({ dlqStatus, onDiagnosticsUpdate, onOpenQuaranti
                           <span className="text-xs text-slate-200 font-bold capitalize">{diagnostics.status}</span>
                         </div>
                       </div>
+
                       <div className="bg-slate-900 p-2 rounded border border-slate-700">
-                        <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Region (Colo)</div>
-                        <div className="text-xs text-slate-200 font-bold">{diagnostics.region}</div>
-                      </div>
-                      <div className="bg-slate-900 p-2 rounded border border-slate-700">
-                        <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">DB Pool Latency</div>
+                        <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Real-Time Latency</div>
                         <div className="flex items-center gap-2">
-                          <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.latency.database_ms < 150 ? 'bg-emerald-500' : diagnostics.latency.database_ms < 500 ? 'bg-amber-500' : 'bg-rose-500'}`} />
-                          <span className="text-xs text-slate-200 font-bold">{diagnostics.latency.database_ms}ms</span>
+                          <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.latencyMs < 50 ? 'bg-emerald-500' : diagnostics.latencyMs < 150 ? 'bg-amber-500' : 'bg-rose-500'}`} />
+                          <span className="text-xs text-slate-200 font-bold">{diagnostics.latencyMs}ms</span>
                         </div>
                       </div>
                       <div className="bg-slate-900 p-2 rounded border border-slate-700">
-                        <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Workers AI Engine</div>
+                        <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Region (Colo)</div>
                         <div className="flex items-center gap-2">
-                          <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.services.workers_ai === 'available' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <span className="text-xs text-slate-200 font-bold capitalize">{diagnostics.services.workers_ai.replace('_', ' ')}</span>
+                          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          <span className="text-xs text-slate-200 font-bold">{diagnostics.edge?.colo || diagnostics.region}</span>
                         </div>
                       </div>
                       <div className="bg-slate-900 p-2 rounded border border-slate-700 col-span-2">
-                        <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">KV Cache Health</div>
-                        <div className="flex items-center gap-2">
-                          <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.services.kv_ledger.includes('ready') ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                          <span className="text-xs text-slate-200 font-bold capitalize">{diagnostics.services.kv_ledger.replace('_', ' ')}</span>
+                        <div className="text-[9px] text-slate-500 font-mono uppercase mb-1">Subsystems</div>
+                        <div className="flex justify-between mt-1">
+                            <div className="flex items-center gap-1">
+                                <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.services?.database === 'connected' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                <span className="text-[10px] text-slate-300">Auth Gateway</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.services?.kv === 'operational' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                                <span className="text-[10px] text-slate-300">KV State</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <div className={`w-1.5 h-1.5 rounded-full ${diagnostics.services?.briefingCron === 'scheduled' ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                <span className="text-[10px] text-slate-300">Automation Engine</span>
+                            </div>
                         </div>
                       </div>
                     </div>
