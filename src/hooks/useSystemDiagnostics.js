@@ -625,8 +625,15 @@ const [computeDebt, setComputeDebt] = useState(() => {
     }
   }, []);
 
-  return { diagnosticsState, refreshDiagnosticsState: runDiagnostics,
-    telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics,
+  return {
+    data,
+    loading,
+    error: errorLocal,
+    isStale: !isLiveSyncing && errorLocal !== null,
+    refetch: fetchDiagnosticsNew,
+    // Keep others for backward compatibility if used elsewhere
+    diagnosticsState, refreshDiagnosticsState: runDiagnostics,
+    telemetry, telemetryHistory, latencyMs, status, isFetching,
     computeDebt, emailServiceStatus, triggerTestEmail, emailService, verifyEmailDelivery,
     diagnostics: data,
     diagnosticsLoading: loading,
