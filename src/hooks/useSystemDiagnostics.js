@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useCallback, useTransition, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import { getWorkerUrl } from '../utils/workerUrl';
 
@@ -34,7 +34,49 @@ export const dispatchTelemetry = async (eventType, payload) => {
   }
 };
 
-export const useSystemDiagnostics = (isAuthenticated = true) => {
+export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 15000) => {
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorLocal, setErrorLocal] = useState(null);
+  const [isLiveSyncing, setIsLiveSyncing] = useState(false);
+  const lastKnownGood = useRef(null);
+
+  const fetchDiagnosticsNew = useCallback(async () => {
+    setIsLiveSyncing(true);
+    try {
+      const baseUrl = getWorkerUrl();
+      const response = await fetch(`${baseUrl}/diagnostics`, {
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Worker diagnostics returned status: ${response.status}`);
+      }
+
+      const json = await response.json();
+      lastKnownGood.current = json;
+      setData(json);
+      setErrorLocal(null);
+    } catch (err) {
+      console.warn('Diagnostics telemetry warning:', err.message);
+      setErrorLocal(err.message);
+      // Retain last known metrics so UI remains functional
+      if (lastKnownGood.current) {
+        setData(lastKnownGood.current);
+      }
+    } finally {
+      setLoading(false);
+      setIsLiveSyncing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDiagnosticsNew();
+    const interval = setInterval(fetchDiagnosticsNew, 15000);
+    return () => clearInterval(interval);
+  }, [fetchDiagnosticsNew]);
+
   const [telemetry, setTelemetry] = useState(null);
   const [telemetryHistory, setTelemetryHistory] = useState([]);
   const [latencyMs, setLatencyMs] = useState(0);
@@ -180,6 +222,12 @@ export const useSystemDiagnostics = (isAuthenticated = true) => {
     setIsFetching(false);
   }, []);
 
+
+  useEffect(() => {
+    fetchDiagnosticsNew();
+    const interval = setInterval(fetchDiagnosticsNew, pollInterval);
+    return () => clearInterval(interval);
+  }, [fetchDiagnosticsNew, pollInterval]);
 
   useEffect(() => {
     let isMounted = true;
@@ -437,6 +485,14 @@ const [computeDebt, setComputeDebt] = useState(() => {
     }
   }, []);
 
-  return { telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics, computeDebt, emailServiceStatus, triggerTestEmail, emailService, verifyEmailDelivery };
+  return {
+    telemetry, telemetryHistory, latencyMs, status, isFetching, refetch: fetchDiagnostics,
+    computeDebt, emailServiceStatus, triggerTestEmail, emailService, verifyEmailDelivery,
+    diagnostics: data,
+    diagnosticsLoading: loading,
+    diagnosticsError: errorLocal,
+    isLiveSyncing,
+    refreshDiagnostics: fetchDiagnosticsNew
+  };
 
 };

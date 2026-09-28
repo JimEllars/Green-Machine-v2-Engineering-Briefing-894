@@ -15,6 +15,21 @@ const AXiMLoginGate = () => {
         try {
           localStorage.setItem('axim_offline_session', JSON.stringify({ active: true, timestamp: Date.now() }));
         } catch(e) { /* ignore */ }
+      } else if (event === 'SIGNED_OUT') {
+        // Handle signed out events gracefully, check if we have a valid offline cache before hard redirect
+        let cachedOffline = false;
+        try {
+            const stored = localStorage.getItem('axim_offline_session');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                if (Date.now() - parsed.timestamp < 86400000) cachedOffline = true;
+            }
+        } catch(e) { /* ignore */ }
+
+        if (!cachedOffline && !isOffline) {
+          const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
+          window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
+        }
       }
     });
     return () => {
@@ -122,8 +137,8 @@ const AXiMLoginGate = () => {
     initializeAuth();
   }, []);
 
-  if (isOffline && initialAuthChecked) {
-    return null; // Return nothing so the main app can handle the render when offline but logged in.
+  if (initialAuthChecked) {
+    return null; // The App component also conditionally renders AXiMLoginGate, returning null completely hides it when done.
   }
 
 
