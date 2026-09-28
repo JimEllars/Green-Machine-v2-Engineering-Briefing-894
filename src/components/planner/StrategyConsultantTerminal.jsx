@@ -29,6 +29,7 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
   const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const [isConsulting, setIsConsulting] = useState(false);
   const [showFallbackBanner, setShowFallbackBanner] = useState(false);
+  const [briefingHtml, setBriefingHtml] = useState(null);
   const [consultError, setConsultError] = useState(null);
   const [networkStatus, setNetworkStatus] = useState(navigator.onLine ? 'Connected' : 'Offline');
   const terminalRef = useRef(null);
@@ -737,6 +738,9 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
           {displayText}
           {isTyping && <span className="inline-block w-2 h-4 bg-emerald-500 ml-1 animate-pulse" />}
 
+          {briefingHtml && (
+             <div className="mt-4 p-4 bg-white text-black rounded-lg max-w-full overflow-x-auto" dangerouslySetInnerHTML={{__html: briefingHtml}} />
+          )}
           {isConsulting && !displayText && !isTyping && (
              <div className="flex flex-col gap-3 mt-4 animate-pulse opacity-60">
                <div className="h-4 bg-emerald-900/40 rounded w-3/4"></div>
@@ -748,6 +752,57 @@ ${(parsedStrategyData.actionItems || []).map(item => `- ${item}`).join('\n')}`;
         </div>
       </div>
 
+
+      {/* On-Demand Briefing Area */}
+      <div className="p-4 bg-slate-900/50 border-t border-slate-700/50 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={async () => {
+              setIsConsulting(true);
+              setConsultError(null);
+              setBriefingHtml(null);
+              setDisplayText("Generating Executive Briefing...");
+              setIsTyping(true);
+              try {
+                const baseUrl = getWorkerUrl();
+                const response = await fetch(`${baseUrl}/api/briefing/generate`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
+                  }
+                });
+
+                const data = await response.json();
+
+                setIsTyping(false);
+                if (response.ok) {
+                   setDisplayText("");
+                   setParsedStrategyData({ recommendations: ["Briefing generated and dispatched."] });
+                   if (data.html) setBriefingHtml(data.html); else setBriefingHtml(null);
+                   // Display HTML if available in the future, for now it just returns status.
+                   setParsedStrategyData({ recommendations: ["Briefing generated and dispatched."] });
+                } else {
+                   setConsultError(data.error || "Failed to generate briefing");
+                   setDisplayText("");
+                }
+              } catch (e) {
+                setIsTyping(false);
+                setConsultError(e.message);
+                setDisplayText("");
+              } finally {
+                setIsConsulting(false);
+              }
+            }}
+            disabled={isConsulting}
+            className="px-4 py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded text-sm font-medium hover:bg-indigo-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            <SafeIcon name="FileText" className="w-4 h-4" />
+            Generate Executive Briefing
+          </button>
+        </div>
+      </div>
 
       {/* Input Area */}
       <form onSubmit={handleConsultSubmit} className="flex gap-2 p-4 bg-slate-900/90 border-t border-slate-700/50 p-5 rounded-b-xl">
