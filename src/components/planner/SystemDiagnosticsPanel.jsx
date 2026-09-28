@@ -42,6 +42,12 @@ export default function SystemDiagnosticsPanel() {
         </div>
 
         <div className="flex items-center space-x-3">
+          {diagnostics?._stale && (
+             <div className="flex items-center space-x-1.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full">
+               <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
+               <span className="text-[10px] uppercase font-bold text-amber-400">Cached Mode</span>
+             </div>
+          )}
           <span
             className={`px-2.5 py-1 text-xs font-mono font-medium rounded-full border ${getStatusColor(
               diagnostics?.isDegraded ? "degraded" : (diagnostics?.edgeStatus || 'checking')
@@ -66,12 +72,17 @@ export default function SystemDiagnosticsPanel() {
         <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
           <span className="text-xs text-slate-500 uppercase font-mono">Edge Node (Cloudflare)</span>
           <div className="flex items-baseline justify-between mt-1">
-            <span className="text-base font-bold text-white font-mono">{diagnostics?.edgeColo || 'UNKNOWN'}</span>
-            <span className="text-xs text-slate-400 font-mono">{diagnostics?.edgeLatencyMs || 0}ms</span>
+            <span className="text-base font-bold text-white font-mono" title={diagnostics?.cfRay ? `Ray ID: ${diagnostics.cfRay}` : ''}>{diagnostics?.region || diagnostics?.edgeColo || 'UNKNOWN'}</span>
+            <span className="text-xs text-slate-400 font-mono">{diagnostics?.latencyMs || diagnostics?.edgeLatencyMs || 0}ms</span>
           </div>
-          <div className="mt-2 flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${diagnostics?.edgeStatus === "healthy" ? "bg-emerald-400" : "bg-rose-400"}`} />
-            <span className="text-xs text-slate-400 capitalize">{diagnostics?.edgeStatus || 'checking'}</span>
+          <div className="mt-2 flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+               <span className={`w-2 h-2 rounded-full ${diagnostics?.status === "operational" || diagnostics?.edgeStatus === "healthy" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
+               <span className="text-xs text-slate-400 capitalize">{diagnostics?.status || diagnostics?.edgeStatus || 'checking'}</span>
+            </div>
+            {diagnostics?.cfRay && (
+               <span className="text-[9px] text-slate-500 font-mono">{diagnostics.cfRay.split('-')[0]}</span>
+            )}
           </div>
         </div>
 

@@ -44,13 +44,29 @@ class ComponentErrorBoundary extends React.Component {
             </div>
           )}
 
-          <button
-            onClick={this.handleRetry}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-sm font-bold transition-colors flex items-center gap-2"
-          >
-            <SafeIcon name="RefreshCw" className="w-4 h-4" />
-            Retry Component
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={this.handleRetry}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-sm font-bold transition-colors flex items-center gap-2"
+            >
+              <SafeIcon name="RefreshCw" className="w-4 h-4" />
+              Retry Component
+            </button>
+            <button
+              onClick={() => {
+                // Soft reset local state without page refresh
+                try {
+                  localStorage.removeItem('axim_telemetry_cache');
+                  sessionStorage.removeItem('axim_telemetry_cache');
+                } catch (e) { /* ignore */ }
+                this.handleRetry();
+              }}
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded text-sm font-bold transition-colors flex items-center gap-2"
+            >
+              <SafeIcon name="Trash2" className="w-4 h-4" />
+              Soft Reset
+            </button>
+          </div>
         </div>
       );
     }

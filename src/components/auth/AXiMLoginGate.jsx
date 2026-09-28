@@ -75,65 +75,73 @@ const AXiMLoginGate = () => {
     if (token) sessionStorage.setItem('axim_sso_token_backup', token);
     else token = sessionStorage.getItem('axim_sso_token_backup');
 
-    const initializeAuth = async () => {
+    const initializeAuth = () => {
       setIsRefreshingToken(true);
+
+      // Immediately allow render if offline and previously authenticated
+      if (isOffline && sessionStorage.getItem('axim_offline_session_active')) {
+          setInitialAuthChecked(true);
+          return;
+      }
+
       if (token) {
-        // Hydrate the local React/Supabase session seamlessly
-        const { error } = await supabase.auth.setSession({
+        // Hydrate the local React/Supabase session seamlessly and asynchronously
+        supabase.auth.setSession({
           access_token: token,
           refresh_token: token,
-        });
-
-
-        if (error) {
-           console.error("Session hydration failed:", error);
-        } else {
-           // Validate email against whitelist
-           const { data: sessionData } = await supabase.auth.getSession();
-           const email = sessionData?.session?.user?.email;
-           const whitelist = ["jrellars@gmail.com", "authorized@axim.us.com"];
-           if (email && !whitelist.includes(email)) {
-             await supabase.auth.signOut();
-             alert("Unauthorized email address. Only internal treasury managers are allowed.");
-             window.location.href = `https://passport.axim.us.com/login?redirect=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
-             return;
+        }).then(async ({ error }) => {
+           if (error) {
+              console.error("Session hydration failed:", error);
+           } else {
+              const { data: sessionData } = await supabase.auth.getSession();
+              const email = sessionData?.session?.user?.email;
+              const whitelist = ["jrellars@gmail.com", "authorized@axim.us.com"];
+              if (email && !whitelist.includes(email)) {
+                await supabase.auth.signOut();
+                alert("Unauthorized email address. Only internal treasury managers are allowed.");
+                window.location.href = `https://passport.axim.us.com/login?redirect=${encodeURIComponent(window.location.origin + '/auth/callback')}`;
+                return;
+              }
+              sessionStorage.setItem('axim_offline_session_active', 'true');
            }
-        }
-
+           setInitialAuthChecked(true);
+        });
 
         // Strip token from history to prevent token leakage
         const newUrl = window.location.origin + window.location.pathname;
         window.history.replaceState({}, document.title, newUrl);
         sessionStorage.removeItem('axim_sso_token_backup');
-        setInitialAuthChecked(true);
       } else {
         // Optimistic check first
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-           setInitialAuthChecked(true);
-           try {
-             // Cache a minimal session representation for offline reloads
-             localStorage.setItem('axim_offline_session', JSON.stringify({ active: true, timestamp: Date.now() }));
-           } catch(e) { /* ignore */ }
-        } else {
-           let cachedOffline = false;
-           try {
-               const stored = localStorage.getItem('axim_offline_session');
-               if (stored) {
-                   const parsed = JSON.parse(stored);
-                   // Accept cached session if within 24 hours
-                   if (Date.now() - parsed.timestamp < 86400000) cachedOffline = true;
-               }
-           } catch(e) { /* ignore */ }
+        supabase.auth.getSession().then(({ data: { session }, error }) => {
+            if (error) {
+                // Network drop during background sync shouldn't clear state
+                console.warn("Background sync failed:", error);
+            }
+            if (session) {
+               setInitialAuthChecked(true);
+               sessionStorage.setItem('axim_offline_session_active', 'true');
+               try {
+                 localStorage.setItem('axim_offline_session', JSON.stringify({ active: true, timestamp: Date.now() }));
+               } catch(e) { /* ignore */ }
+            } else {
+               let cachedOffline = false;
+               try {
+                   const stored = localStorage.getItem('axim_offline_session');
+                   if (stored) {
+                       const parsed = JSON.parse(stored);
+                       if (Date.now() - parsed.timestamp < 86400000) cachedOffline = true;
+                   }
+               } catch(e) { /* ignore */ }
 
-           if (isOffline || cachedOffline) {
-             setInitialAuthChecked(true);
-           } else {
-             // Automatically route the user to SSO
-             const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
-             window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
-           }
-        }
+               if (isOffline || cachedOffline) {
+                 setInitialAuthChecked(true);
+               } else {
+                 const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
+                 window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
+               }
+            }
+        });
       }
       setIsRefreshingToken(false);
     };
