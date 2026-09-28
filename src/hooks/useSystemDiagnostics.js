@@ -144,7 +144,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
   const [isLiveSyncing, setIsLiveSyncing] = useState(false);
   const lastKnownGood = useRef(null);
 
-  const fetchDiagnosticsNew = useCallback(async () => {
+  const fetchDiagnosticsNew = useCallback(async (retryCount = 0) => {
     setIsLiveSyncing(true);
     try {
       const baseUrl = getWorkerUrl();
@@ -168,23 +168,44 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
       lastKnownGood.current = json;
       setData(json);
       setErrorLocal(null);
+      try {
+        sessionStorage.setItem('axim_telemetry_cache', JSON.stringify({ telemetry: json, timestamp: Date.now() }));
+      } catch (e) { /* ignore */ }
+
+      setIsLiveSyncing(false);
+      setLoading(false);
+
+      return { data: json, loading: false, error: null, isStale: false, refetch: fetchDiagnosticsNew };
     } catch (err) {
       console.warn('Diagnostics telemetry warning:', err.message);
-      setErrorLocal(err.message);
-      // Retain last known metrics so UI remains functional
-      if (lastKnownGood.current) {
-        setData(lastKnownGood.current);
-      } else {
-        setData({
-          status: 'standby',
-          edge: 'operational',
-          latency: 'cached',
-          timestamp: new Date().toISOString()
-        });
+
+      const maxAttempts = 3;
+      if (retryCount < maxAttempts) {
+         const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+         await new Promise(res => setTimeout(res, delay));
+         return fetchDiagnosticsNew(retryCount + 1);
       }
-    } finally {
+
+      setErrorLocal(err.message);
+
+      let cachedData = null;
+      try {
+        const cached = sessionStorage.getItem('axim_telemetry_cache');
+        if (cached) cachedData = JSON.parse(cached);
+      } catch (e) { /* ignore */ }
+
+      let fallbackData = cachedData?.telemetry || lastKnownGood.current || {
+        status: 'standby',
+        edge: 'operational',
+        latency: 'cached',
+        timestamp: new Date().toISOString()
+      };
+
+      setData(fallbackData);
       setLoading(false);
       setIsLiveSyncing(false);
+
+      return { data: fallbackData, loading: false, error: err.message, isStale: true, refetch: fetchDiagnosticsNew };
     }
   }, []);
 

@@ -6,7 +6,7 @@ const getCorsHeaders = (request: Request) => {
   const allowedOrigin = (origin.match(/^https:\/\/.*\.axim\.us\.com$/) || origin.startsWith('http://localhost:')) ? origin : '*';
   return {
     'Access-Control-Allow-Origin': allowedOrigin,
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Version, X-Axim-Signature, x-client-info, apikey',
     'Access-Control-Max-Age': '86400',
   };
@@ -86,9 +86,12 @@ export default {
         const totalDuration = Date.now() - startTime;
 
         return jsonResponse(request, {
+          success: true,
           status: dbStatus === 'connected' ? 'operational' : 'degraded',
           timestamp: new Date().toISOString(),
+          uptime: process.uptime ? process.uptime() : 0,
           region: (request as any).cf?.colo || 'DEV-EDGE',
+          cfRay: request.headers.get('cf-ray') || 'unknown',
           latency: {
             database_ms: dbLatency,
             ai_engine_ms: env.AI ? 45 : -1,
@@ -100,7 +103,7 @@ export default {
             kv_ledger: kvStatus,
             emailit: env.EMAILIT_API_KEY ? 'configured' : 'missing_key',
           },
-          version: '2.1.0-telemetry',
+          version: '2.4.0-telemetry',
           latencyMs: totalDuration,
         }, 200, {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -180,13 +183,16 @@ export default {
       }
 
       // Default route
+      if (!url.pathname.startsWith('/api')) {
+         return jsonResponse(request, { success: false, error: "Not found", timestamp: new Date().toISOString() }, 404);
+      }
       const response = await thirdwebBridge.fetch(request, env, ctx);
       status = response.status;
       return response;
 
     } catch (error: any) {
       status = 500;
-      return jsonResponse(request, { status: "error", message: error.message }, 500);
+      return jsonResponse(request, { success: false, error: error.message, timestamp: new Date().toISOString() }, 500);
     } finally {
         const latencyMs = Date.now() - startTime;
         const logPayload = {
