@@ -2,6 +2,8 @@ export function getWorkerUrl() {
   let url = '';
   if (import.meta.env && import.meta.env.VITE_WORKER_URL) {
     url = import.meta.env.VITE_WORKER_URL;
+  } else if (import.meta.env && import.meta.env.PROD) {
+    url = window.location.origin;
   } else if (window.location.hostname.endsWith('.pages.dev')) {
     url = window.location.origin;
   } else {

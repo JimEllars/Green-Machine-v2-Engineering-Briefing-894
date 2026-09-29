@@ -21,7 +21,7 @@ describe('Edge Ledger Worker Diagnostics', () => {
     const response = await worker.fetch(request, env, ctx);
 
     expect(response.status).toBe(200);
-    const data = await response.json();
+    const data: any = await response.json();
     expect(data.status).toBe('healthy');
   });
 
@@ -43,9 +43,9 @@ describe('Edge Ledger Worker Diagnostics', () => {
     const response = await worker.fetch(request, partialEnv, ctx);
 
     expect(response.status).toBe(200);
-    const data = await response.json();
+    const data: any = await response.json();
     expect(data.success).toBe(true);
-    expect(data.services.kv_ledger).toBe('unbound');
+    expect(data.services.kv_ledger).toBe('UNBOUND');
     expect(data.services.emailit).toBe('missing_key');
   });
 
@@ -54,7 +54,7 @@ describe('Edge Ledger Worker Diagnostics', () => {
     const response = await worker.fetch(request, env, ctx);
 
     expect(response.status).toBe(404);
-    const data = await response.json();
+    const data: any = await response.json();
     expect(data.success).toBe(false);
     expect(data.error).toBe('Not found');
     expect(data.timestamp).toBeDefined();

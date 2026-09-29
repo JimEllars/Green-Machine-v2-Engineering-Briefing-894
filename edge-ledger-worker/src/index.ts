@@ -81,7 +81,7 @@ export default {
         const aiStatus = env.AI ? 'available' : 'not_bound';
 
         // 3. KV Namespace Status
-        const kvStatus = env.EDGE_LEDGER_KV ? 'ready' : (env.GREEN_STATE || env.MARKET_CACHE ? 'ready_alt' : 'unbound');
+        const kvStatus = env.LEDGER_KV ? 'READY' : 'UNBOUND';
 
         const totalDuration = Date.now() - startTime;
 
@@ -90,7 +90,7 @@ export default {
           status: dbStatus === 'connected' ? 'operational' : 'degraded',
           timestamp: new Date().toISOString(),
           uptime: process.uptime ? process.uptime() : 0,
-          region: (request as any).cf?.colo || 'DEV-EDGE',
+          region: (request as any).cf?.colo || 'DEV',
           cfRay: request.headers.get('cf-ray') || 'unknown',
           latency: {
             database_ms: dbLatency,
@@ -183,12 +183,8 @@ export default {
       }
 
       // Default route
-      if (!url.pathname.startsWith('/api')) {
-         return jsonResponse(request, { success: false, error: "Not found", timestamp: new Date().toISOString() }, 404);
-      }
-      const response = await thirdwebBridge.fetch(request, env, ctx);
-      status = response.status;
-      return response;
+      // Memory hint: Edge worker routing must implement strict catch-all termination layers to prevent unmapped API endpoint requests from falling through to base tracking payload loops.
+      return jsonResponse(request, { success: false, error: "Not found", timestamp: new Date().toISOString() }, 404);
 
     } catch (error: any) {
       status = 500;

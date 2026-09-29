@@ -3,18 +3,19 @@ import { useSystemDiagnostics } from "../../hooks/useSystemDiagnostics";
 import SafeIcon from "../../common/SafeIcon";
 
 export default function SystemDiagnosticsPanel() {
-  const { diagnosticsState: diagnostics, refreshDiagnosticsState: refreshDiagnostics } = useSystemDiagnostics();
+  const { data: diagnostics, isStale, refetch, loading } = useSystemDiagnostics();
   const [showRaw, setShowRaw] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
-    await refreshDiagnostics();
+    await refetch();
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
   const getStatusColor = (status) => {
     switch (status) {
+      case "operational":
       case "healthy":
         return "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
       case "degraded":
@@ -23,6 +24,8 @@ export default function SystemDiagnosticsPanel() {
         return "bg-rose-500/20 text-rose-400 border-rose-500/30";
     }
   };
+
+  const isDegraded = diagnostics?.status === 'degraded' || diagnostics?.services?.database === 'degraded';
 
   return (
     <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-5 shadow-2xl">
@@ -42,27 +45,33 @@ export default function SystemDiagnosticsPanel() {
         </div>
 
         <div className="flex items-center space-x-3">
-          {diagnostics?._stale && (
+          {isStale && (
              <div className="flex items-center space-x-1.5 px-2 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full">
                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></div>
                <span className="text-[10px] uppercase font-bold text-amber-400">Cached Mode</span>
              </div>
           )}
+          {!isStale && (
+             <div className="flex items-center space-x-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+               <span className="text-[10px] uppercase font-bold text-emerald-400">Live Edge</span>
+             </div>
+          )}
           <span
             className={`px-2.5 py-1 text-xs font-mono font-medium rounded-full border ${getStatusColor(
-              diagnostics?.isDegraded ? "degraded" : (diagnostics?.edgeStatus || 'checking')
+              isDegraded ? "degraded" : (diagnostics?.status || 'checking')
             )}`}
           >
-            {diagnostics?.isDegraded ? "SYSTEM DEGRADED" : "ALL SYSTEMS NOMINAL"}
+            {isDegraded ? "SYSTEM DEGRADED" : "ALL SYSTEMS NOMINAL"}
           </span>
 
           <button
             onClick={handleManualRefresh}
-            disabled={isRefreshing}
+            disabled={isRefreshing || loading}
             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
             title="Refresh Diagnostics"
           >
-            <SafeIcon className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-emerald-400' : ''}`} name="RefreshCw" />
+            <SafeIcon className={`w-4 h-4 ${(isRefreshing || loading) ? 'animate-spin text-emerald-400' : ''}`} name="RefreshCw" />
           </button>
         </div>
       </div>
@@ -72,13 +81,13 @@ export default function SystemDiagnosticsPanel() {
         <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
           <span className="text-xs text-slate-500 uppercase font-mono">Edge Node (Cloudflare)</span>
           <div className="flex items-baseline justify-between mt-1">
-            <span className="text-base font-bold text-white font-mono" title={diagnostics?.cfRay ? `Ray ID: ${diagnostics.cfRay}` : ''}>{diagnostics?.region || diagnostics?.edgeColo || 'UNKNOWN'}</span>
-            <span className="text-xs text-slate-400 font-mono">{diagnostics?.latencyMs || diagnostics?.edgeLatencyMs || 0}ms</span>
+            <span className="text-base font-bold text-white font-mono" title={diagnostics?.cfRay ? `Ray ID: ${diagnostics.cfRay}` : ''}>{diagnostics?.region || 'UNKNOWN'}</span>
+            <span className="text-xs text-slate-400 font-mono">{diagnostics?.latency?.edge_runtime_ms || diagnostics?.latencyMs || 0}ms</span>
           </div>
           <div className="mt-2 flex items-center justify-between">
             <div className="flex items-center space-x-2">
-               <span className={`w-2 h-2 rounded-full ${diagnostics?.status === "operational" || diagnostics?.edgeStatus === "healthy" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
-               <span className="text-xs text-slate-400 capitalize">{diagnostics?.status || diagnostics?.edgeStatus || 'checking'}</span>
+               <span className={`w-2 h-2 rounded-full ${diagnostics?.status === "operational" || diagnostics?.status === "healthy" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
+               <span className="text-xs text-slate-400 capitalize">{diagnostics?.status || 'checking'}</span>
             </div>
             {diagnostics?.cfRay && (
                <span className="text-[9px] text-slate-500 font-mono">{diagnostics.cfRay.split('-')[0]}</span>
@@ -91,11 +100,11 @@ export default function SystemDiagnosticsPanel() {
           <span className="text-xs text-slate-500 uppercase font-mono">Database (Supabase)</span>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-base font-bold text-white font-mono">Postgres RLS</span>
-            <span className="text-xs text-slate-400 font-mono">{diagnostics?.databaseLatencyMs || 0}ms</span>
+            <span className="text-xs text-slate-400 font-mono">{diagnostics?.latency?.database_ms || 0}ms</span>
           </div>
           <div className="mt-2 flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${diagnostics?.databaseStatus === "healthy" ? "bg-emerald-400" : "bg-rose-400"}`} />
-            <span className="text-xs text-slate-400 capitalize">{diagnostics?.databaseStatus || 'checking'}</span>
+            <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.database === "connected" || diagnostics?.services?.database === "healthy" ? "bg-emerald-400" : "bg-rose-400"}`} />
+            <span className="text-xs text-slate-400 capitalize">{diagnostics?.services?.database || 'checking'}</span>
           </div>
         </div>
 
@@ -106,31 +115,31 @@ export default function SystemDiagnosticsPanel() {
             <span className="text-base font-bold text-white font-mono">LEDGER_KV</span>
           </div>
           <div className="mt-2 flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${diagnostics?.kvStatus === "connected" ? "bg-emerald-400" : "bg-amber-400"}`} />
-            <span className="text-xs text-slate-400 capitalize">{diagnostics?.kvStatus || 'checking'}</span>
+            <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.kv_ledger === "ready" || diagnostics?.services?.kv_ledger === "connected" || diagnostics?.services?.kv_ledger === "ready_alt" ? "bg-emerald-400" : "bg-amber-400"}`} />
+            <span className="text-xs text-slate-400 capitalize">{diagnostics?.services?.kv_ledger || 'checking'}</span>
           </div>
         </div>
 
         {/* Automation Cron */}
         <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
-          <span className="text-xs text-slate-500 uppercase font-mono">Cron Briefing Engine</span>
+          <span className="text-xs text-slate-500 uppercase font-mono">Workers AI</span>
           <div className="flex items-baseline justify-between mt-1">
             <span className="text-base font-bold text-white font-mono">
-              {diagnostics?.lastCron?.status ? diagnostics.lastCron.status.toUpperCase() : "STANDBY"}
+              {diagnostics?.services?.workers_ai ? diagnostics.services.workers_ai.toUpperCase() : "STANDBY"}
             </span>
-            {diagnostics?.lastCron?.durationMs && (
-              <span className="text-xs text-slate-400 font-mono">{diagnostics.lastCron.durationMs}ms</span>
+            {diagnostics?.latency?.ai_engine_ms > 0 && (
+              <span className="text-xs text-slate-400 font-mono">{diagnostics.latency.ai_engine_ms}ms</span>
             )}
           </div>
           <div className="mt-2 text-xs text-slate-500 truncate">
-            {diagnostics?.lastCron?.timestamp ? new Date(diagnostics.lastCron.timestamp).toLocaleTimeString() : "Awaiting run"}
+            {diagnostics?.timestamp ? new Date(diagnostics.timestamp).toLocaleTimeString() : "Awaiting sync"}
           </div>
         </div>
       </div>
 
       <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-500 font-mono">
         <span>
-          Last sync: {diagnostics?.lastChecked ? diagnostics.lastChecked.toLocaleTimeString() : "Never"}
+          Last sync: {diagnostics?.timestamp ? new Date(diagnostics.timestamp).toLocaleTimeString() : "Never"}
         </span>
         <button
           onClick={() => setShowRaw(!showRaw)}
@@ -142,7 +151,7 @@ export default function SystemDiagnosticsPanel() {
 
       {showRaw && (
         <pre className="mt-3 p-3 bg-black/60 rounded-lg border border-slate-800 text-[11px] font-mono text-emerald-400 overflow-x-auto max-h-48">
-          {JSON.stringify(diagnostics?.rawTelemetry || diagnostics, null, 2)}
+          {JSON.stringify(diagnostics, null, 2)}
         </pre>
       )}
     </div>
