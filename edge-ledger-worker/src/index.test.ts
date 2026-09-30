@@ -44,9 +44,9 @@ describe('Edge Ledger Worker Diagnostics', () => {
 
     expect(response.status).toBe(200);
     const data: any = await response.json();
-    expect(data.success).toBe(true);
-    expect(data.services.kv_ledger).toBe('UNBOUND');
-    expect(data.services.emailit).toBe('missing_key');
+    expect(data.bindings.kv).toBe(false);
+    expect(data.bindings.emailit).toBe(false);
+    expect(data.bindings.thirdweb).toBe(false);
   });
 
   test('Malformed routes return HTTP 404 with structured error JSON', async () => {

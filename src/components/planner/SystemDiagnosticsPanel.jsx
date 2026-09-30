@@ -36,7 +36,7 @@ export default function SystemDiagnosticsPanel() {
   };
 
   return (
-    <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-xl p-5 shadow-2xl">
+    <div className="bg-slate-900/60 border border-slate-800/80 backdrop-blur-md rounded-xl text-slate-100 p-5 shadow-2xl">
       <div className="flex items-center justify-between pb-4 border-b border-slate-800">
         <div className="flex items-center space-x-3">
           <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
@@ -62,7 +62,7 @@ export default function SystemDiagnosticsPanel() {
           {diagnostics?.isLive && !isStale && (
              <div className="flex items-center space-x-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
-               <span className="text-[10px] uppercase font-bold text-emerald-400">Live Edge Heartbeat</span>
+               <span className="text-[10px] uppercase font-bold text-emerald-400">Live Edge Telemetry</span>
              </div>
           )}
           <span
@@ -137,14 +137,14 @@ export default function SystemDiagnosticsPanel() {
           <div className="flex flex-col space-y-1 mt-1">
             <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400 font-mono">EmailIt:</span>
-               <span className={`font-mono ${diagnostics?.subsystems?.emailit?.configured ? "text-emerald-400" : "text-rose-400"}`}>
-                  {diagnostics?.subsystems?.emailit?.configured ? "READY" : "ERR"}
+               <span className={`font-mono ${(diagnostics?.bindings?.emailit || diagnostics?.subsystems?.emailit?.configured) ? "text-emerald-400" : "text-amber-400"}`}>
+                  {(diagnostics?.bindings?.emailit || diagnostics?.subsystems?.emailit?.configured) ? "Online" : "Mock Mode"}
                </span>
             </div>
              <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400 font-mono">Thirdweb:</span>
-               <span className={`font-mono ${diagnostics?.subsystems?.thirdwebBridge?.configured ? "text-emerald-400" : "text-rose-400"}`}>
-                  {diagnostics?.subsystems?.thirdwebBridge?.configured ? "READY" : "ERR"}
+               <span className={`font-mono ${(diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? "text-emerald-400" : "text-amber-400"}`}>
+                  {(diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? "Online" : "Mock Mode"}
                </span>
             </div>
           </div>

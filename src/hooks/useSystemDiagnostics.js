@@ -365,9 +365,9 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
 
   useEffect(() => {
     fetchDiagnosticsNew();
-    const interval = setInterval(fetchDiagnosticsNew, pollInterval);
+    const interval = setInterval(fetchDiagnosticsNew, 15000);
     return () => clearInterval(interval);
-  }, [fetchDiagnosticsNew, pollInterval]);
+  }, [fetchDiagnosticsNew]);
 
   useEffect(() => {
     let isMounted = true;
