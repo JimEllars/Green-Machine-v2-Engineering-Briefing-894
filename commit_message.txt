@@ -1,5 +1,0 @@
-fix(telemetry): harden edge diagnostics, worker cors, and session resilience
-- Add exponential backoff and storage caching to useSystemDiagnostics
-- Enrich worker /api/diagnostics with CF colo and Ray ID telemetry
-- Ensure non-blocking session restore in AXiMLoginGate
-- Add unit tests for worker health, CORS preflights, and error handling

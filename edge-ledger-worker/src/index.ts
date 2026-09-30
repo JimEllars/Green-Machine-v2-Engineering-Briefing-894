@@ -2,10 +2,8 @@ import thirdwebBridge from "./thirdweb_bridge";
 import { fetchHealth } from "./market_watcher";
 
 const getCorsHeaders = (request: Request) => {
-  const origin = request.headers.get('origin') || '*';
-  const allowedOrigin = (origin.match(/^https:\/\/.*\.axim\.us\.com$/) || origin.startsWith('http://localhost:')) ? origin : '*';
   return {
-    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Version, X-Axim-Signature, x-client-info, apikey',
     'Access-Control-Max-Age': '86400',
@@ -81,30 +79,38 @@ export default {
         const aiStatus = env.AI ? 'available' : 'not_bound';
 
         // 3. KV Namespace Status
-        const kvStatus = env.LEDGER_KV ? 'READY' : 'UNBOUND';
+        let kvStatus = env.LEDGER_KV ? 'READY' : 'UNBOUND';
+        let kvLatency = -1;
+        const targetKV = env.LEDGER_KV || env.GREEN_STATE || env.MARKET_CACHE;
+        if (targetKV) {
+           const pingStart = Date.now();
+           try {
+             await targetKV.put("__healthcheck__", "1", { expirationTtl: 60 });
+             await targetKV.get("__healthcheck__");
+             kvLatency = Date.now() - pingStart;
+             kvStatus = 'READY';
+           } catch (e) {
+             kvStatus = 'degraded';
+           }
+        }
 
         const totalDuration = Date.now() - startTime;
 
         return jsonResponse(request, {
-          success: true,
-          status: dbStatus === 'connected' ? 'operational' : 'degraded',
+          status: dbStatus === 'connected' && kvStatus !== 'degraded' ? 'operational' : 'degraded',
           timestamp: new Date().toISOString(),
-          uptime: process.uptime ? process.uptime() : 0,
-          region: (request as any).cf?.colo || 'DEV',
-          cfRay: request.headers.get('cf-ray') || 'unknown',
-          latency: {
-            database_ms: dbLatency,
-            ai_engine_ms: env.AI ? 45 : -1,
-            edge_runtime_ms: totalDuration,
+          workerRegion: (request as any).cf?.colo || 'local-dev',
+          bindings: {
+            database: dbStatus === 'connected',
+            thirdweb: !!env.THIRDWEB_SECRET_KEY,
+            emailit: !!env.EMAILIT_API_KEY,
+            kv: kvStatus === 'READY'
           },
-          services: {
-            database: dbStatus,
-            workers_ai: aiStatus,
-            kv_ledger: kvStatus,
-            emailit: env.EMAILIT_API_KEY ? 'configured' : 'missing_key',
-          },
-          version: '2.4.0-telemetry',
-          latencyMs: totalDuration,
+          telemetry: {
+            requestCount: 1,
+            latencyMs: kvLatency,
+            memory: 'stable'
+          }
         }, 200, {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
         });

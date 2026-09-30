@@ -43,7 +43,8 @@ export async function syncMarketCache(env: Env, ctx?: ExecutionContext): Promise
       const res = await fetch("https://api.anny.trade/backend/anny-line/chart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asset, interval: "1d", tradeMarket: "USDT" })
+        body: JSON.stringify({ asset, interval: "1d", tradeMarket: "USDT" }),
+        signal: AbortSignal.timeout(3000)
       });
       if (res.status === 429) {
          throw { status: 429, retryAfter: res.headers.get('Retry-After') };
@@ -76,7 +77,8 @@ export async function syncMarketCache(env: Env, ctx?: ExecutionContext): Promise
     const multiSourceData = {
       crypto: results,
       _telemetry_timestamp: Date.now(),
-      provider: "anny_trade_rest"
+      provider: "anny_trade_rest",
+      upstreamLive: true
     };
 
     // 2. Dynamic Volatility Circuit Breaker
@@ -148,7 +150,9 @@ export async function syncMarketCache(env: Env, ctx?: ExecutionContext): Promise
       const { value, metadata } = await env.MARKET_CACHE.getWithMetadata(CACHE_KEY);
       if (value) {
         // Prolong the existing stale cache
-        await env.MARKET_CACHE.put(CACHE_KEY, value as string, {
+        const parsedFallback = JSON.parse(value as string);
+        parsedFallback.upstreamLive = false;
+        await env.MARKET_CACHE.put(CACHE_KEY, JSON.stringify(parsedFallback), {
           expirationTtl: MAX_AGE + STALE_WHILE_REVALIDATE,
           metadata: { ...(metadata as object), rate_limited: error.status === 429, fallback: true }
         });

@@ -1943,9 +1943,9 @@ if (request.method === "GET" && url.pathname === "/api/dlq-status") {
             try {
               const payload = (await request.json()) as any;
 
-          if (!(env as any).THIRDWEB_SECRET_KEY || !(env as any).WALLET_PRIVATE_KEY) {
+          if (!(env as any).THIRDWEB_SECRET_KEY || (env as any).THIRDWEB_SECRET_KEY.includes('placeholder') || !(env as any).WALLET_PRIVATE_KEY) {
             console.warn("[ThirdwebBridge] Credentials unprovisioned. Running in simulated ledger mode.");
-            return new Response(JSON.stringify({ success: true, txHash: "0xsimulated_" + Date.now(), status: "logged_locally" }), {
+            return new Response(JSON.stringify({ success: true, txHash: "0xsimulated_" + Date.now(), status: "logged_locally", mock: true }), {
               status: 200,
               headers: { "Content-Type": "application/json", ...corsHeaders }
             });
