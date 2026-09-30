@@ -151,7 +151,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-      const response = await fetch(`${baseUrl}/api/diagnostics`, {
+      const response = await fetch(`${baseUrl}/api/v1/telemetry`, {
         headers: {
             'Accept': 'application/json',
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
@@ -166,7 +166,15 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
 
       const json = await response.json();
       lastKnownGood.current = json;
-      setData(json);
+
+      // Update state silently without throwing boundaries
+      setData(prev => ({
+        ...prev,
+        ...json,
+        lastChecked: new Date(),
+        latencyMs: json.latencyMs,
+        colo: json.colo
+      }));
       setErrorLocal(null);
       try {
         sessionStorage.setItem('axim_telemetry_cache', JSON.stringify({ telemetry: json, timestamp: Date.now() }));
@@ -177,7 +185,8 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
 
       return { data: json, loading: false, error: null, isStale: false, refetch: fetchDiagnosticsNew };
     } catch (err) {
-      console.warn('Diagnostics telemetry warning:', err.message);
+      // Diagnostic polling failures must NEVER trigger global error boundaries or flash user alerts.
+      // We log silently here.
 
       const maxAttempts = 3;
       if (retryCount < maxAttempts) {
@@ -209,11 +218,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
     }
   }, []);
 
-  useEffect(() => {
-    fetchDiagnosticsNew();
-    const interval = setInterval(fetchDiagnosticsNew, 30000);
-    return () => clearInterval(interval);
-  }, [fetchDiagnosticsNew]);
+
 
   const [telemetry, setTelemetry] = useState(null);
   const [telemetryHistory, setTelemetryHistory] = useState([]);
@@ -222,6 +227,54 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
   const [isFetching, setIsFetching] = useState(false);
   const [errorCount, setErrorCount] = useState(0);
   const [, startTransition] = useTransition();
+
+  useEffect(() => {
+    let isMounted = true;
+    let timeoutId = null;
+
+    const runFetch = async () => {
+      if (document.visibilityState === 'hidden') {
+         timeoutId = setTimeout(runFetch, 120000); // 2 minutes backoff when hidden
+         return;
+      }
+
+      if (isMounted) {
+        const result = await fetchDiagnosticsNew().catch(e => console.error("Diagnostics fetch error handled:", e));
+        if (isMounted) {
+          setErrorCount(currentErrorCount => {
+             const newCount = result?.error ? currentErrorCount + 1 : 0;
+             let baseInterval = 15000;
+             if (newCount === 1) baseInterval = 30000;
+             else if (newCount === 2) baseInterval = 60000;
+             else if (newCount > 2) baseInterval = 120000;
+
+             const jitter = baseInterval * 0.1 * Math.random();
+             const intervalTime = baseInterval + jitter;
+             timeoutId = setTimeout(runFetch, intervalTime);
+             return newCount;
+          });
+        }
+      }
+    };
+
+    runFetch();
+
+    const handleVisibilityChange = () => {
+       if (document.visibilityState === 'visible') {
+          clearTimeout(timeoutId);
+          runFetch();
+       }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchDiagnosticsNew]);
+
   const [emailServiceStatus, setEmailServiceStatus] = useState('idle');
   const [emailService, setEmailService] = useState({
     status: 'operational',
@@ -363,61 +416,9 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
   }, []);
 
 
-  useEffect(() => {
-    fetchDiagnosticsNew();
-    const interval = setInterval(fetchDiagnosticsNew, 15000);
-    return () => clearInterval(interval);
-  }, [fetchDiagnosticsNew]);
 
-  useEffect(() => {
-    let isMounted = true;
-    let timeoutId = null;
 
-    const runFetch = async () => {
-      if (!isAuthenticated) return;
 
-      if (document.visibilityState === 'hidden') {
-         // Backoff when hidden, delay next check significantly
-         timeoutId = setTimeout(runFetch, 120000); // 2 minutes
-         return;
-      }
-
-      if (isMounted) {
-        await fetchDiagnostics().catch(e => console.error("Diagnostics fetch error handled:", e));
-      }
-
-      if (isMounted) {
-        // Exponential backoff logic based on error count
-        // Using a function form of state to ensure latest value
-        setErrorCount(currentErrorCount => {
-           // Add 0-20% jitter to prevent thundering herd cascades
-           const baseInterval = currentErrorCount === 0 ? 10000 : Math.min(10000 * Math.pow(1.5, currentErrorCount), 60000);
-           const jitter = baseInterval * 0.2 * Math.random();
-           const intervalTime = baseInterval + jitter;
-           timeoutId = setTimeout(runFetch, intervalTime);
-           return currentErrorCount;
-        });
-      }
-    };
-
-    runFetch();
-
-    const handleVisibilityChange = () => {
-       if (document.visibilityState === 'visible') {
-          // If returning to tab, fetch immediately and reset timer
-          clearTimeout(timeoutId);
-          runFetch();
-       }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [fetchDiagnostics]);
 
 
 

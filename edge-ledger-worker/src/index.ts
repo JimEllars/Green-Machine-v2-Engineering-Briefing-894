@@ -4,7 +4,7 @@ import { fetchHealth } from "./market_watcher";
 const getCorsHeaders = (request: Request) => {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Version, X-Axim-Signature, x-client-info, apikey',
     'Access-Control-Max-Age': '86400',
   };
@@ -14,6 +14,16 @@ export function handleOptions(request: Request): Response {
   return new Response(null, {
     status: 204,
     headers: getCorsHeaders(request),
+  });
+}
+
+export function jsonError(message: string, status: number = 400, code: string = 'BAD_REQUEST') {
+  return new Response(JSON.stringify({
+    success: false,
+    error: { message, code, timestamp: Date.now() }
+  }), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...getCorsHeaders({} as Request) }
   });
 }
 
@@ -127,7 +137,7 @@ export default {
         });
       }
 
-      if (url.pathname === "/telemetry" || url.pathname === "/api/telemetry") {
+      if (url.pathname === "/telemetry" || url.pathname === "/api/telemetry" || url.pathname === "/api/v1/telemetry") {
         const startTimeTel = performance.now();
         let kvHealthy = false;
         let kvLatencyMs = 0;
@@ -164,30 +174,46 @@ export default {
         } catch {
         }
 
+        let dbStatus = 'disconnected';
+        try {
+          const res = await fetch(`${env.SUPABASE_URL}/rest/v1/`, {
+            method: 'GET',
+            headers: {
+              'apikey': env.SUPABASE_ANON_KEY || '',
+              'Authorization': `Bearer ${env.SUPABASE_ANON_KEY || ''}`,
+            },
+          });
+          if (res.ok) {
+            dbStatus = 'connected';
+          }
+        } catch {}
+
         const cfData = (request as any).cf || {};
+        const isHealthy = kvHealthy && dbStatus === 'connected';
+
         const telemetryPayload = {
-          status: 'ok',
-          timestamp: new Date().toISOString(),
-          workerRegion: cfData.colo || "UNKNOWN",
-          executionTimeMs: Math.round(performance.now() - startTimeTel),
+          status: isHealthy ? 'healthy' : 'degraded',
+          timestamp: Date.now(),
+          colo: cfData.colo || "UNKNOWN",
+          memoryUsage: "nominal",
+          version: "2.1.0",
+          services: {
+            supabase: dbStatus,
+            thirdweb: !!env.THIRDWEB_SECRET_KEY ? 'ready' : 'standby',
+            emailit: !!env.EMAILIT_API_KEY ? 'ready' : 'standby'
+          },
+          // Maintain some legacy fields for backward compatibility
           subsystems: {
             kv: { status: kvStatus, latencyMs: kvLatencyMs },
             thirdwebBridge: { configured: !!env.THIRDWEB_SECRET_KEY },
             emailit: { configured: !!env.EMAILIT_API_KEY, circuitBreaker: cbStatus },
-            database: { configured: !!env.SUPABASE_URL }
+            database: { configured: !!env.SUPABASE_URL, status: dbStatus === 'connected' ? 'healthy' : 'degraded' }
           },
           edge: {
             colo: cfData.colo || "LOCAL",
-            country: cfData.country || "UNKNOWN",
-            city: cfData.city || "UNKNOWN",
-            httpProtocol: cfData.httpProtocol || "HTTP/2",
+            country: cfData.country || "UNKNOWN"
           },
-          services: {
-            kv: kvHealthy ? "connected" : "unavailable",
-            lastCron: lastCronInfo,
-            workerLatencyMs: Math.round(performance.now() - startTimeTel),
-          },
-          version: "2.1.0-prod",
+          latencyMs: Math.round(performance.now() - startTimeTel)
         };
 
         return jsonResponse(request, telemetryPayload, 200, {
@@ -218,11 +244,11 @@ export default {
 
       // Default route
       // Memory hint: Edge worker routing must implement strict catch-all termination layers to prevent unmapped API endpoint requests from falling through to base tracking payload loops.
-      return jsonResponse(request, { success: false, error: "Not found", timestamp: new Date().toISOString() }, 404);
+      return jsonError("Not found", 404, 'NOT_FOUND');
 
     } catch (error: any) {
       status = 500;
-      return jsonResponse(request, { success: false, error: error.message, timestamp: new Date().toISOString() }, 500);
+      return jsonError(error.message, 500, 'INTERNAL_SERVER_ERROR');
     } finally {
         const latencyMs = Date.now() - startTime;
         const logPayload = {
