@@ -122,27 +122,54 @@ export default {
       }
 
       if (url.pathname === "/telemetry" || url.pathname === "/api/telemetry") {
-        const startTimeTel = Date.now();
+        const startTimeTel = performance.now();
         let kvHealthy = false;
+        let kvLatencyMs = 0;
         let lastCronInfo = null;
 
         const targetKV = env.LEDGER_KV || env.GREEN_STATE || env.MARKET_CACHE;
+        let kvStatus = 'unreachable';
 
         try {
           if (targetKV) {
-            await targetKV.put("telemetry:ping", Date.now().toString(), { expirationTtl: 120 });
-            kvHealthy = true;
+            const pingStart = performance.now();
+            await targetKV.put("__healthcheck__", "1", { expirationTtl: 60 });
+            const pingRead = await targetKV.get("__healthcheck__");
+            kvLatencyMs = Math.round(performance.now() - pingStart);
+            kvStatus = pingRead === '1' ? 'healthy' : 'degraded';
+            kvHealthy = pingRead === '1';
+
             const rawCron = await targetKV.get("telemetry:last_cron");
             lastCronInfo = rawCron ? JSON.parse(rawCron) : { status: "not_recorded" };
           }
         } catch {
+          kvStatus = 'unreachable';
           kvHealthy = false;
+        }
+
+        let cbStatus = 'operational';
+        try {
+          if (targetKV) {
+             const emailitCb = await targetKV.get("emailit_circuit_breaker");
+             if (emailitCb === "open") {
+                 cbStatus = 'degraded';
+             }
+          }
+        } catch {
         }
 
         const cfData = (request as any).cf || {};
         const telemetryPayload = {
-          status: kvHealthy ? "healthy" : "degraded",
+          status: 'ok',
           timestamp: new Date().toISOString(),
+          workerRegion: cfData.colo || "UNKNOWN",
+          executionTimeMs: Math.round(performance.now() - startTimeTel),
+          subsystems: {
+            kv: { status: kvStatus, latencyMs: kvLatencyMs },
+            thirdwebBridge: { configured: !!env.THIRDWEB_SECRET_KEY },
+            emailit: { configured: !!env.EMAILIT_API_KEY, circuitBreaker: cbStatus },
+            database: { configured: !!env.SUPABASE_URL }
+          },
           edge: {
             colo: cfData.colo || "LOCAL",
             country: cfData.country || "UNKNOWN",
@@ -152,12 +179,13 @@ export default {
           services: {
             kv: kvHealthy ? "connected" : "unavailable",
             lastCron: lastCronInfo,
-            workerLatencyMs: Date.now() - startTimeTel,
+            workerLatencyMs: Math.round(performance.now() - startTimeTel),
           },
           version: "2.1.0-prod",
         };
 
         return jsonResponse(request, telemetryPayload, 200, {
+          'Access-Control-Allow-Origin': '*',
           'Cache-Control': 'no-store, no-cache, must-revalidate'
         });
       }

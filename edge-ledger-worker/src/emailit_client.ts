@@ -28,6 +28,7 @@ export interface DispatchResult {
   provider: 'emailit' | 'resend';
   messageId?: string;
   rawResponse?: any;
+  degraded?: boolean;
   error?: string;
 }
 
@@ -140,40 +141,48 @@ export class EmailDispatchManager {
       meta: options.meta
     };
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3500);
-
     try {
+      try {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload),
-        signal: controller.signal as any
+        signal: AbortSignal.timeout(8000) as any
       });
 
-      this.extractTelemetryHeaders(response);
-
-      if (response.status === 429) {
-        throw new Error('EmailIt Rate Limit Exceeded (HTTP 429)');
-      }
-
       if (!response.ok) {
-        let errorData = {};
+        let errorBody = {};
         try {
-            errorData = await response.json();
-        } catch(e) {}
-        throw new Error(`EmailIt API Error [HTTP ${response.status}]: ${JSON.stringify(errorData)}`);
+            errorBody = await response.json();
+        } catch (e) {}
+        return {
+            success: false,
+            provider: 'resend',
+            error: `Critical Secondary Provider Failure (Resend) [HTTP ${response.status}]: ${JSON.stringify(errorBody)}`,
+            degraded: true
+        };
       }
 
       const data = await (response.json() as any);
       return {
         success: true,
-        provider: 'emailit',
+        provider: 'resend',
         messageId: data.id,
         rawResponse: data
       };
-    } finally {
-      clearTimeout(timeout);
+    } catch (error: any) {
+        return {
+            success: false,
+            provider: 'resend',
+            error: error.message || 'Resend API Error',
+            degraded: true
+        };
+    }
+    } catch (error: any) {
+        if (error.name === 'TimeoutError') {
+             throw new Error('EmailIt API Timeout after 8000ms');
+        }
+        throw error;
     }
   }
 
@@ -314,7 +323,8 @@ export class EmailDispatchManager {
                  'Authorization': `Bearer ${this.emailitApiKey}`,
                  'Content-Type': 'application/json'
              },
-             body: JSON.stringify({})
+             body: JSON.stringify({}),
+             signal: AbortSignal.timeout(8000) as any
          });
 
          // 400 Bad Request indicates auth succeeded but payload is bad.
