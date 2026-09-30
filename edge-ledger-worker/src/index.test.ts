@@ -30,7 +30,7 @@ describe('Edge Ledger Worker Diagnostics', () => {
     const response = await worker.fetch(request, env, ctx);
 
     expect(response.status).toBe(204);
-    expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+    expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
     expect(response.headers.get('Access-Control-Max-Age')).toBe('86400');
   });
 
@@ -56,7 +56,24 @@ describe('Edge Ledger Worker Diagnostics', () => {
     expect(response.status).toBe(404);
     const data: any = await response.json();
     expect(data.success).toBe(false);
-    expect(data.error).toBe('Not found');
+    expect(data.error.message).toBe('Not found');
+    expect(data.error.code).toBe('NOT_FOUND');
+    expect(data.error.timestamp).toBeDefined();
+  });
+
+  test('GET /api/v1/telemetry returns HTTP 200 with new structured payload', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 } as any);
+    const request = new Request('https://green-machine.axim.com/api/v1/telemetry', { method: 'GET' });
+    const response = await worker.fetch(request, env, ctx);
+
+    expect(response.status).toBe(200);
+    const data: any = await response.json();
+
+    expect(data.status).toBeDefined();
     expect(data.timestamp).toBeDefined();
+    expect(data.version).toBe('2.1.0');
+    expect(data.services.supabase).toBeDefined();
+    expect(data.services.thirdweb).toBeDefined();
+    expect(data.services.emailit).toBeDefined();
   });
 });

@@ -29,14 +29,28 @@ export default function SystemDiagnosticsPanel() {
   const isDegraded = diagnostics?.status === 'degraded' || diagnostics?.subsystems?.database?.status === 'degraded';
 
   const getLatencyColor = (latency) => {
-    if (!latency) return "text-slate-400";
+    if (latency === undefined || latency === null) return "text-slate-400";
     if (latency < 100) return "text-emerald-400";
-    if (latency < 300) return "text-amber-400";
+    if (latency <= 250) return "text-amber-400";
     return "text-rose-400";
   };
 
+  const getRingColor = (latency) => {
+    if (latency === undefined || latency === null) return "bg-slate-500/20 text-slate-400 border-slate-500/40";
+    if (latency < 100) return "bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
+    if (latency <= 250) return "bg-amber-500/20 text-amber-400 border-amber-500/40";
+    return "bg-rose-500/20 text-rose-400 border-rose-500/40";
+  };
+
+  const getPulseColor = (latency) => {
+    if (latency === undefined || latency === null) return "bg-slate-400";
+    if (latency < 100) return "bg-emerald-500 animate-pulse";
+    if (latency <= 250) return "bg-amber-500 animate-pulse";
+    return "bg-rose-500 animate-pulse";
+  };
+
   return (
-    <div className="bg-slate-900/60 border border-slate-800/80 backdrop-blur-md rounded-xl text-slate-100 p-5 shadow-2xl">
+    <div className="bg-slate-900/80 border border-slate-800/80 backdrop-blur-md rounded-xl text-slate-100 p-5 shadow-2xl">
       <div className="flex items-center justify-between pb-4 border-b border-slate-800">
         <div className="flex items-center space-x-3">
           <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
@@ -65,13 +79,16 @@ export default function SystemDiagnosticsPanel() {
                <span className="text-[10px] uppercase font-bold text-emerald-400">Live Edge Telemetry</span>
              </div>
           )}
+          {loading && !diagnostics ? (
+            <div className="h-6 w-32 bg-slate-800/50 rounded-full animate-pulse"></div>
+          ) : (
           <span
-            className={`px-2.5 py-1 text-xs font-mono font-medium rounded-full border ${getStatusColor(
-              isDegraded ? "degraded" : (diagnostics?.status || 'checking')
-            )}`}
+            className={`flex items-center space-x-2 px-2.5 py-1 text-xs font-mono font-medium rounded-full border ${getRingColor(diagnostics?.latencyMs)}`}
           >
-            {isDegraded ? "SYSTEM DEGRADED" : "ALL SYSTEMS NOMINAL"}
+            <span className={`w-1.5 h-1.5 rounded-full ${getPulseColor(diagnostics?.latencyMs)}`}></span>
+            <span>{isDegraded ? "SYSTEM DEGRADED" : "ALL SYSTEMS NOMINAL"}</span>
           </span>
+          )}
 
           <button
             onClick={handleManualRefresh}
@@ -85,70 +102,77 @@ export default function SystemDiagnosticsPanel() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-        {/* Edge Worker */}
-        <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
-          <span className="text-xs text-slate-500 uppercase font-mono">Edge Node (Cloudflare)</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-base font-bold text-white font-mono px-2 py-0.5 bg-slate-800 rounded">
-                [{diagnostics?.colo || diagnostics?.workerRegion || 'UNKNOWN'}]
-            </span>
-            <span className={`text-xs font-mono font-bold ${getLatencyColor(diagnostics?.latency)}`}>
-                {diagnostics?.latency || 0}ms
-            </span>
-          </div>
-          <div className="mt-2 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-               <span className={`w-2 h-2 rounded-full ${diagnostics?.status === "ok" || diagnostics?.status === "operational" || diagnostics?.status === "healthy" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
-               <span className="text-xs text-slate-400 capitalize">{diagnostics?.status || 'checking'}</span>
+        {loading && !diagnostics ? (
+          <>
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80 animate-pulse">
+                <div className="h-3 w-20 bg-slate-800 rounded mb-2"></div>
+                <div className="h-5 w-24 bg-slate-800 rounded mb-3"></div>
+                <div className="h-3 w-16 bg-slate-800 rounded"></div>
+              </div>
+            ))}
+          </>
+        ) : (
+          <>
+            {/* Edge Node (Colo) */}
+            <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
+              <span className="text-xs text-slate-500 uppercase font-mono">Edge Node (Colo)</span>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="text-base font-bold text-white font-mono px-2 py-0.5 bg-slate-800 rounded">
+                    [{diagnostics?.colo || diagnostics?.edge?.colo || diagnostics?.workerRegion || 'UNKNOWN'}]
+                </span>
+                <span className={`text-xs font-mono font-bold ${getLatencyColor(diagnostics?.latencyMs)}`}>
+                    {diagnostics?.latencyMs || 0}ms
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                   <span className={`w-2 h-2 rounded-full ${diagnostics?.status === "ok" || diagnostics?.status === "operational" || diagnostics?.status === "healthy" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
+                   <span className="text-xs text-slate-400 capitalize">{diagnostics?.status || 'checking'}</span>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
 
-        {/* Supabase DB */}
-        <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
-          <span className="text-xs text-slate-500 uppercase font-mono">Database (Supabase)</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-base font-bold text-white font-mono">Postgres RLS</span>
-          </div>
-          <div className="mt-2 flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${diagnostics?.subsystems?.database?.configured ? "bg-emerald-400" : "bg-rose-400"}`} />
-            <span className="text-xs text-slate-400 capitalize">{diagnostics?.subsystems?.database?.configured ? 'configured' : 'checking'}</span>
-          </div>
-        </div>
-
-        {/* Cloudflare KV */}
-        <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
-          <span className="text-xs text-slate-500 uppercase font-mono">Edge Ledger KV</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="text-base font-bold text-white font-mono">LEDGER_KV</span>
-             <span className={`text-xs font-mono ${getLatencyColor(diagnostics?.subsystems?.kv?.latencyMs)}`}>
-                {diagnostics?.subsystems?.kv?.latencyMs || 0}ms
-            </span>
-          </div>
-          <div className="mt-2 flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${diagnostics?.subsystems?.kv?.status === "healthy" || diagnostics?.subsystems?.kv?.status === "connected" ? "bg-emerald-400" : "bg-amber-400"}`} />
-            <span className="text-xs text-slate-400 capitalize">{diagnostics?.subsystems?.kv?.status || 'checking'}</span>
-          </div>
-        </div>
-
-        {/* Automation Cron */}
-        <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
-          <span className="text-xs text-slate-500 uppercase font-mono">External Integrations</span>
-          <div className="flex flex-col space-y-1 mt-1">
-            <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-400 font-mono">EmailIt:</span>
-               <span className={`font-mono ${(diagnostics?.bindings?.emailit || diagnostics?.subsystems?.emailit?.configured) ? "text-emerald-400" : "text-amber-400"}`}>
-                  {(diagnostics?.bindings?.emailit || diagnostics?.subsystems?.emailit?.configured) ? "Online" : "Mock Mode"}
-               </span>
+            {/* Database Rail */}
+            <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
+              <span className="text-xs text-slate-500 uppercase font-mono">Database Rail</span>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="text-base font-bold text-white font-mono">Postgres RLS</span>
+              </div>
+              <div className="mt-2 flex items-center space-x-2">
+                <span className={`w-2 h-2 rounded-full ${(diagnostics?.services?.supabase === 'connected' || diagnostics?.subsystems?.database?.configured) ? "bg-emerald-400" : "bg-rose-400"}`} />
+                <span className="text-xs text-slate-400 capitalize">{(diagnostics?.services?.supabase === 'connected' || diagnostics?.subsystems?.database?.configured) ? 'configured' : 'checking'}</span>
+              </div>
             </div>
-             <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-400 font-mono">Thirdweb:</span>
-               <span className={`font-mono ${(diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? "text-emerald-400" : "text-amber-400"}`}>
-                  {(diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? "Online" : "Mock Mode"}
-               </span>
+
+            {/* Contract Bridge */}
+            <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
+              <span className="text-xs text-slate-500 uppercase font-mono">Contract Bridge</span>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="text-base font-bold text-white font-mono">Web3 Relay</span>
+              </div>
+              <div className="mt-2 flex items-center space-x-2">
+                <span className={`w-2 h-2 rounded-full ${(diagnostics?.services?.thirdweb === 'ready' || diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                <span className="text-xs text-slate-400 capitalize">{(diagnostics?.services?.thirdweb === 'ready' || diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? 'Ready' : 'Mock Mode'}</span>
+              </div>
             </div>
-          </div>
-        </div>
+
+            {/* Telemetry Latency / Edge Ledger KV */}
+            <div className="p-3.5 bg-slate-950/60 rounded-lg border border-slate-800/80">
+              <span className="text-xs text-slate-500 uppercase font-mono">Telemetry Latency</span>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="text-base font-bold text-white font-mono">KV State</span>
+                 <span className={`text-xs font-mono ${getLatencyColor(diagnostics?.subsystems?.kv?.latencyMs)}`}>
+                    {diagnostics?.subsystems?.kv?.latencyMs || 0}ms
+                </span>
+              </div>
+              <div className="mt-2 flex items-center space-x-2">
+                <span className={`w-2 h-2 rounded-full ${diagnostics?.subsystems?.kv?.status === "healthy" || diagnostics?.subsystems?.kv?.status === "connected" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                <span className="text-xs text-slate-400 capitalize">{diagnostics?.subsystems?.kv?.status || 'checking'}</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between text-xs text-slate-500 font-mono">
