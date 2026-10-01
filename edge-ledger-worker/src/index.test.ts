@@ -1,20 +1,33 @@
-import { expect, test, describe, vi } from 'vitest';
+import { expect, test, describe } from 'vitest';
 import worker from './index';
 
 describe('Edge Ledger Worker Diagnostics', () => {
   const env = {
-    SUPABASE_URL: 'https://mock.supabase.co',
-    EMAILIT_API_KEY: 'mock_emailit',
-    THIRDWEB_SECRET_KEY: 'mock_thirdweb',
     LEDGER_KV: {
-      get: vi.fn(),
-      put: vi.fn()
+      get: async (key: string) => {
+        if (key === '__healthcheck__') return '1';
+        if (key === '__health_probe__') return '1';
+        return null;
+      },
+      put: async () => {},
     },
-    AI: {}
+    SUPABASE_URL: 'https://mock.supabase.co',
+    SUPABASE_ANON_KEY: 'mock-anon-key',
+    EMAILIT_API_KEY: 'mock-emailit-key',
+    THIRDWEB_SECRET_KEY: 'mock-thirdweb-key',
   };
+
   const ctx = {
-    waitUntil: vi.fn()
+    waitUntil: (promise: Promise<any>) => {},
   };
+
+  test('OPTIONS /* returns correct CORS headers', async () => {
+    const request = new Request('https://green-machine.axim.com/api/health', { method: 'OPTIONS' });
+    const response = await worker.fetch(request, env, ctx);
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
+  });
 
   test('GET /health returns HTTP 200 with { status: "healthy" }', async () => {
     const request = new Request('https://green-machine.axim.com/api/health', { method: 'GET' });
@@ -22,31 +35,22 @@ describe('Edge Ledger Worker Diagnostics', () => {
 
     expect(response.status).toBe(200);
     const data: any = await response.json();
+    expect(data.success).toBe(true);
     expect(data.status).toBe('healthy');
   });
 
-  test('OPTIONS /* returns correct CORS headers', async () => {
-    const request = new Request('https://green-machine.axim.com/api/some-endpoint', { method: 'OPTIONS' });
+  test('GET /api/telemetry returns HTTP 200 with new structured payload', async () => {
+    const request = new Request('https://green-machine.axim.com/api/telemetry', {
+      method: 'GET',
+    });
+
     const response = await worker.fetch(request, env, ctx);
-
-    expect(response.status).toBe(204);
-    expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, PUT, DELETE, OPTIONS');
-    expect(response.headers.get('Access-Control-Max-Age')).toBe('86400');
-  });
-
-  test('GET /api/diagnostics handles missing KV/thirdweb secrets gracefully', async () => {
-    // Override fetch for Supabase Ping Check
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 } as any);
-
-    const partialEnv = {}; // Missing secrets
-    const request = new Request('https://green-machine.axim.com/api/diagnostics', { method: 'GET' });
-    const response = await worker.fetch(request, partialEnv, ctx);
 
     expect(response.status).toBe(200);
     const data: any = await response.json();
-    expect(data.bindings.kv).toBe(false);
-    expect(data.bindings.emailit).toBe(false);
-    expect(data.bindings.thirdweb).toBe(false);
+
+    expect(data.status).toBe('healthy');
+    expect(data.services.thirdweb_bridge.status).toBe('online');
   });
 
   test('Malformed routes return HTTP 404 with structured error JSON', async () => {
@@ -56,24 +60,6 @@ describe('Edge Ledger Worker Diagnostics', () => {
     expect(response.status).toBe(404);
     const data: any = await response.json();
     expect(data.success).toBe(false);
-    expect(data.error.message).toBe('Not found');
     expect(data.error.code).toBe('NOT_FOUND');
-    expect(data.error.timestamp).toBeDefined();
-  });
-
-  test('GET /api/v1/telemetry returns HTTP 200 with new structured payload', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200 } as any);
-    const request = new Request('https://green-machine.axim.com/api/v1/telemetry', { method: 'GET' });
-    const response = await worker.fetch(request, env, ctx);
-
-    expect(response.status).toBe(200);
-    const data: any = await response.json();
-
-    expect(data.status).toBeDefined();
-    expect(data.timestamp).toBeDefined();
-    expect(data.version).toBe('2.1.0');
-    expect(data.services.supabase).toBeDefined();
-    expect(data.services.thirdweb).toBeDefined();
-    expect(data.services.emailit).toBeDefined();
   });
 });

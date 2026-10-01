@@ -26,7 +26,7 @@ const AXiMLoginGate = () => {
             const stored = localStorage.getItem('axim_offline_session');
             if (stored) {
                 const parsed = JSON.parse(stored);
-                if (Date.now() - parsed.timestamp < 86400000) cachedOffline = true;
+                if (Date.now() - parsed.timestamp < 300000) cachedOffline = true;
             }
         } catch(e) { /* ignore */ }
 
@@ -130,7 +130,7 @@ const AXiMLoginGate = () => {
                    const stored = localStorage.getItem('axim_offline_session');
                    if (stored) {
                        const parsed = JSON.parse(stored);
-                       if (Date.now() - parsed.timestamp < 86400000) cachedOffline = true;
+                       if (Date.now() - parsed.timestamp < 300000) cachedOffline = true;
                    }
                } catch(e) { /* ignore */ }
 
