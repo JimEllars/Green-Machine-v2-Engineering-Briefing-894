@@ -3,6 +3,12 @@
 interface CloudflareEnv {
 	GREEN_STATE: KVNamespace;
 	MARKET_CACHE: KVNamespace;
-	SUPABASE_URL: "https://pvbcdndqjguzqeafhwhw.supabase.co";
+    LEDGER_KV?: KVNamespace;
+	SUPABASE_URL: string;
+    SUPABASE_SERVICE_KEY?: string;
+    SUPABASE_SERVICE_ROLE_KEY?: string;
+    EMAILIT_API_KEY?: string;
+    THIRDWEB_SECRET_KEY?: string;
+    ENVIRONMENT?: string;
 	AI: Ai;
 }

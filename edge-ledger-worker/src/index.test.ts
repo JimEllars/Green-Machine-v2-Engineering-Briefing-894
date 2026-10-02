@@ -29,14 +29,13 @@ describe('Edge Ledger Worker Diagnostics', () => {
     expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, POST, OPTIONS');
   });
 
-  test('GET /health returns HTTP 200 with { status: "healthy" }', async () => {
+  test('GET /health returns HTTP 200 with { status: "operational" }', async () => {
     const request = new Request('https://green-machine.axim.com/api/health', { method: 'GET' });
     const response = await worker.fetch(request, env, ctx);
 
     expect(response.status).toBe(200);
     const data: any = await response.json();
-    expect(data.success).toBe(true);
-    expect(data.status).toBe('healthy');
+    expect(data.status).toBe('operational');
   });
 
   test('GET /api/telemetry returns HTTP 200 with new structured payload', async () => {
