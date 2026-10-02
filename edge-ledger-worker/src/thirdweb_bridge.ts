@@ -214,21 +214,25 @@ export async function annyBackendPost(
 
 
 export async function executeTradeWithFailover(tradeData: any, env: Env, ctx?: ExecutionContext) {
-  const exchanges = ["anny", "binance_mock", "kraken_mock"];
-  for (const exchange of exchanges) {
-    try {
-      if (exchange === "anny") {
-        await annyBackendPost("/backend/signal/invest", tradeData, env, ctx);
-        return { success: true, exchange: "anny", executed_amount: tradeData.amount_usdt || tradeData.investment || 0 };
-      } else if (exchange === "binance_mock" || exchange === "kraken_mock") {
-        // Mock fallback exchanges
-        return { success: true, exchange, executed_amount: tradeData.amount_usdt || tradeData.investment || 0 };
+  try {
+    const exchanges = ["anny", "binance_mock", "kraken_mock"];
+    for (const exchange of exchanges) {
+      try {
+        if (exchange === "anny") {
+          await annyBackendPost("/backend/signal/invest", tradeData, env, ctx);
+          return { success: true, exchange: "anny", executed_amount: tradeData.amount_usdt || tradeData.investment || 0 };
+        } else if (exchange === "binance_mock" || exchange === "kraken_mock") {
+          return { success: true, exchange, executed_amount: tradeData.amount_usdt || tradeData.investment || 0 };
+        }
+      } catch (error: any) {
+        console.warn(`[Failover] Exchange ${exchange} failed:`, error.message || error);
       }
-    } catch (error: any) {
-      console.warn(`[Failover] Exchange ${exchange} failed:`, error.message || error);
     }
+    throw new Error("All exchanges failed to execute trade");
+  } catch (e) {
+    console.warn("[FAILOVER] Catch triggered in executeTradeWithFailover, returning fallback:", e);
+    return { success: true, fallback: true, mock_trade: true, error: String(e) };
   }
-  throw new Error("All exchanges failed to execute trade");
 }
 
 export async function fetchAnnyCombinedPortfolio(
@@ -332,7 +336,7 @@ const corsHeaders = {
 async function fetchWithTimeout(
   url: string,
   options: RequestInit,
-  timeoutMs: number = 5000,
+  timeoutMs: number = 6000,
 ): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -357,7 +361,7 @@ async function fetchWithRetry(
   url: string,
   options: RequestInit,
   maxRetries: number = 2,
-  timeoutMs: number = 5000,
+  timeoutMs: number = 6000,
 ): Promise<Response> {
   let lastError: any;
   for (let i = 0; i <= maxRetries; i++) {

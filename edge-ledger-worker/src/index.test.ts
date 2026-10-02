@@ -62,4 +62,13 @@ describe('Edge Ledger Worker Diagnostics', () => {
     expect(data.success).toBe(false);
     expect(data.error.code).toBe('NOT_FOUND');
   });
+
+  test('GET /api/health returns valid telemetry headers', async () => {
+    const request = new Request('https://green-machine.axim.com/api/health', { method: 'GET' });
+    const response = await worker.fetch(request, env, ctx);
+
+    expect(response.headers.has('Server-Timing')).toBe(true);
+    expect(response.headers.has('X-Edge-Origin')).toBe(true);
+    expect(response.headers.get('X-Edge-Origin')).toBe('cloudflare-worker');
+  });
 });
