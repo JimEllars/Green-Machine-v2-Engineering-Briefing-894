@@ -149,7 +149,8 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
     try {
       const baseUrl = getWorkerUrl();
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      const startReq = performance.now();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
 
       const response = await fetch(`${baseUrl}${targetEndpoint}`, {
         headers: {
@@ -164,7 +165,9 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
         throw new Error(`Worker diagnostics returned status: ${response.status}`);
       }
 
+      const latency = Math.round(performance.now() - startReq);
       const json = await response.json();
+      json.latencyMs = latency;
       lastKnownGood.current = json;
 
       // Update state silently without throwing boundaries
@@ -246,7 +249,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
         if (isMounted) {
           setErrorCount(currentErrorCount => {
              const newCount = result?.error ? currentErrorCount + 1 : 0;
-             let baseInterval = 15000;
+             let baseInterval = 30000;
              if (newCount === 1) baseInterval = 30000;
              else if (newCount === 2) baseInterval = 60000;
              else if (newCount > 2) baseInterval = 120000;

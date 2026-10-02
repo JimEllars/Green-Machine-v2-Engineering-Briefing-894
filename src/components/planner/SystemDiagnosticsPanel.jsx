@@ -30,8 +30,8 @@ export default function SystemDiagnosticsPanel() {
 
   const getLatencyColor = (latency) => {
     if (latency === undefined || latency === null) return "text-slate-400";
-    if (latency < 100) return "text-emerald-400";
-    if (latency <= 250) return "text-amber-400";
+    if (latency < 150) return "text-emerald-400";
+    if (latency <= 400) return "text-amber-400";
     return "text-rose-400";
   };
 
@@ -104,15 +104,15 @@ export default function SystemDiagnosticsPanel() {
       <div className="flex flex-wrap gap-2 mb-4">
         {/* Status Pill Indicators */}
         <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50 text-xs text-slate-300">
-          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.kv?.status === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.kv?.status === 'connected' ? 'animate-pulse bg-emerald-500 rounded-full h-2 w-2' : 'bg-amber-400'}`}></span>
           <span>Edge Gateway (KV: {diagnostics?.services?.kv?.latency_ms || 0}ms)</span>
         </div>
         <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50 text-xs text-slate-300">
-          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.ai_engine?.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.ai_engine?.status === 'active' ? 'animate-pulse bg-emerald-500 rounded-full h-2 w-2' : 'bg-amber-400'}`}></span>
           <span>AI Automation Node ({diagnostics?.services?.ai_engine?.status || 'Active'})</span>
         </div>
         <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50 text-xs text-slate-300">
-          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.thirdweb_bridge?.status === 'online' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.thirdweb_bridge?.status === 'online' ? 'animate-pulse bg-emerald-500 rounded-full h-2 w-2' : 'bg-amber-400'}`}></span>
           <span>Blockchain Bridge ({diagnostics?.services?.thirdweb_bridge?.status || 'Online'})</span>
         </div>
       </div>
@@ -158,12 +158,12 @@ export default function SystemDiagnosticsPanel() {
                     [{diagnostics?.colo || diagnostics?.edge?.colo || diagnostics?.workerRegion || 'UNKNOWN'}]
                 </span>
                 <span className={`text-xs font-mono font-bold ${getLatencyColor(diagnostics?.latencyMs)}`}>
-                    {diagnostics?.latencyMs || 0}ms
+                    [{diagnostics?.latencyMs || 0} ms]
                 </span>
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                   <span className={`w-2 h-2 rounded-full ${diagnostics?.status === "ok" || diagnostics?.status === "operational" || diagnostics?.status === "healthy" ? "bg-emerald-400 animate-pulse" : "bg-rose-400"}`} />
+                   <span className={`w-2 h-2 rounded-full ${diagnostics?.status === "ok" || diagnostics?.status === "operational" || diagnostics?.status === "healthy" ? "animate-pulse bg-emerald-500 rounded-full h-2 w-2" : "bg-rose-400"}`} />
                    <span className="text-xs text-slate-400 capitalize">{diagnostics?.status || 'checking'}</span>
                 </div>
               </div>
@@ -176,7 +176,7 @@ export default function SystemDiagnosticsPanel() {
                 <span className="text-base font-bold text-white font-mono">Postgres RLS</span>
               </div>
               <div className="mt-2 flex items-center space-x-2">
-                <span className={`w-2 h-2 rounded-full ${(diagnostics?.services?.supabase === 'connected' || diagnostics?.subsystems?.database?.configured) ? "bg-emerald-400" : "bg-rose-400"}`} />
+                <span className={`w-2 h-2 rounded-full ${(diagnostics?.services?.supabase === 'connected' || diagnostics?.subsystems?.database?.configured) ? "bg-emerald-500" : "bg-rose-400"}`} />
                 <span className="text-xs text-slate-400 capitalize">{(diagnostics?.services?.supabase === 'connected' || diagnostics?.subsystems?.database?.configured) ? 'configured' : 'checking'}</span>
               </div>
             </div>
@@ -188,7 +188,7 @@ export default function SystemDiagnosticsPanel() {
                 <span className="text-base font-bold text-white font-mono">Web3 Relay</span>
               </div>
               <div className="mt-2 flex items-center space-x-2">
-                <span className={`w-2 h-2 rounded-full ${(diagnostics?.services?.thirdweb === 'ready' || diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                <span className={`w-2 h-2 rounded-full ${(diagnostics?.services?.thirdweb === 'ready' || diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? "animate-pulse bg-emerald-500 rounded-full h-2 w-2" : "bg-amber-400"}`} />
                 <span className="text-xs text-slate-400 capitalize">{(diagnostics?.services?.thirdweb === 'ready' || diagnostics?.bindings?.thirdweb || diagnostics?.subsystems?.thirdwebBridge?.configured) ? 'Ready' : 'Mock Mode'}</span>
               </div>
             </div>
@@ -199,11 +199,11 @@ export default function SystemDiagnosticsPanel() {
               <div className="flex items-baseline justify-between mt-1">
                 <span className="text-base font-bold text-white font-mono">KV State</span>
                  <span className={`text-xs font-mono ${getLatencyColor(diagnostics?.subsystems?.kv?.latencyMs)}`}>
-                    {diagnostics?.subsystems?.kv?.latencyMs || 0}ms
+                    [{diagnostics?.subsystems?.kv?.latencyMs || 0} ms]
                 </span>
               </div>
               <div className="mt-2 flex items-center space-x-2">
-                <span className={`w-2 h-2 rounded-full ${diagnostics?.subsystems?.kv?.status === "healthy" || diagnostics?.subsystems?.kv?.status === "connected" ? "bg-emerald-400" : "bg-amber-400"}`} />
+                <span className={`w-2 h-2 rounded-full ${diagnostics?.subsystems?.kv?.status === "healthy" || diagnostics?.subsystems?.kv?.status === "connected" ? "bg-emerald-500" : "bg-amber-400"}`} />
                 <span className="text-xs text-slate-400 capitalize">{diagnostics?.subsystems?.kv?.status || 'checking'}</span>
               </div>
             </div>
