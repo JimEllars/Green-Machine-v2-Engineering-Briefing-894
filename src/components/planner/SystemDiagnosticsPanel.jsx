@@ -157,9 +157,21 @@ export default function SystemDiagnosticsPanel() {
                 <span className="text-base font-bold text-white font-mono px-2 py-0.5 bg-slate-800 rounded">
                     [{diagnostics?.colo || diagnostics?.edge?.colo || diagnostics?.workerRegion || 'UNKNOWN'}]
                 </span>
-                <span className={`text-xs font-mono font-bold ${getLatencyColor(diagnostics?.latencyMs)}`}>
-                    {diagnostics?.latencyMs || 0}ms
-                </span>
+                <div className="flex flex-col items-end">
+                  <span className={`text-xs font-mono font-bold ${getLatencyColor(diagnostics?.clientRtt)}`}>
+                      RTT: {diagnostics?.clientRtt || diagnostics?.latencyMs || 0}ms
+                  </span>
+                  {diagnostics?.edgeLatency !== undefined && (
+                    <span className={`text-[10px] font-mono ${getLatencyColor(diagnostics?.edgeLatency)}`}>
+                        Edge: {diagnostics?.edgeLatency}ms
+                    </span>
+                  )}
+                  {diagnostics?.errorRate !== undefined && (
+                    <span className={`text-[10px] font-mono ${diagnostics.errorRate > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        Err: {diagnostics.errorRate.toFixed(1)}%
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="mt-2 flex items-center justify-between">
                 <div className="flex items-center space-x-2">

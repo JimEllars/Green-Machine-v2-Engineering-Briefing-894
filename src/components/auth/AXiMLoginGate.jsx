@@ -20,6 +20,9 @@ const AXiMLoginGate = () => {
           localStorage.setItem('axim_offline_session', JSON.stringify({ active: true, timestamp: Date.now() }));
         } catch(e) { /* ignore */ }
       } else if (event === 'SIGNED_OUT') {
+        // Debounce signout to prevent flickers caused by network fluctuations
+        if (window._axim_signout_debounce) clearTimeout(window._axim_signout_debounce);
+        window._axim_signout_debounce = setTimeout(() => {
         // Handle signed out events gracefully, check if we have a valid offline cache before hard redirect
         let cachedOffline = false;
         try {
@@ -34,6 +37,7 @@ const AXiMLoginGate = () => {
           const redirectUrl = encodeURIComponent(window.location.origin + '/auth/callback');
           window.location.href = `https://passport.axim.us.com/login?redirect=${redirectUrl}`;
         }
+        }, 1500);
       }
     });
     return () => {

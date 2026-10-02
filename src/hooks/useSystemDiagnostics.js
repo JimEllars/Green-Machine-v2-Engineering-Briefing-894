@@ -67,7 +67,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
-      const res = await fetch(`${workerBase}/api/telemetry`, {
+      const res = await fetch(`${workerBase}/api/health`, {
         signal: controller.signal,
         headers: { Accept: 'application/json' },
       });
@@ -144,8 +144,9 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
   const [isLiveSyncing, setIsLiveSyncing] = useState(false);
   const lastKnownGood = useRef(null);
 
-  const fetchDiagnosticsNew = useCallback(async (retryCount = 0, targetEndpoint = '/api/telemetry') => {
+  const fetchDiagnosticsNew = useCallback(async (retryCount = 0, targetEndpoint = '/api/health') => {
     setIsLiveSyncing(true);
+    const startReq = performance.now();
     try {
       const baseUrl = getWorkerUrl();
       const controller = new AbortController();
@@ -160,21 +161,40 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
       });
       clearTimeout(timeoutId);
 
+      const clientRtt = Math.round(performance.now() - startReq);
+
       if (!response.ok) {
         throw new Error(`Worker diagnostics returned status: ${response.status}`);
+      }
+
+      let edgeLatency = 0;
+      const serverTiming = response.headers.get('Server-Timing');
+      if (serverTiming && serverTiming.includes('dur=')) {
+          const match = serverTiming.match(/dur=([0-9.]+)/);
+          if (match) edgeLatency = parseFloat(match[1]);
       }
 
       const json = await response.json();
       lastKnownGood.current = json;
 
       // Update state silently without throwing boundaries
-      setData(prev => ({
-        ...prev,
-        ...json,
-        lastChecked: new Date(),
-        latencyMs: json.latencyMs,
-        colo: json.colo
-      }));
+      setData(prev => {
+        const errorHistory = prev?.errorHistory || [];
+        const newHistory = [...errorHistory, 0].slice(-10);
+        const errorRate = (newHistory.filter(x => x === 1).length / newHistory.length) * 100;
+
+        return {
+          ...prev,
+          ...json,
+          lastChecked: new Date(),
+          latencyMs: clientRtt,
+          clientRtt,
+          edgeLatency,
+          errorRate,
+          errorHistory: newHistory,
+          colo: json.region || json.colo
+        };
+      });
       setErrorLocal(null);
       try {
         sessionStorage.setItem('axim_telemetry_cache', JSON.stringify({ telemetry: json, timestamp: Date.now() }));
@@ -190,9 +210,6 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
 
       const maxAttempts = 3;
       if (retryCount < maxAttempts) {
-         // dynamic fallback to /api/health if this was the last attempt?
-         // Actually, if we fail /api/telemetry we just retry. The prompt says "dynamic fallback to /api/health".
-         const targetEndpoint = retryCount === maxAttempts - 1 ? '/api/health' : '/api/telemetry';
          const delay = Math.min(3000 * Math.pow(2, retryCount), 15000);
          await new Promise(res => setTimeout(res, delay));
          return fetchDiagnosticsNew(retryCount + 1, targetEndpoint);
@@ -210,10 +227,22 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
         status: 'standby',
         edge: 'operational',
         latency: 'cached',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        region: 'UNKNOWN'
       };
 
-      setData(fallbackData);
+      setData(prev => {
+        const errorHistory = prev?.errorHistory || [];
+        const newHistory = [...errorHistory, 1].slice(-10);
+        const errorRate = (newHistory.filter(x => x === 1).length / newHistory.length) * 100;
+
+        return {
+          ...fallbackData,
+          ...prev,
+          errorHistory: newHistory,
+          errorRate
+        };
+      });
       setLoading(false);
       setIsLiveSyncing(false);
 
