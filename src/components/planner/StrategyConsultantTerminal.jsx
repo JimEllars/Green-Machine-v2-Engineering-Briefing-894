@@ -210,7 +210,7 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
 
     // Set a strict timeout for graceful degradation
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
       const systemPrompt = "You are the AXiM Green Machine Financial Consultant. Analyze financial plans, tokenomics, yield models, and risk parameters. Return structured JSON with { projected_roi, break_even_months, risk_score, recommendations, capital_efficiency_score }.";
@@ -233,6 +233,12 @@ export default function StrategyConsultantTerminal({ latestAuditContext }) {
 
       clearTimeout(timeoutId);
 
+      if (response.status === 429) {
+        throw new Error("Rate limit exceeded. Please wait a moment and try again.");
+      }
+      if (response.status >= 500) {
+        throw new Error("Edge inference temporarily unavailable. Please retry.");
+      }
       const data = await response.json().catch(() => ({ error: "Invalid JSON response" }));
 
 

@@ -28,7 +28,7 @@
     "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240909.0",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "@eslint/js": "^9.39.5",
     "@types/node": "^26.6.3",
     "@types/react": "^18.3.3",

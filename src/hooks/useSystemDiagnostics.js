@@ -144,14 +144,14 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
   const [isLiveSyncing, setIsLiveSyncing] = useState(false);
   const lastKnownGood = useRef(null);
 
-  const fetchDiagnosticsNew = useCallback(async (retryCount = 0) => {
+  const fetchDiagnosticsNew = useCallback(async (retryCount = 0, targetEndpoint = '/api/telemetry') => {
     setIsLiveSyncing(true);
     try {
       const baseUrl = getWorkerUrl();
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3500);
 
-      const response = await fetch(`${baseUrl}/api/v1/telemetry`, {
+      const response = await fetch(`${baseUrl}${targetEndpoint}`, {
         headers: {
             'Accept': 'application/json',
             'X-Axim-Signature': import.meta.env.VITE_AXIM_INTERNAL_KEY || 'default-internal-key-replace-in-production'
@@ -190,9 +190,12 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
 
       const maxAttempts = 3;
       if (retryCount < maxAttempts) {
-         const delay = Math.min(1000 * Math.pow(2, retryCount), 8000);
+         // dynamic fallback to /api/health if this was the last attempt?
+         // Actually, if we fail /api/telemetry we just retry. The prompt says "dynamic fallback to /api/health".
+         const targetEndpoint = retryCount === maxAttempts - 1 ? '/api/health' : '/api/telemetry';
+         const delay = Math.min(3000 * Math.pow(2, retryCount), 15000);
          await new Promise(res => setTimeout(res, delay));
-         return fetchDiagnosticsNew(retryCount + 1);
+         return fetchDiagnosticsNew(retryCount + 1, targetEndpoint);
       }
 
       setErrorLocal(err.message);

@@ -3,7 +3,7 @@ import { useSystemDiagnostics } from "../../hooks/useSystemDiagnostics";
 import SafeIcon from "../../common/SafeIcon";
 
 export default function SystemDiagnosticsPanel() {
-  const { telemetry: diagnostics, isStale, refreshDiagnostics, diagnosticsLoading: loading } = useSystemDiagnostics();
+  const { telemetry: diagnostics, isStale, refreshDiagnostics, diagnosticsLoading: loading, isLiveSyncing } = useSystemDiagnostics();
   const [showRaw, setShowRaw] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -99,6 +99,42 @@ export default function SystemDiagnosticsPanel() {
             <SafeIcon className={`w-4 h-4 ${(isRefreshing || loading) ? 'animate-spin text-emerald-400' : ''}`} name="RefreshCw" />
           </button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 mb-4">
+        {/* Status Pill Indicators */}
+        <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50 text-xs text-slate-300">
+          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.kv?.status === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span>Edge Gateway (KV: {diagnostics?.services?.kv?.latency_ms || 0}ms)</span>
+        </div>
+        <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50 text-xs text-slate-300">
+          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.ai_engine?.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span>AI Automation Node ({diagnostics?.services?.ai_engine?.status || 'Active'})</span>
+        </div>
+        <div className="flex items-center space-x-2 px-3 py-1.5 bg-slate-800/50 rounded-full border border-slate-700/50 text-xs text-slate-300">
+          <span className={`w-2 h-2 rounded-full ${diagnostics?.services?.thirdweb_bridge?.status === 'online' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
+          <span>Blockchain Bridge ({diagnostics?.services?.thirdweb_bridge?.status || 'Online'})</span>
+        </div>
+      </div>
+
+      {/* Animated pulse bar for telemetry sync */}
+      {isRefreshing || isLiveSyncing ? (
+        <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden mb-4">
+          <div className="w-1/3 h-full bg-emerald-500 animate-[pulse_1s_ease-in-out_infinite_alternate] shadow-[0_0_10px_rgba(16,185,129,0.8)] rounded-full translate-x-full transition-transform duration-500"></div>
+        </div>
+      ) : (
+        <div className="w-full h-1 bg-transparent mb-4"></div>
+      )}
+
+      <div className="flex justify-between items-center mb-4">
+         <button
+            onClick={handleManualRefresh}
+            disabled={isRefreshing || loading || isLiveSyncing}
+            className="flex items-center space-x-2 px-4 py-2 text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500/50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <SafeIcon name="Activity" className={`w-4 h-4 ${isRefreshing || isLiveSyncing ? 'animate-spin' : ''}`} />
+            <span>Run Diagnostic Probe</span>
+          </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">

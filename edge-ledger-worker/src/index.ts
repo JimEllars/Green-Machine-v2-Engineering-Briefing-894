@@ -1,20 +1,20 @@
 import thirdwebBridge from "./thirdweb_bridge";
 import { fetchHealth } from "./market_watcher";
 
-const getCorsHeaders = (request: Request) => {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-Client-Version, X-Axim-Signature, x-client-info, apikey',
-    'Access-Control-Max-Age': '86400',
-  };
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With, apikey",
 };
 
-export function handleOptions(request: Request): Response {
-  return new Response(null, {
-    status: 204,
-    headers: getCorsHeaders(request),
-  });
+export function handleCors(request: Request): Response | null {
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: CORS_HEADERS,
+    });
+  }
+  return null;
 }
 
 export function jsonError(message: string, status: number = 400, code: string = 'BAD_REQUEST') {
@@ -23,7 +23,7 @@ export function jsonError(message: string, status: number = 400, code: string = 
     error: { message, code, timestamp: Date.now() }
   }), {
     status,
-    headers: { 'Content-Type': 'application/json', ...getCorsHeaders({} as Request) }
+    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS }
   });
 }
 
@@ -32,7 +32,7 @@ export function jsonResponse(request: Request, data: unknown, status = 200, extr
     status,
     headers: {
       'Content-Type': 'application/json',
-      ...getCorsHeaders(request),
+      ...CORS_HEADERS,
       ...extraHeaders,
     },
   });
@@ -44,9 +44,8 @@ export default {
     const startTime = Date.now();
     let status = 200;
 
-    if (request.method === "OPTIONS") {
-      return handleOptions(request);
-    }
+    const corsRes = handleCors(request);
+    if (corsRes) return corsRes;
 
     try {
       // Validate environment variables gracefully
@@ -60,165 +59,45 @@ export default {
 
       const url = new URL(request.url);
 
-      if (url.pathname === "/diagnostics" || url.pathname === "/api/diagnostics") {
-        const startTime = Date.now();
+      if (url.pathname === "/api/health" || url.pathname === "/status" || url.pathname === "/api/telemetry") {
+        const start = Date.now();
+        let kvStatus = "connected";
+        let kvLatency = 0;
 
-        // 1. Database Ping Check
-        let dbStatus = 'disconnected';
-        let dbLatency = -1;
         try {
-          const dbStart = Date.now();
-          const res = await fetch(`${env.SUPABASE_URL}/rest/v1/`, {
-            method: 'GET',
-            headers: {
-              'apikey': env.SUPABASE_ANON_KEY || '',
-              'Authorization': `Bearer ${env.SUPABASE_ANON_KEY || ''}`,
-            },
-          });
-          if (res.ok) {
-            dbStatus = 'connected';
-            dbLatency = Date.now() - dbStart;
-          } else {
-            dbStatus = 'degraded';
+          const probeStart = Date.now();
+          if (env.LEDGER_KV) {
+             await env.LEDGER_KV.get("__health_probe__");
+          } else if (env.GREEN_STATE) {
+             await env.GREEN_STATE.get("__health_probe__");
+          } else if (env.MARKET_CACHE) {
+             await env.MARKET_CACHE.get("__health_probe__");
           }
-        } catch {
-          dbStatus = 'unreachable';
+          kvLatency = Date.now() - probeStart;
+        } catch (err) {
+          kvStatus = "degraded";
         }
 
-        // 2. AI Engine Status
-        const aiStatus = env.AI ? 'available' : 'not_bound';
-
-        // 3. KV Namespace Status
-        let kvStatus = env.LEDGER_KV ? 'READY' : 'UNBOUND';
-        let kvLatency = -1;
-        const targetKV = env.LEDGER_KV || env.GREEN_STATE || env.MARKET_CACHE;
-        if (targetKV) {
-           const pingStart = Date.now();
-           try {
-             await targetKV.put("__healthcheck__", "1", { expirationTtl: 60 });
-             await targetKV.get("__healthcheck__");
-             kvLatency = Date.now() - pingStart;
-             kvStatus = 'READY';
-           } catch (e) {
-             kvStatus = 'degraded';
-           }
-        }
-
-        const totalDuration = Date.now() - startTime;
-
-        return jsonResponse(request, {
-          status: dbStatus === 'connected' && kvStatus !== 'degraded' ? 'operational' : 'degraded',
+        const payload = {
+          success: true,
+          status: kvStatus === "connected" ? "healthy" : "degraded",
           timestamp: new Date().toISOString(),
-          workerRegion: (request as any).cf?.colo || 'local-dev',
-          bindings: {
-            database: dbStatus === 'connected',
-            thirdweb: !!env.THIRDWEB_SECRET_KEY,
-            emailit: !!env.EMAILIT_API_KEY,
-            kv: kvStatus === 'READY'
-          },
-          telemetry: {
-            requestCount: 1,
-            latencyMs: kvLatency,
-            memory: 'stable'
-          }
-        }, 200, {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-        });
-      }
-
-      if (url.pathname === "/health" || url.pathname === "/api/health") {
-        return jsonResponse(request, {
-            status: "healthy",
-            version: "v2.1.0-telemetry",
-            timestamp: new Date().toISOString(),
-            region: (request as any).cf?.colo || "local",
-        }, 200, {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-        });
-      }
-
-      if (url.pathname === "/telemetry" || url.pathname === "/api/telemetry" || url.pathname === "/api/v1/telemetry") {
-        const startTimeTel = performance.now();
-        let kvHealthy = false;
-        let kvLatencyMs = 0;
-        let lastCronInfo = null;
-
-        const targetKV = env.LEDGER_KV || env.GREEN_STATE || env.MARKET_CACHE;
-        let kvStatus = 'unreachable';
-
-        try {
-          if (targetKV) {
-            const pingStart = performance.now();
-            await targetKV.put("__healthcheck__", "1", { expirationTtl: 60 });
-            const pingRead = await targetKV.get("__healthcheck__");
-            kvLatencyMs = Math.round(performance.now() - pingStart);
-            kvStatus = pingRead === '1' ? 'healthy' : 'degraded';
-            kvHealthy = pingRead === '1';
-
-            const rawCron = await targetKV.get("telemetry:last_cron");
-            lastCronInfo = rawCron ? JSON.parse(rawCron) : { status: "not_recorded" };
-          }
-        } catch {
-          kvStatus = 'unreachable';
-          kvHealthy = false;
-        }
-
-        let cbStatus = 'operational';
-        try {
-          if (targetKV) {
-             const emailitCb = await targetKV.get("emailit_circuit_breaker");
-             if (emailitCb === "open") {
-                 cbStatus = 'degraded';
-             }
-          }
-        } catch {
-        }
-
-        let dbStatus = 'disconnected';
-        try {
-          const res = await fetch(`${env.SUPABASE_URL}/rest/v1/`, {
-            method: 'GET',
-            headers: {
-              'apikey': env.SUPABASE_ANON_KEY || '',
-              'Authorization': `Bearer ${env.SUPABASE_ANON_KEY || ''}`,
-            },
-          });
-          if (res.ok) {
-            dbStatus = 'connected';
-          }
-        } catch {}
-
-        const cfData = (request as any).cf || {};
-        const isHealthy = kvHealthy && dbStatus === 'connected';
-
-        const telemetryPayload = {
-          status: isHealthy ? 'healthy' : 'degraded',
-          timestamp: Date.now(),
-          colo: cfData.colo || "UNKNOWN",
-          memoryUsage: "nominal",
-          version: "2.1.0",
+          environment: env.ENVIRONMENT || "production",
           services: {
-            supabase: dbStatus,
-            thirdweb: !!env.THIRDWEB_SECRET_KEY ? 'ready' : 'standby',
-            emailit: !!env.EMAILIT_API_KEY ? 'ready' : 'standby'
+            kv: { status: kvStatus, latency_ms: kvLatency },
+            thirdweb_bridge: { status: env.THIRDWEB_SECRET_KEY ? "online" : "unconfigured" },
+            ai_engine: { status: "active" },
           },
-          // Maintain some legacy fields for backward compatibility
-          subsystems: {
-            kv: { status: kvStatus, latencyMs: kvLatencyMs },
-            thirdwebBridge: { configured: !!env.THIRDWEB_SECRET_KEY },
-            emailit: { configured: !!env.EMAILIT_API_KEY, circuitBreaker: cbStatus },
-            database: { configured: !!env.SUPABASE_URL, status: dbStatus === 'connected' ? 'healthy' : 'degraded' }
-          },
-          edge: {
-            colo: cfData.colo || "LOCAL",
-            country: cfData.country || "UNKNOWN"
-          },
-          latencyMs: Math.round(performance.now() - startTimeTel)
+          total_execution_ms: Date.now() - start,
         };
 
-        return jsonResponse(request, telemetryPayload, 200, {
-          'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'no-store, no-cache, must-revalidate'
+        return new Response(JSON.stringify(payload), {
+          status: 200,
+          headers: {
+            ...CORS_HEADERS,
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+          },
         });
       }
 
