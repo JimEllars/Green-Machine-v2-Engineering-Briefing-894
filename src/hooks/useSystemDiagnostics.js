@@ -95,7 +95,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
 
     try {
       const { error } = await supabase
-        .from('user_profiles')
+        .from('blockchain_transactions')
         .select('id', { count: 'exact', head: true })
         .limit(1);
 
@@ -178,6 +178,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
         latencyMs: json.latencyMs,
         colo: json.colo
       }));
+      setTelemetry(json);
       setErrorLocal(null);
       try {
         sessionStorage.setItem('axim_telemetry_cache', JSON.stringify({ telemetry: json, timestamp: Date.now() }));
@@ -186,7 +187,7 @@ export const useSystemDiagnostics = (isAuthenticated = true, pollInterval = 1500
       setIsLiveSyncing(false);
       setLoading(false);
 
-      return { data: json, loading: false, error: null, isStale: false, refetch: fetchDiagnosticsNew };
+      return { success: true, data: json, loading: false, error: null, isStale: false, refetch: fetchDiagnosticsNew };
     } catch (err) {
       // Diagnostic polling failures must NEVER trigger global error boundaries or flash user alerts.
       // We log silently here.

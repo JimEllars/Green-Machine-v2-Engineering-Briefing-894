@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useSystemDiagnostics } from "../../hooks/useSystemDiagnostics";
 import SafeIcon from "../../common/SafeIcon";
 
-export default function SystemDiagnosticsPanel() {
+export default function SystemDiagnosticsPanel({ dlqStatus, onDiagnosticsUpdate, onOpenQuarantineManager }) {
   const { telemetry: diagnostics, isStale, refreshDiagnostics, diagnosticsLoading: loading, isLiveSyncing } = useSystemDiagnostics();
   const [showRaw, setShowRaw] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -12,6 +12,15 @@ export default function SystemDiagnosticsPanel() {
     await refreshDiagnostics();
     setTimeout(() => setIsRefreshing(false), 500);
   };
+
+  React.useEffect(() => {
+    if (diagnostics) {
+      onDiagnosticsUpdate?.({
+        dbConnected: diagnostics?.services?.database === 'connected' || diagnostics?.subsystems?.database?.status === 'connected',
+        edgeCacheAvailable: diagnostics?.services?.kv?.status === 'connected' || diagnostics?.subsystems?.kv?.status === 'connected'
+      });
+    }
+  }, [diagnostics, onDiagnosticsUpdate]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -100,6 +109,18 @@ export default function SystemDiagnosticsPanel() {
           </button>
         </div>
       </div>
+
+      {(dlqStatus?.quarantine_count > 0 || dlqStatus?.count > 0) && (
+        <div className="mb-4">
+          <button
+            onClick={onOpenQuarantineManager}
+            className="px-2.5 py-1 text-xs font-mono font-bold rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30 transition flex items-center gap-1.5"
+          >
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+            Quarantine: {dlqStatus.quarantine_count} Items
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2 mb-4">
         {/* Status Pill Indicators */}

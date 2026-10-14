@@ -124,12 +124,6 @@ export default {
         });
       }
 
-      if (url.pathname.startsWith("/api/bridge/")) {
-        const response = await thirdwebBridge.fetch(request, env, ctx);
-        status = response.status;
-        return response;
-      }
-
       if (url.pathname.startsWith("/api/market/")) {
         const response = await fetchHealth(env, request, ctx);
         status = response.status;
@@ -137,16 +131,16 @@ export default {
       }
 
       if (url.pathname.startsWith("/api/briefing/")) {
-        // Route to briefing_generator.ts logic
         const { dispatchExecutiveBriefing } = await import("./briefing_generator");
         const html = await dispatchExecutiveBriefing(env, ctx);
         status = 200;
         return jsonResponse(request, { status: "briefing_dispatched", html }, 200);
       }
 
-      // Default route
-      // Memory hint: Edge worker routing must implement strict catch-all termination layers to prevent unmapped API endpoint requests from falling through to base tracking payload loops.
-      return jsonError("Not found", 404, 'NOT_FOUND');
+      // Delegate all other /api routes and bridge calls to thirdwebBridge
+      const response = await thirdwebBridge.fetch(request, env, ctx);
+      status = response.status;
+      return response;
 
     } catch (error: any) {
       status = 500;
