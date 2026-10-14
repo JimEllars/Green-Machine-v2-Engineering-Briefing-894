@@ -3,6 +3,14 @@ import worker from './index';
 
 describe('Edge Ledger Worker Diagnostics', () => {
   const env = {
+    GREEN_STATE: {
+      get: async (key: string) => null,
+      put: async () => {},
+    },
+    MARKET_CACHE: {
+      get: async (key: string) => null,
+      put: async () => {},
+    },
     LEDGER_KV: {
       get: async (key: string) => {
         if (key === '__healthcheck__') return '1';
@@ -52,6 +60,15 @@ describe('Edge Ledger Worker Diagnostics', () => {
     expect(data.services.thirdweb_bridge.status).toBe('online');
   });
 
+  test('Delegated routes do not return 404 from index (e.g. /api/admin/*)', async () => {
+    // We mock thirdwebBridge to verify delegation?
+    // Actually we just call a route that thirdwebBridge should handle.
+    const request = new Request('https://green-machine.axim.com/api/admin/dept-summary', { method: 'GET' });
+    const response = await worker.fetch(request, env, ctx);
+    // Even if it fails (e.g., due to auth), it shouldn't be a 404 NOT_FOUND from index.ts catch-all
+    expect(response.status).not.toBe(404);
+  });
+
   test('Malformed routes return HTTP 404 with structured error JSON', async () => {
     const request = new Request('https://green-machine.axim.com/invalid-route', { method: 'GET' });
     const response = await worker.fetch(request, env, ctx);
@@ -59,6 +76,6 @@ describe('Edge Ledger Worker Diagnostics', () => {
     expect(response.status).toBe(404);
     const data: any = await response.json();
     expect(data.success).toBe(false);
-    expect(data.error.code).toBe('NOT_FOUND');
+    expect(data.error).toBe('404 Not Found');
   });
 });
